@@ -1,47 +1,59 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
+import HomeView from '@/views/HomeView.vue'
 
 const routes: Array<RouteRecordRaw> = [
   {
     path: '/',
     name: 'home',
-    component: () => import('@/views/HomeView.vue')
+    component: HomeView,
+    meta: {
+      title: '智能投资助手 - 首页'
+    }
   },
   {
-    path: '/industry-valuation',
-    name: 'industry-valuation',
-    component: () => import('@/views/IndustryValuationView.vue')
+    path: '/stock/search',
+    name: 'stockSearch',
+    component: () => import('@/views/StockSearchView.vue'),
+    meta: {
+      title: '股票搜索 - 智能投资助手'
+    }
   },
   {
-    path: '/market-data',
-    name: 'market-data',
-    component: () => import('@/views/MarketDataView.vue')
+    path: '/stock/detail/:code',
+    name: 'stockDetail',
+    component: () => import('@/views/StockDetailView.vue'),
+    meta: {
+      title: '股票详情 - 智能投资助手'
+    }
   },
   {
-    path: '/financial-analysis',
-    name: 'financial-analysis',
-    component: () => import('@/views/FinancialAnalysisView.vue')
+    path: '/stock/analysis/:code',
+    name: 'stockAnalysis',
+    component: () => import('@/views/StockAnalysisView.vue'),
+    meta: {
+      title: '股票分析 - 智能投资助手'
+    }
   },
   {
-    path: '/valuation-decision',
-    name: 'valuation-decision',
-    component: () => import('@/views/ValuationDecisionView.vue')
-  },
-  {
-    path: '/login',
-    name: 'login',
-    component: () => import('@/views/LoginView.vue')
-  },
-  {
-    path: '/register',
-    name: 'register',
-    component: () => import('@/views/RegisterView.vue')
+    path: '/about',
+    name: 'about',
+    component: () => import('@/views/AboutView.vue'),
+    meta: {
+      title: '关于我们 - 智能投资助手'
+    }
   }
 ]
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes
+})
+
+// 路由守卫，设置页面标题
+router.beforeEach((to, from, next) => {
+  document.title = to.meta.title as string || '智能投资助手'
+  next()
 })
 
 export default router

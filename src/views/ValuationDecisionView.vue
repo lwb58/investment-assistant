@@ -5,7 +5,7 @@
     <!-- 股票选择器 -->
     <div class="stock-selector">
       <el-select v-model="selectedStockId" placeholder="选择股票" class="stock-select" @change="loadStockData">
-        <el-option v-for="stock in stockList" :key="stock.id" :label="stock.name + '(' + stock.code + ')" :value="stock.id" />
+        <el-option v-for="stock in stockList" :key="stock.id" :label="stock.name + '(' + stock.code + ')'" :value="stock.id" />
       </el-select>
       <el-button type="primary" @click="addStockToList" v-if="showAddButton">添加到对比</el-button>
     </div>
@@ -215,19 +215,20 @@
 import { ref, onMounted, watch, nextTick } from 'vue'
 import * as echarts from 'echarts'
 import type { ECharts } from 'echarts'
+import valuationService from '../services/valuationService';
 
-// 模拟数据
+// 使用股票代码作为ID
 const stockList = ref([
-  { id: '1', name: '贵州茅台', code: '600519' },
-  { id: '2', name: '宁德时代', code: '300750' },
-  { id: '3', name: '比亚迪', code: '002594' },
-  { id: '4', name: '隆基绿能', code: '601012' },
-  { id: '5', name: '阳光电源', code: '300274' }
+  { id: '600519', name: '贵州茅台', code: '600519' },
+  { id: '300750', name: '宁德时代', code: '300750' },
+  { id: '002594', name: '比亚迪', code: '002594' },
+  { id: '601012', name: '隆基绿能', code: '601012' },
+  { id: '300274', name: '阳光电源', code: '300274' }
 ])
 
-const selectedStockId = ref('1')
+const selectedStockId = ref('600519')
 const selectedStock = ref<any>({
-  id: '1',
+  id: '600519',
   name: '贵州茅台',
   code: '600519',
   currentPrice: 1823.00,
@@ -241,321 +242,317 @@ const selectedStock = ref<any>({
 const comparisonList = ref<any[]>([])
 const showAddButton = ref(true)
 const activeModel = ref('dcf')
+const loading = ref(false)
+const error = ref<string | null>(null)
 
-// DCF参数
+// DCF参数 - 使用小数形式而不是百分比
 const dcfParams = ref({
-  forecastYears: 5,
-  growthRate: 15,
-  discountRate: 9,
-  terminalGrowthRate: 2.5
+  forecastYears: 10,
+  growthRate: 0.12, // 12%
+  discountRate: 0.15, // 15%
+  terminalGrowthRate: 0.03 // 3%
 })
 
 const dcfResult = ref<any>(null)
-
-// 相对估值参数
-const relativeParams = ref({
-  benchmarkType: 'industry'
-})
-
-const relativeValuationData = ref([
-  { company: '贵州茅台', currentPrice: 1823.00, pe: 25.6, pb: 9.8, ps: 13.2, evToEbitda: 20.5, peg: 1.2 },
-  { company: '五粮液', currentPrice: 168.50, pe: 18.2, pb: 5.6, ps: 8.9, evToEbitda: 15.8, peg: 1.4 },
-  { company: '泸州老窖', currentPrice: 145.20, pe: 21.3, pb: 7.8, ps: 10.5, evToEbitda: 18.2, peg: 1.3 },
-  { company: '山西汾酒', currentPrice: 287.60, pe: 28.5, pb: 12.3, ps: 15.6, evToEbitda: 23.4, peg: 1.5 },
-  { company: '洋河股份', currentPrice: 132.40, pe: 15.8, pb: 4.9, ps: 7.8, evToEbitda: 13.5, peg: 1.2 },
-  { company: '行业平均', currentPrice: '-', pe: 22.5, pb: 8.1, ps: 11.2, evToEbitda: 18.3, peg: 1.3 }
-])
-
-const relativeSummary = ref({
-  avgPE: 22.5,
-  avgPB: 8.1,
-  avgPS: 11.2,
-  targetPricePE: 1598.40,
-  targetPricePB: 1584.00
-})
-
-// 综合评分
-const scoreData = ref({
-  fundamental: 95,
-  growth: 88,
-  valuation: 75,
-  technical: 82,
-  total: 85
-})
-
-// 图表引用
-const dcfChartRef = ref<HTMLElement>()
-const historicalChartRef = ref<HTMLElement>()
-let dcfChartInstance: ECharts | null = null
-let historicalChartInstance: ECharts | null = null
+const valuationResult = ref<any>(null)
+const historicalValuation = ref<any[]>([])
 
 // 加载股票数据
-const loadStockData = (id: string) => {
-  // 在实际应用中，这里会根据ID加载股票详细数据
-  console.log('加载股票数据:', id)
-  const stock = stockList.value.find(s => s.id === id)
-  if (stock) {
-    selectedStock.value = {
-      ...selectedStock.value,
-      id: stock.id,
-      name: stock.name,
-      code: stock.code
+const loadStockData = async (symbol: string) => {
+  try {
+    loading.value = true;
+    error.value = null;
+    
+    // 重置之前的结果
+    dcfResult.value = null;
+    valuationResult.value = null;
+    
+    const stock = stockList.value.find(s => s.id === symbol);
+    if (stock) {
+      selectedStock.value = {
+        ...selectedStock.value,
+        id: stock.id,
+        name: stock.name,
+        code: stock.code
+      };
+      
+      // 获取历史估值数据
+      await loadHistoricalValuation(symbol);
     }
-    showAddButton.value = !comparisonList.value.some(s => s.id === id)
+  } catch (err) {
+    console.error('加载股票数据失败:', err);
+    error.value = '加载股票数据失败，请重试';
+  } finally {
+    loading.value = false;
   }
 }
 
-// 添加到对比列表
-const addStockToList = () => {
-  if (!comparisonList.value.some(s => s.id === selectedStock.value.id)) {
-    comparisonList.value.push({ ...selectedStock.value })
-    showAddButton.value = false
+// 加载历史估值数据
+const loadHistoricalValuation = async (symbol: string) => {
+  try {
+    const history = await valuationService.getValuationHistory(symbol);
+    historicalValuation.value = history;
+    // 可以在这里初始化图表
+  } catch (err) {
+    console.error('加载历史估值失败:', err);
   }
 }
 
-// 从对比列表移除
-const removeStockFromList = (id: string) => {
-  comparisonList.value = comparisonList.value.filter(s => s.id !== id)
-  if (id === selectedStock.value.id) {
-    showAddButton.value = true
+// 计算估值
+const calculateValuation = async () => {
+  try {
+    loading.value = true;
+    error.value = null;
+    
+    // 转换参数格式
+    const params = {
+      growthRate: dcfParams.value.growthRate,
+      discountRate: dcfParams.value.discountRate,
+      terminalGrowthRate: dcfParams.value.terminalGrowthRate,
+      years: dcfParams.value.forecastYears,
+      weights: {
+        dcf: 0.4,
+        fcf: 0.3,
+        buffett: 0.3
+      }
+    };
+    
+    // 调用估值服务
+    const result = await valuationService.calculateValuation(selectedStockId.value, params);
+    valuationResult.value = result;
+    
+    // 更新DCF结果显示
+    if (result.dcf) {
+      dcfResult.value = {
+        enterpriseValue: result.dcf.intrinsicValue,
+        equityValue: result.dcf.intrinsicValue,
+        perShareValue: result.intrinsicValue,
+        valuation: result.marginOfSafety > 0 ? 'undervalued' : 'overvalued',
+        percentDiff: result.marginOfSafety
+      };
+    }
+    
+    // 更新当前股价
+    if (result.currentPrice) {
+      selectedStock.value.currentPrice = result.currentPrice;
+    }
+    
+    // 刷新历史数据
+    await loadHistoricalValuation(selectedStockId.value);
+    
+    // 更新图表
+    await nextTick();
+    renderDCFChart();
+  } catch (err) {
+    console.error('计算估值失败:', err);
+    error.value = '计算估值失败，请检查参数或重试';
+  } finally {
+    loading.value = false;
   }
 }
 
-// 开始对比分析
-const startComparison = () => {
-  console.log('开始对比分析:', comparisonList.value)
-  // 在实际应用中，这里会执行对比分析逻辑
-}
-
-// 计算DCF估值
-const calculateDCF = () => {
-  // 模拟DCF计算
-  const freeCashFlow = 48422000000 // 484.22亿
-  const shares = 12561978000 // 125.62亿股
-  
-  // 简化的DCF计算
-  let enterpriseValue = 0
-  let terminalValue = 0
-  
-  // 计算预测期现金流现值
-  for (let i = 1; i <= dcfParams.value.forecastYears; i++) {
-    const cashFlow = freeCashFlow * Math.pow((1 + dcfParams.value.growthRate / 100), i)
-    const presentValue = cashFlow / Math.pow((1 + dcfParams.value.discountRate / 100), i)
-    enterpriseValue += presentValue
-  }
-  
-  // 计算终值
-  const lastCashFlow = freeCashFlow * Math.pow((1 + dcfParams.value.growthRate / 100), dcfParams.value.forecastYears)
-  terminalValue = lastCashFlow * (1 + dcfParams.value.terminalGrowthRate / 100) / 
-                 ((dcfParams.value.discountRate / 100) - (dcfParams.value.terminalGrowthRate / 100))
-  
-  // 终值折现
-  const terminalValuePresent = terminalValue / Math.pow((1 + dcfParams.value.discountRate / 100), dcfParams.value.forecastYears)
-  enterpriseValue += terminalValuePresent
-  
-  // 计算股权价值（简化处理，假设无负债）
-  const equityValue = enterpriseValue
-  const perShareValue = equityValue / shares
-  
-  // 计算高估/低估百分比
-  const percentDiff = ((perShareValue - selectedStock.value.currentPrice) / selectedStock.value.currentPrice) * 100
-  const valuation = percentDiff > 0 ? 'undervalued' : 'overvalued'
-  
-  dcfResult.value = {
-    enterpriseValue,
-    equityValue,
-    perShareValue,
-    percentDiff,
-    valuation
-  }
-  
-  nextTick(() => {
-    initDCFChart()
-  })
-}
+// 计算DCF估值（保持原方法名称兼容性）
+const calculateDCF = calculateValuation;
 
 // 格式化货币
-const formatCurrency = (value: number) => {
-  if (value >= 100000000) {
-    return (value / 100000000).toFixed(2) + '亿'
-  } else if (value >= 10000) {
-    return (value / 10000).toFixed(2) + '万'
-  }
-  return value.toFixed(2)
-}
-
-// 初始化DCF图表
-const initDCFChart = () => {
-  if (!dcfChartRef.value) return
-  
-  dcfChartInstance = echarts.init(dcfChartRef.value)
-  
-  const years = []
-  const cashFlows = []
-  const discountRates = []
-  
-  for (let i = 1; i <= dcfParams.value.forecastYears; i++) {
-    years.push(`第${i}年`)
-    const cashFlow = 48422000000 * Math.pow((1 + dcfParams.value.growthRate / 100), i)
-    cashFlows.push((cashFlow / 100000000).toFixed(2))
-    discountRates.push(dcfParams.value.discountRate)
-  }
-  
-  const option = {
-    title: {
-      text: '自由现金流预测',
-      left: 'center'
-    },
-    tooltip: {
-      trigger: 'axis'
-    },
-    legend: {
-      data: ['自由现金流(亿)', '贴现率(%)'],
-      bottom: 0
-    },
-    xAxis: {
-      type: 'category',
-      data: years
-    },
-    yAxis: [
-      {
-        type: 'value',
-        name: '现金流(亿)',
-        position: 'left'
-      },
-      {
-        type: 'value',
-        name: '贴现率(%)',
-        position: 'right',
-        max: dcfParams.value.discountRate * 2
-      }
-    ],
-    series: [
-      {
-        name: '自由现金流(亿)',
-        type: 'bar',
-        data: cashFlows
-      },
-      {
-        name: '贴现率(%)',
-        type: 'line',
-        yAxisIndex: 1,
-        data: discountRates
-      }
-    ]
-  }
-  
-  dcfChartInstance.setOption(option)
-}
-
-// 初始化历史估值图表
-const initHistoricalChart = () => {
-  if (!historicalChartRef.value) return
-  
-  historicalChartInstance = echarts.init(historicalChartRef.value)
-  
-  const option = {
-    title: {
-      text: '历史估值走势',
-      left: 'center'
-    },
-    tooltip: {
-      trigger: 'axis'
-    },
-    legend: {
-      data: ['PE', 'PB', 'PS'],
-      bottom: 0
-    },
-    xAxis: {
-      type: 'category',
-      data: ['2023-01', '2023-03', '2023-06', '2023-09', '2023-12', '2024-03', '2024-06', '2024-09']
-    },
-    yAxis: {
-      type: 'value',
-      splitLine: {
-        show: true
-      }
-    },
-    series: [
-      {
-        name: 'PE',
-        type: 'line',
-        data: [32.5, 30.2, 28.6, 26.8, 24.5, 23.2, 24.8, 25.6],
-        smooth: true
-      },
-      {
-        name: 'PB',
-        type: 'line',
-        data: [11.5, 10.8, 10.2, 9.5, 8.8, 8.5, 9.2, 9.8],
-        smooth: true
-      },
-      {
-        name: 'PS',
-        type: 'line',
-        data: [15.8, 14.5, 13.8, 13.2, 12.5, 12.0, 12.8, 13.2],
-        smooth: true
-      }
-    ]
-  }
-  
-  historicalChartInstance.setOption(option)
-}
+const formatCurrency = (value: number | undefined) => {
+  if (value === undefined || value === null) return '-';
+  return value.toLocaleString('zh-CN', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+};
 
 // 获取建议类名
 const getSuggestionClass = (score: number) => {
-  if (score >= 85) return 'strong-buy'
-  if (score >= 75) return 'buy'
-  if (score >= 65) return 'hold'
-  if (score >= 55) return 'sell'
-  return 'strong-sell'
-}
+  if (score >= 80) return 'excellent';
+  if (score >= 70) return 'good';
+  if (score >= 60) return 'fair';
+  return 'poor';
+};
 
 // 获取建议标题
 const getSuggestionTitle = (score: number) => {
-  if (score >= 85) return '强烈买入'
-  if (score >= 75) return '买入'
-  if (score >= 65) return '持有'
-  if (score >= 55) return '卖出'
-  return '强烈卖出'
-}
+  if (score >= 80) return '强烈推荐';
+  if (score >= 70) return '推荐';
+  if (score >= 60) return '谨慎推荐';
+  return '不推荐';
+};
 
 // 获取建议内容
 const getSuggestionContent = (score: number) => {
-  if (score >= 85) {
-    return '该股票综合评分优秀，基本面稳健，估值合理，具有较高的投资价值，建议积极买入。'
-  } else if (score >= 75) {
-    return '该股票综合评分良好，具有一定的投资价值，可以考虑适量买入。'
-  } else if (score >= 65) {
-    return '该股票综合评分一般，暂时建议持有，密切关注公司基本面变化。'
-  } else if (score >= 55) {
-    return '该股票综合评分较差，存在一定风险，建议考虑减持。'
-  }
-  return '该股票综合评分很差，风险较高，建议尽快卖出。'
-}
+  if (score >= 80) return '该股票在基本面、成长性、估值和技术面表现优异，具备较高的投资价值。';
+  if (score >= 70) return '该股票整体表现良好，基本面稳定，建议考虑适量配置。';
+  if (score >= 60) return '该股票表现一般，存在一定风险，建议谨慎考虑，等待更合适的入场时机。';
+  return '该股票表现不佳，建议暂不考虑投资，可继续观察。';
+};
 
-// 监听选项卡变化
-watch(activeModel, (newModel) => {
-  if (newModel === 'dcf' && dcfResult.value) {
-    nextTick(() => {
-      initDCFChart()
-    })
+// 渲染DCF图表
+const renderDCFChart = () => {
+  if (!dcfChartRef.value || !valuationResult.value?.dcf?.cashFlows) return;
+  
+  if (dcfChartInstance) {
+    dcfChartInstance.dispose();
   }
-})
+  
+  dcfChartInstance = echarts.init(dcfChartRef.value);
+  const cashFlows = valuationResult.value.dcf.cashFlows;
+  
+  const option = {
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: {
+        type: 'shadow'
+      }
+    },
+    legend: {
+      data: ['自由现金流', '现值']
+    },
+    grid: {
+      left: '3%',
+      right: '4%',
+      bottom: '3%',
+      containLabel: true
+    },
+    xAxis: {
+      type: 'category',
+      data: cashFlows.map((item: any) => `第${item.year}年`)
+    },
+    yAxis: {
+      type: 'value'
+    },
+    series: [
+      {
+        name: '自由现金流',
+        type: 'bar',
+        data: cashFlows.map((item: any) => item.fcf.toFixed(2)),
+        itemStyle: {
+          color: '#5470c6'
+        }
+      },
+      {
+        name: '现值',
+        type: 'bar',
+        data: cashFlows.map((item: any) => item.presentValue.toFixed(2)),
+        itemStyle: {
+          color: '#91cc75'
+        }
+      }
+    ]
+  };
+  
+  dcfChartInstance.setOption(option);
+};
 
-onMounted(() => {
-  loadStockData(selectedStockId.value)
+// 渲染历史估值图表
+const renderHistoricalChart = () => {
+  if (!historicalChartRef.value || historicalValuation.value.length === 0) return;
   
-  // 初始化历史估值图表
-  nextTick(() => {
-    initHistoricalChart()
-  })
+  if (historicalChartInstance) {
+    historicalChartInstance.dispose();
+  }
   
-  // 监听窗口大小变化
+  historicalChartInstance = echarts.init(historicalChartRef.value);
+  
+  const dates = historicalValuation.value.map(item => 
+    new Date(item.valuation_date).toLocaleDateString('zh-CN')
+  );
+  const intrinsicValues = historicalValuation.value.map(item => item.intrinsic_value);
+  const currentPrices = historicalValuation.value.map(item => item.current_price);
+  
+  const option = {
+    tooltip: {
+      trigger: 'axis'
+    },
+    legend: {
+      data: ['内在价值', '市场价格']
+    },
+    grid: {
+      left: '3%',
+      right: '4%',
+      bottom: '3%',
+      containLabel: true
+    },
+    xAxis: {
+      type: 'category',
+      boundaryGap: false,
+      data: dates
+    },
+    yAxis: {
+      type: 'value'
+    },
+    series: [
+      {
+        name: '内在价值',
+        type: 'line',
+        data: intrinsicValues,
+        itemStyle: {
+          color: '#5470c6'
+        },
+        smooth: true
+      },
+      {
+        name: '市场价格',
+        type: 'line',
+        data: currentPrices,
+        itemStyle: {
+          color: '#ee6666'
+        },
+        smooth: true
+      }
+    ]
+  };
+  
+  historicalChartInstance.setOption(option);
+};
+
+// 组件挂载时初始化
+onMounted(async () => {
+  // 加载默认股票数据
+  await loadStockData(selectedStockId.value);
+  
+  // 初始化图表
   window.addEventListener('resize', () => {
-    dcfChartInstance?.resize()
-    historicalChartInstance?.resize()
-  })
-})
+    dcfChartInstance?.resize();
+    historicalChartInstance?.resize();
+  });
+});
+
+// 监听历史估值数据变化，重新渲染图表
+watch(historicalValuation, () => {
+  nextTick(() => {
+    renderHistoricalChart();
+  });
+});
+
+// 监听估值结果变化，重新渲染DCF图表
+watch(valuationResult, () => {
+  nextTick(() => {
+    renderDCFChart();
+  });
+});
+
+// 添加到对比列表
+const addStockToList = () => {
+  if (comparisonList.value.find(item => item.id === selectedStock.value.id)) {
+    return;
+  }
+  
+  comparisonList.value.push({ ...selectedStock.value });
+  showAddButton.value = false;
+};
+
+// 从对比列表移除
+const removeStockFromList = (id: string) => {
+  comparisonList.value = comparisonList.value.filter(item => item.id !== id);
+  showAddButton.value = true;
+};
+
+// 开始对比分析
+const startComparison = () => {
+  // 对比分析逻辑
+  console.log('开始对比分析:', comparisonList.value);
+};
 </script>
 
 <style scoped>
