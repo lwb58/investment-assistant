@@ -1,4 +1,4 @@
-const IndustryService = require('../services/industryService');
+import IndustryService from '../services/industryService.js';
 
 /**
  * 行业分析控制器
@@ -11,7 +11,7 @@ const industryController = {
    */
   async getIndustries(req, res) {
     try {
-      const industries = await IndustryService.getIndustries();
+      const industries = await IndustryService.getIndustries() || [];
       
       res.json({
         success: true,
@@ -163,4 +163,4 @@ const industryController = {
   }
 };
 
-module.exports = industryController;
+export default industryController;

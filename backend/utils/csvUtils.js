@@ -129,7 +129,7 @@ function parseCSVLine(line) {
   return values;
 }
 
-module.exports = {
+export {
   exportToCSV,
   parseCSV
 };

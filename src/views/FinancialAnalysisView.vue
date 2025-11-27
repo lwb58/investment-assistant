@@ -17,7 +17,8 @@
     </div>
     
     <!-- 公司概览 -->
-    <div v-if="selectedStock" class="company-overview">
+    <div v-if="loading" class="loading">加载中...</div>
+<div v-else-if="selectedStock" class="company-overview">
       <div class="company-header">
         <h3>{{ selectedStock.name }}</h3>
         <span class="stock-code">{{ selectedStock.code }}</span>
@@ -225,81 +226,32 @@ import { ref, onMounted, watch, nextTick } from 'vue'
 import * as echarts from 'echarts'
 import type { ECharts } from 'echarts'
 
-// 模拟数据
 const searchQuery = ref('')
-const selectedStock = ref<any>({
-  name: '贵州茅台',
-  code: '600519',
-  currentPrice: 1823.00,
-  priceChange: 18.23,
-  priceChangePercent: 1.01,
-  industry: '白酒',
-  marketCap: 22900,
-  peTTM: 25.6,
-  pb: 9.8,
-  indicators: {
-    revenue: 1062.75,
-    revenueYoY: 16.85,
-    revenueQoq: 4.32,
-    netProfit: 484.22,
-    netProfitYoY: 19.49,
-    netProfitQoq: 5.16,
-    grossMargin: 91.87,
-    netMargin: 45.56,
-    roe: 31.25,
-    debtRatio: 17.68,
-    currentRatio: 3.87,
-    quickRatio: 3.65,
-    arTurnover: 12.34,
-    inventoryTurnover: 0.32,
-    assetTurnover: 0.68
-  },
-  balanceSheet: [
-    { item: '货币资金', latest: 1356.78, previous: 1234.56, yearAgo: 1123.45, yoyChange: 20.76 },
-    { item: '应收账款', latest: 45.67, previous: 42.34, yearAgo: 38.90, yoyChange: 17.40 },
-    { item: '存货', latest: 3256.78, previous: 3123.45, yearAgo: 2987.65, yoyChange: 8.94 },
-    { item: '流动资产合计', latest: 5678.90, previous: 5432.10, yearAgo: 5123.45, yoyChange: 10.84 },
-    { item: '固定资产', latest: 432.10, previous: 412.34, yearAgo: 398.76, yoyChange: 8.36 },
-    { item: '总资产', latest: 21345.67, previous: 20123.45, yearAgo: 18987.65, yoyChange: 12.42 },
-    { item: '短期借款', latest: 0.00, previous: 0.00, yearAgo: 0.00, yoyChange: 0.00 },
-    { item: '应付账款', latest: 123.45, previous: 118.90, yearAgo: 112.34, yoyChange: 9.89 },
-    { item: '流动负债合计', latest: 1467.89, previous: 1401.23, yearAgo: 1324.56, yoyChange: 10.82 },
-    { item: '总负债', latest: 3773.45, previous: 3556.78, yearAgo: 3367.89, yoyChange: 12.04 },
-    { item: '股东权益', latest: 17572.22, previous: 16566.67, yearAgo: 15619.76, yoyChange: 12.50 }
-  ],
-  incomeStatement: [
-    { item: '营业收入', latest: 267.89, previous: 256.78, yearAgo: 229.24, yoyChange: 16.86 },
-    { item: '营业成本', latest: 21.56, previous: 20.45, yearAgo: 19.23, yoyChange: 12.12 },
-    { item: '营业利润', latest: 135.67, previous: 128.90, yearAgo: 113.56, yoyChange: 19.47 },
-    { item: '净利润', latest: 108.90, previous: 103.56, yearAgo: 90.99, yoyChange: 19.68 },
-    { item: '基本每股收益', latest: 8.71, previous: 8.28, yearAgo: 7.28, yoyChange: 19.64 }
-  ],
-  cashFlow: [
-    { item: '经营活动现金流净额', latest: 123.45, previous: 118.90, yearAgo: 102.34, yoyChange: 20.63 },
-    { item: '投资活动现金流净额', latest: -56.78, previous: -52.34, yearAgo: -48.90, yoyChange: -16.11 },
-    { item: '筹资活动现金流净额', latest: -67.89, previous: -65.43, yearAgo: -62.34, yoyChange: -8.90 },
-    { item: '现金及等价物净增加额', latest: -1.22, previous: 1.13, yearAgo: -8.90, yoyChange: 86.30 }
-  ],
-  scores: {
-    profitability: 95,
-    solvency: 90,
-    operation: 85,
-    growth: 88,
-    overall: 92
-  }
-})
+const selectedStock = ref<any>(null)
+const loading = ref(false)
 
 const activeTab = ref('keyIndicators')
 const trendChartRef = ref<HTMLElement>()
 let trendChartInstance: ECharts | null = null
 
 // 搜索股票
-const searchStock = () => {
+const searchStock = async () => {
   if (!searchQuery.value) {
     return
   }
-  console.log('搜索股票:', searchQuery.value)
-  // 在实际应用中，这里会根据搜索词获取股票数据
+  
+  loading.value = true
+  try {
+    // 调用API获取股票数据
+    const response = await fetch(`/api/stock/financial/${searchQuery.value}`)
+    const data = await response.json()
+    selectedStock.value = data
+  } catch (error) {
+    console.error('获取股票数据失败:', error)
+    // 可以添加错误提示
+  } finally {
+    loading.value = false
+  }
 }
 
 // 格式化市值
@@ -326,10 +278,12 @@ const getScoreDescription = (score: number) => {
 
 // 初始化趋势图
 const initTrendChart = () => {
-  if (!trendChartRef.value) return
+  if (!trendChartRef.value || !selectedStock.value) return
   
   trendChartInstance = echarts.init(trendChartRef.value)
   
+  // 这里应该使用从API获取的真实趋势数据
+  // 暂时使用空数据结构，实际应用中应从selectedStock.value获取
   const option = {
     title: {
       text: '营收与净利润趋势',
@@ -344,7 +298,7 @@ const initTrendChart = () => {
     },
     xAxis: {
       type: 'category',
-      data: ['2023-Q1', '2023-Q2', '2023-Q3', '2023-Q4', '2024-Q1', '2024-Q2']
+      data: [] // 将从API数据填充
     },
     yAxis: [
       {
@@ -365,25 +319,25 @@ const initTrendChart = () => {
       {
         name: '营业收入',
         type: 'bar',
-        data: [218.29, 237.68, 251.87, 263.51, 232.43, 267.89]
+        data: [] // 将从API数据填充
       },
       {
         name: '净利润',
         type: 'bar',
-        data: [95.39, 105.55, 113.09, 116.19, 96.32, 108.90]
+        data: [] // 将从API数据填充
       },
       {
         name: '营收同比增长',
         type: 'line',
         yAxisIndex: 1,
-        data: [18.25, 16.51, 17.20, 16.82, 6.48, 16.86],
+        data: [], // 将从API数据填充
         smooth: true
       },
       {
         name: '净利润同比增长',
         type: 'line',
         yAxisIndex: 1,
-        data: [23.92, 20.85, 19.87, 18.24, 1.15, 19.68],
+        data: [], // 将从API数据填充
         smooth: true
       }
     ]

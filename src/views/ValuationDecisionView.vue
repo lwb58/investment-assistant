@@ -217,33 +217,50 @@ import * as echarts from 'echarts'
 import type { ECharts } from 'echarts'
 import valuationService from '../services/valuationService';
 
-// 使用股票代码作为ID
-const stockList = ref([
-  { id: '600519', name: '贵州茅台', code: '600519' },
-  { id: '300750', name: '宁德时代', code: '300750' },
-  { id: '002594', name: '比亚迪', code: '002594' },
-  { id: '601012', name: '隆基绿能', code: '601012' },
-  { id: '300274', name: '阳光电源', code: '300274' }
-])
+// 初始空数据
+const stockList = ref<any[]>([])
+const selectedStockId = ref('')
+const selectedStock = ref<any>(null)
 
-const selectedStockId = ref('600519')
-const selectedStock = ref<any>({
-  id: '600519',
-  name: '贵州茅台',
-  code: '600519',
-  currentPrice: 1823.00,
-  pe: 25.6,
-  pb: 9.8,
-  ps: 13.2,
-  evToEbitda: 20.5,
-  peg: 1.2
-})
-
-const comparisonList = ref<any[]>([])
+const comparisonList = ref<any[]>([])  
 const showAddButton = ref(true)
 const activeModel = ref('dcf')
 const loading = ref(false)
 const error = ref<string | null>(null)
+
+// 图表引用
+const dcfChartRef = ref<HTMLElement | null>(null)
+const historicalChartRef = ref<HTMLElement | null>(null)
+let dcfChartInstance: ECharts | undefined
+let historicalChartInstance: ECharts | undefined
+
+// 评分数据
+const scoreData = ref({
+  total: 0,
+  fundamental: 0,
+  growth: 0,
+  valuation: 0,
+  technical: 0
+})
+
+// 相对估值汇总
+const relativeSummary = ref({
+  avgPE: 0,
+  avgPB: 0,
+  avgPS: 0,
+  avgEVToEbitda: 0,
+  targetPricePE: 0,
+  targetPricePB: 0
+})
+
+// 相对估值参数
+const relativeParams = ref({
+  benchmarkType: 'industry',
+  benchmark: ''
+})
+
+// 相对估值数据
+const relativeValuationData = ref<any[]>([])
 
 // DCF参数 - 使用小数形式而不是百分比
 const dcfParams = ref({
@@ -267,18 +284,18 @@ const loadStockData = async (symbol: string) => {
     dcfResult.value = null;
     valuationResult.value = null;
     
-    const stock = stockList.value.find(s => s.id === symbol);
-    if (stock) {
-      selectedStock.value = {
-        ...selectedStock.value,
-        id: stock.id,
-        name: stock.name,
-        code: stock.code
-      };
-      
-      // 获取历史估值数据
-      await loadHistoricalValuation(symbol);
-    }
+    // 从API获取股票详细信息
+    const stockData = await valuationService.getStockInfo(symbol);
+    selectedStock.value = stockData;
+    
+    // 获取历史估值数据
+    await loadHistoricalValuation(symbol);
+    
+    // 获取相对估值数据
+    await loadRelativeValuation(symbol);
+    
+    // 获取评分数据
+    await loadScoreData(symbol);
   } catch (err) {
     console.error('加载股票数据失败:', err);
     error.value = '加载股票数据失败，请重试';
@@ -287,14 +304,50 @@ const loadStockData = async (symbol: string) => {
   }
 }
 
+// 加载相对估值数据
+const loadRelativeValuation = async (symbol: string) => {
+  try {
+    const data = await valuationService.getRelativeValuation(symbol);
+    relativeValuationData.value = data.comparisonCompanies || [];
+    relativeSummary.value = {
+      avgPE: data.industryAverages?.pe || 0,
+      avgPB: data.industryAverages?.pb || 0,
+      avgPS: data.industryAverages?.ps || 0,
+      avgEVToEbitda: data.industryAverages?.evToEbitda || 0,
+      targetPricePE: data.targetPrices?.peBased || 0,
+      targetPricePB: data.targetPrices?.pbBased || 0
+    };
+  } catch (err) {
+    console.error('加载相对估值失败:', err);
+  }
+}
+
+// 加载评分数据
+const loadScoreData = async (symbol: string) => {
+  try {
+    const data = await valuationService.getScoreData(symbol);
+    scoreData.value = data || {
+      total: 0,
+      fundamental: 0,
+      growth: 0,
+      valuation: 0,
+      technical: 0
+    };
+  } catch (err) {
+    console.error('加载评分数据失败:', err);
+  }
+}
+
 // 加载历史估值数据
 const loadHistoricalValuation = async (symbol: string) => {
   try {
     const history = await valuationService.getValuationHistory(symbol);
-    historicalValuation.value = history;
-    // 可以在这里初始化图表
+    historicalValuation.value = history || [];
+    await nextTick();
+    renderHistoricalChart();
   } catch (err) {
     console.error('加载历史估值失败:', err);
+    historicalValuation.value = [];
   }
 }
 
@@ -321,20 +374,23 @@ const calculateValuation = async () => {
     const result = await valuationService.calculateValuation(selectedStockId.value, params);
     valuationResult.value = result;
     
+    // 添加类型断言以避免TypeScript错误
+    const typedResult = result as any;
+    
     // 更新DCF结果显示
-    if (result.dcf) {
+    if (typedResult.dcf) {
       dcfResult.value = {
-        enterpriseValue: result.dcf.intrinsicValue,
-        equityValue: result.dcf.intrinsicValue,
-        perShareValue: result.intrinsicValue,
-        valuation: result.marginOfSafety > 0 ? 'undervalued' : 'overvalued',
-        percentDiff: result.marginOfSafety
+        enterpriseValue: typedResult.dcf.intrinsicValue,
+        equityValue: typedResult.dcf.intrinsicValue,
+        perShareValue: typedResult.intrinsicValue,
+        valuation: typedResult.marginOfSafety > 0 ? 'undervalued' : 'overvalued',
+        percentDiff: typedResult.marginOfSafety
       };
     }
     
     // 更新当前股价
-    if (result.currentPrice) {
-      selectedStock.value.currentPrice = result.currentPrice;
+    if (typedResult.currentPrice) {
+      selectedStock.value.currentPrice = typedResult.currentPrice;
     }
     
     // 刷新历史数据
@@ -508,8 +564,17 @@ const renderHistoricalChart = () => {
 
 // 组件挂载时初始化
 onMounted(async () => {
-  // 加载默认股票数据
-  await loadStockData(selectedStockId.value);
+  // 组件挂载后加载股票列表
+  try {
+    loading.value = true;
+    const stocks = await valuationService.getStockList();
+    stockList.value = stocks || [];
+  } catch (err) {
+    console.error('加载股票列表失败:', err);
+    stockList.value = [];
+  } finally {
+    loading.value = false;
+  }
   
   // 初始化图表
   window.addEventListener('resize', () => {

@@ -1,6 +1,6 @@
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-const industryController = require('../controllers/industryController');
+import industryController from '../controllers/industryController.js';
 
 /**
  * @swagger
@@ -27,4 +27,4 @@ router.get('/:industryCode/trend', industryController.getIndustryTrend);
 // 获取行业估值排名
 router.get('/valuation/ranking', industryController.getIndustryValuationRanking);
 
-module.exports = router;
+export default router;

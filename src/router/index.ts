@@ -12,6 +12,14 @@ const routes: Array<RouteRecordRaw> = [
     }
   },
   {
+    path: '/market-data',
+    name: 'marketData',
+    component: () => import('@/views/MarketDataView.vue'),
+    meta: {
+      title: '市场行情 - 智能投资助手'
+    }
+  },
+  {
     path: '/stock/search',
     name: 'stockSearch',
     component: () => import('@/views/StockSearchView.vue'),
@@ -36,13 +44,29 @@ const routes: Array<RouteRecordRaw> = [
     }
   },
   {
-    path: '/about',
-    name: 'about',
-    component: () => import('@/views/AboutView.vue'),
+    path: '/favorite-stocks',
+    name: 'favoriteStocks',
+    component: () => import('@/views/FavoriteStocksView.vue'),
     meta: {
-      title: '关于我们 - 智能投资助手'
+      title: '关注股票 - 智能投资助手'
     }
-  }
+  },
+  {
+    path: '/profile',
+    name: 'profile',
+    component: () => import('@/views/ProfileView.vue'),
+    meta: {
+      title: '个人中心 - 智能投资助手'
+    }
+  },
+  // {
+  //   path: '/about',
+  //   name: 'about',
+  //   component: () => import('@/views/AboutView.vue'),
+  //   meta: {
+  //     title: '关于我们 - 智能投资助手'
+  //   }
+  // }
 ]
 
 const router = createRouter({
@@ -51,7 +75,7 @@ const router = createRouter({
 })
 
 // 路由守卫，设置页面标题
-router.beforeEach((to, from, next) => {
+router.beforeEach((to, _from, next) => {
   document.title = to.meta.title as string || '智能投资助手'
   next()
 })

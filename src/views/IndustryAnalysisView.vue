@@ -1303,4 +1303,73 @@ onMounted(() => {
 .retry-btn:hover {
   background-color: #ff7875;
 }
+
+/* 响应式样式 */
+@media (max-width: 768px) {
+  .industry-analysis-container {
+    padding: 15px;
+  }
+  
+  .page-title {
+    font-size: 20px;
+  }
+  
+  .industry-tabs {
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+  
+  .el-tabs__nav {
+    font-size: 12px;
+  }
+  
+  .industry-card {
+    margin-bottom: 15px;
+    padding: 15px;
+  }
+  
+  .metric-value {
+    font-size: 16px;
+  }
+  
+  .metric-label {
+    font-size: 12px;
+  }
+  
+  .stock-list {
+    overflow-x: auto;
+  }
+  
+  .el-table {
+    min-width: 500px;
+    font-size: 12px;
+  }
+  
+  .el-table__header th,
+  .el-table__body td {
+    padding: 6px 4px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .industry-analysis-container {
+    padding: 10px;
+  }
+  
+  .page-title {
+    font-size: 18px;
+  }
+  
+  .industry-card {
+    padding: 12px;
+  }
+  
+  .metric-value {
+    font-size: 14px;
+  }
+  
+  .metric-label {
+    font-size: 11px;
+  }
+}
 </style>

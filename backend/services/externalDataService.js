@@ -1,6 +1,12 @@
 import axios from 'axios';
-import { getDB } from '../config/db.js';
 import dotenv from 'dotenv';
+
+// 导入修复后的API模块
+import sinacnApi from '../apis/sinacnApi.js';
+import eastmoneyApi from '../apis/eastmoneyApi.js';
+import tushareApi from '../apis/tushareApi.js';
+import baostockApi from '../apis/baostockApi.js';
+import dtshareApi from '../apis/dtshareApi.js';
 
 // 加载环境变量
 dotenv.config();
@@ -13,24 +19,386 @@ class ExternalDataService {
   constructor() {
     this.db = null;
     this.axios = axios.create({
-      timeout: 15000,
+      timeout: 10000, // 设置超时时间
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        'Accept': 'application/json, text/plain, */*'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
       }
     });
     this.cache = new Map();
     this.cacheTTL = 5 * 60 * 1000; // 5分钟缓存
+    
+    // 配置多个数据源，使用环境变量或默认值
+    this.config = {
+      tushare: {
+        baseUrl: 'http://api.tushare.pro',
+        token: process.env.TUSHARE_TOKEN || '' // 不再硬编码token
+      },
+      publicAPIs: {
+        baseUrl: 'https://api.example.com/v1' // 示例公共API
+      }
+    };
+    
+    this.setupInterceptors();
+  }
+  
+  // 设置拦截器
+  setupInterceptors() {
+    // 请求拦截器
+    this.axios.interceptors.request.use(
+      config => {
+        console.log(`请求API: ${config.method?.toUpperCase()} ${config.url}`);
+        return config;
+      },
+      error => Promise.reject(error)
+    );
+    
+    // 响应拦截器
+    this.axios.interceptors.response.use(
+      response => response,
+      async error => {
+        const config = error.config || {};
+        
+        // 初始化重试配置
+        config.retry = config.retry || 2;
+        config.retryCount = config.retryCount || 0;
+        
+        // 如果重试次数未达到上限
+        if (config.retryCount < config.retry) {
+          config.retryCount++;
+          
+          // 指数退避策略
+          const delay = Math.pow(2, config.retryCount) * 1000;
+          console.log(`请求失败，${delay}ms后重试 (${config.retryCount}/${config.retry})`);
+          
+          await new Promise(resolve => setTimeout(resolve, delay));
+          return this.axios(config);
+        }
+        
+        return Promise.reject(error);
+      }
+    );
     this.initialize();
   }
 
   async initialize() {
     try {
       this.db = await getDB();
+      // 验证Tushare token是否有效
+      const validateResult = await this.validateTushareToken();
+      if (validateResult) {
+        console.log('Tushare API连接成功');
+      } else {
+        console.warn('Tushare API连接失败，请检查token是否有效');
+      }
       console.log('外部数据源服务初始化成功');
     } catch (error) {
       console.error('外部数据源服务初始化失败:', error);
     }
+  }
+  
+  /**
+   * 验证Tushare token是否有效
+   */
+  async validateTushareToken() {
+    try {
+      const response = await this.callTushareAPI('stock_basic', {
+        exchange: '',
+        list_status: 'L',
+        fields: 'ts_code,symbol,name,industry',
+        limit: 1
+      });
+      return response && response.data && response.data.items && response.data.items.length > 0;
+    } catch (error) {
+      console.error('验证Tushare Token失败:', error);
+      return false;
+    }
+  }
+  
+  /**
+   * 调用Tushare API
+   * @param {string} apiName API名称
+   * @param {Object} params 请求参数
+   */
+  async callTushareAPI(apiName, params = {}) {
+    try {
+      console.log(`调用Tushare API: ${apiName}`);
+      const response = await this.axios.post(this.tushare.baseUrl, {
+        api_name: apiName,
+        token: this.tushare.token,
+        params: params,
+        fields: params.fields || ''
+      }, {
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        timeout: 15000
+      });
+      
+      if (response.data && response.data.code === 0) {
+        return response.data;
+      } else {
+        console.error(`Tushare API ${apiName} 调用失败: ${response.data?.msg || '未知错误'}`);
+        return null;
+      }
+    } catch (error) {
+      console.error(`Tushare API ${apiName} 请求异常:`, error.message);
+      // 网络错误时返回null，允许调用方继续尝试其他数据源
+      return null;
+    }
+  }
+  
+  /**
+   * Tushare API - 获取股票基本信息
+   * @param {Object} options 查询选项
+   */
+  async getTushareStockBasic(options = {}) {
+    const cacheKey = `tushare_stock_basic_${JSON.stringify(options)}`;
+    const cached = this.getCachedData(cacheKey);
+    if (cached) return cached;
+
+    try {
+      console.log(`使用修复的Tushare API模块获取股票基本信息`);
+      const stocks = await tushareApi.getStockBasic(options);
+      
+      if (stocks && Array.isArray(stocks)) {
+        // 确保返回的数据格式符合服务层期望
+        const formattedStocks = stocks.map(stock => ({
+          symbol: stock.ts_code,
+          code: stock.symbol,
+          name: stock.name,
+          industry: stock.industry,
+          area: stock.area,
+          market: stock.market,
+          exchange: stock.exchange
+        }));
+        
+        this.setCachedData(cacheKey, formattedStocks);
+        return formattedStocks;
+      }
+    } catch (error) {
+      console.error('获取Tushare股票基本信息失败:', error);
+    }
+    return [];
+  }
+  
+  /**
+   * Tushare API - 获取股票实时行情
+   * @param {string} symbol 股票代码 (如: 000001.SZ, 600000.SH)
+   */
+  async getTushareStockQuote(symbol) {
+    const cacheKey = `tushare_quote_${symbol}`;
+    const cached = this.getCachedData(cacheKey);
+    if (cached) return cached;
+
+    try {
+      // Tushare的行情API需要使用ts_code格式
+      const params = {
+        ts_code: symbol,
+        fields: 'ts_code,name,open,high,low,close,pre_close,change,pct_chg,volume,amount,pe,pe_ttm,pb,total_mv'
+      };
+      
+      // 使用stock_quotation API获取实时行情
+      const result = await this.callTushareAPI('stock_quotation', params);
+      
+      if (result && result.data && result.data.items && result.data.items.length > 0) {
+        const quote = result.data.items[0];
+        
+        const formattedData = {
+          symbol: quote.ts_code,
+          name: quote.name,
+          price: quote.close,
+          open: quote.open,
+          high: quote.high,
+          low: quote.low,
+          pre_close: quote.pre_close,
+          change: quote.change,
+          pct_change: quote.pct_chg,
+          volume: quote.volume,
+          amount: quote.amount,
+          pe: quote.pe || quote.pe_ttm || 0,
+          pb: quote.pb || 0,
+          market_cap: quote.total_mv || 0,
+          timestamp: new Date()
+        };
+        
+        this.setCachedData(cacheKey, formattedData);
+        return formattedData;
+      }
+    } catch (error) {
+      console.error(`获取Tushare股票${symbol}行情失败:`, error);
+    }
+    return null;
+  }
+  
+  /**
+   * Tushare API - 获取行业分类数据
+   */
+  async getTushareIndustries() {
+    const cacheKey = 'tushare_industries';
+    const cached = this.getCachedData(cacheKey);
+    if (cached) return cached;
+
+    try {
+      // 使用stock_basic API获取所有股票，然后按行业分组
+      const stocks = await this.getTushareStockBasic({
+        fields: 'ts_code,name,industry',
+        limit: 10000
+      });
+      
+      // 按行业分组并统计
+      const industryMap = {};
+      stocks.forEach(stock => {
+        if (stock.industry && stock.industry.trim()) {
+          if (!industryMap[stock.industry]) {
+            industryMap[stock.industry] = {
+              name: stock.industry,
+              count: 0,
+              stocks: []
+            };
+          }
+          industryMap[stock.industry].count++;
+          industryMap[stock.industry].stocks.push({
+            symbol: stock.symbol,
+            name: stock.name
+          });
+        }
+      });
+      
+      // 转换为数组格式
+      const industries = Object.values(industryMap);
+      
+      this.setCachedData(cacheKey, industries);
+      return industries;
+    } catch (error) {
+      console.error('获取Tushare行业数据失败:', error);
+    }
+    return [];
+  }
+  
+  /**
+   * Tushare API - 获取行业股票列表
+   * @param {string} industry 行业名称
+   */
+  async getTushareIndustryStocks(industry) {
+    const cacheKey = `tushare_industry_stocks_${industry}`;
+    const cached = this.getCachedData(cacheKey);
+    if (cached) return cached;
+
+    try {
+      const stocks = await this.getTushareStockBasic({
+        fields: 'ts_code,symbol,name,industry,area,market',
+        limit: 10000
+      });
+      
+      // 筛选指定行业的股票
+      const industryStocks = stocks.filter(stock => 
+        stock.industry && stock.industry.trim() === industry
+      );
+      
+      // 获取每只股票的行情数据
+      const detailedStocks = await Promise.all(
+        industryStocks.map(async stock => {
+          const quote = await this.getTushareStockQuote(stock.symbol);
+          return {
+            ...stock,
+            price: quote?.price || 0,
+            change: quote?.change || 0,
+            pct_change: quote?.pct_change || 0,
+            pe: quote?.pe || 0,
+            pb: quote?.pb || 0,
+            market_cap: quote?.market_cap || 0
+          };
+        })
+      );
+      
+      this.setCachedData(cacheKey, detailedStocks);
+      return detailedStocks;
+    } catch (error) {
+      console.error(`获取Tushare行业${industry}股票列表失败:`, error);
+    }
+    return [];
+  }
+  
+  /**
+   * Tushare API - 获取行业估值数据
+   */
+  async getTushareIndustryValuations() {
+    const cacheKey = 'tushare_industry_valuations';
+    const cached = this.getCachedData(cacheKey);
+    if (cached) return cached;
+
+    try {
+      // 1. 获取所有股票的基本信息和行业分类
+      const stocks = await this.getTushareStockBasic({
+        fields: 'ts_code,symbol,name,industry',
+        limit: 10000
+      });
+      
+      // 2. 获取所有股票的估值数据
+      const tsCodes = stocks.map(stock => stock.ts_code).join(',');
+      const valuationResult = await this.callTushareAPI('stock_valuation', {
+        ts_code: tsCodes,
+        fields: 'ts_code,pe,pe_ttm,pb,total_mv',
+        limit: 10000
+      });
+      
+      if (!valuationResult || !valuationResult.data || !valuationResult.data.items) {
+        return [];
+      }
+      
+      // 3. 创建股票代码到估值数据的映射
+      const valuationMap = {};
+      valuationResult.data.items.forEach(item => {
+        valuationMap[item.ts_code] = {
+          pe: item.pe || item.pe_ttm || 0,
+          pb: item.pb || 0,
+          market_cap: item.total_mv || 0
+        };
+      });
+      
+      // 4. 按行业分组计算平均估值
+      const industryValuations = {};
+      
+      stocks.forEach(stock => {
+        if (stock.industry && stock.industry.trim() && valuationMap[stock.symbol]) {
+          const industry = stock.industry;
+          const valuation = valuationMap[stock.symbol];
+          
+          if (!industryValuations[industry]) {
+            industryValuations[industry] = {
+              name: industry,
+              stockCount: 0,
+              totalPE: 0,
+              totalPB: 0,
+              totalMarketCap: 0,
+              avgPE: 0,
+              avgPB: 0,
+              totalMarketCap: 0
+            };
+          }
+          
+          industryValuations[industry].stockCount++;
+          industryValuations[industry].totalPE += valuation.pe;
+          industryValuations[industry].totalPB += valuation.pb;
+          industryValuations[industry].totalMarketCap += valuation.market_cap;
+        }
+      });
+      
+      // 5. 计算行业平均估值
+      const result = Object.values(industryValuations).map(ind => ({
+        name: ind.name,
+        stockCount: ind.stockCount,
+        avgPE: ind.stockCount > 0 ? ind.totalPE / ind.stockCount : 0,
+        avgPB: ind.stockCount > 0 ? ind.totalPB / ind.stockCount : 0,
+        totalMarketCap: ind.totalMarketCap
+      }));
+      
+      this.setCachedData(cacheKey, result);
+      return result;
+    } catch (error) {
+      console.error('获取Tushare行业估值数据失败:', error);
+    }
+    return [];
   }
 
   /**
@@ -62,39 +430,31 @@ class ExternalDataService {
     if (cached) return cached;
 
     try {
-      // 东方财富股票行情接口
-      const market = symbol.endsWith('.SH') ? 'sh' : 'sz';
-      const stockCode = symbol.split('.')[0];
-      const url = `https://push2.eastmoney.com/api/qt/stock/get?fields=f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f12,f13,f14,f15,f16,f17,f18,f20,f21,f23,f24,f25,f22,f11,f62,f128,f136,f148,f152,f168,f177,f183,f184,f185,f186,f187,f188,f189,f190,f191,f192,f207,f208,f209,f222,f223,f224,f225,f226,f227,f228,f229,f230,f231,f232,f233,f234,f235,f236,f237,f238,f239,f240,f241,f242,f243,f244,f245,f246,f247,f248,f249,f250,f251,f252,f253,f254,f255,f256,f257,f258,f259,f260,f261,f262,f263,f264,f265,f266,f267,f268,f269,f270,f271,f272,f273,f274,f275,f276,f277,f278,f279,f280,f281,f282,f283,f284,f285,f286,f287,f288,f289,f290,f291,f292,f293,f294,f295,f296,f297,f298,f299,f300,f301,f302,f303,f304,f305,f306,f307,f308,f309,f310,f311,f312,f313,f314,f315,f316,f317,f318,f319,f320,f321,f322,f323,f324,f325,f326,f327,f328,f329,f330,f331,f332,f333,f334,f335,f336,f337,f338,f339,f340,f341,f342,f343,f344,f345,f346,f347,f348,f349,f350,f351,f352,f353,f354,f355,f356,f357,f358,f359,f360,f361,f362,f363,f364,f365,f366,f367,f368,f369,f370,f371,f372,f373,f374,f375,f376,f377,f378,f379,f380,f381,f382,f383,f384,f385,f386,f387,f388,f389,f390,f391,f392,f393,f394,f395,f396,f397,f398,f399,f400,f401,f402,f403,f404,f405,f406,f407,f408,f409,f410,f411,f412,f413,f414,f415,f416,f417,f418,f419,f420,f421,f422,f423,f424,f425,f426,f427,f428,f429,f430,f431,f432,f433,f434,f435,f436,f437,f438,f439,f440,f441,f442,f443,f444,f445,f446,f447,f448,f449,f450,f451,f452,f453,f454,f455,f456,f457,f458,f459,f460,f461,f462,f463,f464,f465,f466,f467,f468,f469,f470,f471,f472,f473,f474,f475,f476,f477,f478,f479,f480,f481,f482,f483,f484,f485,f486,f487,f488,f489,f490,f491,f492,f493,f494,f495,f496,f497,f498,f499,f500,f501,f502,f503,f504,f505,f506,f507,f508,f509,f510,f511,f512,f513,f514,f515,f516,f517,f518,f519,f520,f521,f522,f523,f524,f525,f526,f527,f528,f529,f530,f531,f532,f533,f534,f535,f536,f537,f538,f539,f540,f541,f542,f543,f544,f545,f546,f547,f548,f549,f550,f551,f552,f553,f554,f555,f556,f557,f558,f559,f560,f561,f562,f563,f564,f565,f566,f567,f568,f569,f570,f571,f572,f573,f574,f575,f576,f577,f578,f579,f580,f581,f582,f583,f584,f585,f586,f587,f588,f589,f590,f591,f592,f593,f594,f595,f596,f597,f598,f599,f600,f601,f602,f603,f604,f605,f606,f607,f608,f609,f610,f611,f612,f613,f614,f615,f616,f617,f618,f619,f620,f621,f622,f623,f624,f625,f626,f627,f628,f629,f630,f631,f632,f633,f634,f635,f636,f637,f638,f639,f640,f641,f642,f643,f644,f645,f646,f647,f648,f649,f650,f651,f652,f653,f654,f655,f656,f657,f658,f659,f660,f661,f662,f663,f664,f665,f666,f667,f668,f669,f670,f671,f672,f673,f674,f675,f676,f677,f678,f679,f680,f681,f682,f683,f684,f685,f686,f687,f688,f689,f690,f691,f692,f693,f694,f695,f696,f697,f698,f699,f700&secid=${market}.${stockCode}&ut=fcea386e386d9c584928df10665e7bfb&forcect=1&fields2=f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13,f14,f15,f16,f17,f18,f20,f21,f23,f24,f25,f22,f11,f62,f128,f136,f148,f152,f168,f177,f183,f184,f185,f186,f187,f188,f189,f190,f191,f192,f207,f208,f209,f222,f223,f224,f225,f226,f227,f228,f229,f230,f231,f232,f233,f234,f235,f236,f237,f238,f239,f240,f241,f242,f243,f244,f245,f246,f247,f248,f249,f250,f251,f252,f253,f254,f255,f256,f257,f258,f259,f260,f261,f262,f263,f264,f265,f266,f267,f268,f269,f270,f271,f272,f273,f274,f275,f276,f277,f278,f279,f280,f281,f282,f283,f284,f285,f286,f287,f288,f289,f290,f291,f292,f293,f294,f295,f296,f297,f298,f299,f300,f301,f302,f303,f304,f305,f306,f307,f308,f309,f310,f311,f312,f313,f314,f315,f316,f317,f318,f319,f320,f321,f322,f323,f324,f325,f326,f327,f328,f329,f330,f331,f332,f333,f334,f335,f336,f337,f338,f339,f340,f341,f342,f343,f344,f345,f346,f347,f348,f349,f350,f351,f352,f353,f354,f355,f356,f357,f358,f359,f360,f361,f362,f363,f364,f365,f366,f367,f368,f369,f370,f371,f372,f373,f374,f375,f376,f377,f378,f379,f380,f381,f382,f383,f384,f385,f386,f387,f388,f389,f390,f391,f392,f393,f394,f395,f396,f397,f398,f399,f400,f401,f402,f403,f404,f405,f406,f407,f408,f409,f410,f411,f412,f413,f414,f415,f416,f417,f418,f419,f420,f421,f422,f423,f424,f425,f426,f427,f428,f429,f430,f431,f432,f433,f434,f435,f436,f437,f438,f439,f440,f441,f442,f443,f444,f445,f446,f447,f448,f449,f450,f451,f452,f453,f454,f455,f456,f457,f458,f459,f460,f461,f462,f463,f464,f465,f466,f467,f468,f469,f470,f471,f472,f473,f474,f475,f476,f477,f478,f479,f480,f481,f482,f483,f484,f485,f486,f487,f488,f489,f490,f491,f492,f493,f494,f495,f496,f497,f498,f499,f500,f501,f502,f503,f504,f505,f506,f507,f508,f509,f510,f511,f512,f513,f514,f515,f516,f517,f518,f519,f520,f521,f522,f523,f524,f525,f526,f527,f528,f529,f530,f531,f532,f533,f534,f535,f536,f537,f538,f539,f540,f541,f542,f543,f544,f545,f546,f547,f548,f549,f550,f551,f552,f553,f554,f555,f556,f557,f558,f559,f560,f561,f562,f563,f564,f565,f566,f567,f568,f569,f570,f571,f572,f573,f574,f575,f576,f577,f578,f579,f580,f581,f582,f583,f584,f585,f586,f587,f588,f589,f590,f591,f592,f593,f594,f595,f596,f597,f598,f599,f600,f601,f602,f603,f604,f605,f606,f607,f608,f609,f610,f611,f612,f613,f614,f615,f616,f617,f618,f619,f620,f621,f622,f623,f624,f625,f626,f627,f628,f629,f630,f631,f632,f633,f634,f635,f636,f637,f638,f639,f640,f641,f642,f643,f644,f645,f646,f647,f648,f649,f650,f651,f652,f653,f654,f655,f656,f657,f658,f659,f660,f661,f662,f663,f664,f665,f666,f667,f668,f669,f670,f671,f672,f673,f674,f675,f676,f677,f678,f679,f680,f681,f682,f683,f684,f685,f686,f687,f688,f689,f690,f691,f692,f693,f694,f695,f696,f697,f698,f699,f700&ut=fcea386e386d9c584928df10665e7bfb&forcect=1&cb=jQuery183013480495686887644_1688444444444&_=1688444444445`;
+      console.log(`使用eastmoneyApi获取股票${symbol}行情`);
+      const result = await eastmoneyApi.getStockQuote(symbol);
       
-      const response = await this.axios.get(url);
-      // 解析JSONP响应
-      const jsonpData = response.data;
-      const jsonStr = jsonpData.match(/\(({.*})\)/)[1];
-      const data = JSON.parse(jsonStr);
-      
-      if (data.data) {
-        const quote = data.data;
-        const result = {
-          symbol: `${quote.f12}.${market === 'sh' ? 'SH' : 'SZ'}`,
-          name: quote.f14,
-          price: quote.f2,
-          open: quote.f17,
-          high: quote.f15,
-          low: quote.f16,
-          pre_close: quote.f18,
-          change: quote.f3,
-          pct_change: quote.f4,
-          volume: quote.f5,
-          amount: quote.f6,
-          pe: quote.f8,
-          pb: quote.f9,
-          market_cap: quote.f20,
-          timestamp: new Date()
+      if (result) {
+        // 确保返回的数据格式符合要求
+        const formattedResult = {
+          symbol: result.symbol || symbol,
+          name: result.name,
+          price: result.price,
+          open: result.open,
+          high: result.high,
+          low: result.low,
+          pre_close: result.pre_close,
+          change: result.change,
+          pct_change: result.pct_change,
+          volume: result.volume,
+          amount: result.amount,
+          pe: result.pe,
+          pb: result.pb,
+          market_cap: result.market_cap,
+          timestamp: result.timestamp || new Date()
         };
         
-        this.setCachedData(cacheKey, result);
-        return result;
+        this.setCachedData(cacheKey, formattedResult);
+        return formattedResult;
       }
     } catch (error) {
       console.error(`获取东方财富股票${symbol}行情失败:`, error);
@@ -149,36 +509,28 @@ class ExternalDataService {
     if (cached) return cached;
 
     try {
-      const market = symbol.endsWith('.SH') ? 'sh' : 'sz';
-      const stockCode = symbol.split('.')[0];
-      const url = `https://hq.sinajs.cn/list=${market}${stockCode}`;
+      console.log(`使用修复的新浪财经API模块获取${symbol}行情`);
+      const result = await sinacnApi.getStockQuote(symbol);
       
-      const response = await this.axios.get(url);
-      const dataStr = response.data;
-      
-      // 解析新浪财经的数据格式
-      const match = dataStr.match(/var hq_str_\w+="([^"]+)"/);
-      if (match && match[1]) {
-        const data = match[1].split(',');
-        
-        const result = {
-          symbol: symbol,
-          name: data[0],
-          open: parseFloat(data[1]),
-          pre_close: parseFloat(data[2]),
-          price: parseFloat(data[3]),
-          high: parseFloat(data[4]),
-          low: parseFloat(data[5]),
-          volume: parseFloat(data[8]),
-          amount: parseFloat(data[9]),
-          timestamp: new Date()
+      if (result) {
+        // 转换为服务层期望的格式
+        const formattedResult = {
+          symbol: result.symbol,
+          name: result.name,
+          open: result.open,
+          pre_close: result.preClose,
+          price: result.price,
+          high: result.high,
+          low: result.low,
+          volume: result.volume,
+          amount: result.amount,
+          change: parseFloat(result.change),
+          pct_change: parseFloat(result.changePercent),
+          timestamp: new Date(result.timestamp)
         };
         
-        result.change = result.price - result.pre_close;
-        result.pct_change = (result.change / result.pre_close) * 100;
-        
-        this.setCachedData(cacheKey, result);
-        return result;
+        this.setCachedData(cacheKey, formattedResult);
+        return formattedResult;
       }
     } catch (error) {
       console.error(`获取新浪财经股票${symbol}行情失败:`, error);
@@ -190,57 +542,123 @@ class ExternalDataService {
    * 新浪财经API - 获取大盘指数
    */
   async getSinaMarketIndex() {
+    // 强制不使用缓存，确保每次都验证API可用性
     const cacheKey = 'sina_market_index';
-    const cached = this.getCachedData(cacheKey);
-    if (cached) return cached;
-
+    
+    // 清除任何可能存在的缓存数据
+    this.cache.delete(cacheKey);
+    
     try {
-      // 一次性获取多个指数数据
+      // 新浪财经大盘指数URL
       const url = 'https://hq.sinajs.cn/list=s_sh000001,s_sz399001,s_sz399006';
       
-      const response = await this.axios.get(url);
+      console.log(`[${new Date().toISOString()}] 正在调用新浪财经API获取大盘指数数据`);
+      
+      // 添加请求头以模拟浏览器请求
+      const response = await this.axios.get(url, {
+        headers: {
+          'Referer': 'https://finance.sina.com.cn/',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+          'Accept-Language': 'zh-CN,zh;q=0.9',
+          'Connection': 'keep-alive'
+        },
+        timeout: 8000 // 设置较短的超时时间
+      });
+
+      // 验证响应状态
+      if (response.status !== 200) {
+        const errorMsg = `获取新浪财经大盘指数失败: HTTP状态码 ${response.status}`;
+        console.error(`[${new Date().toISOString()}] ${errorMsg}`);
+        throw new Error(errorMsg);
+      }
+
+      // 验证响应内容
+      if (!response.data || typeof response.data !== 'string') {
+        const errorMsg = '获取新浪财经大盘指数失败: 响应数据为空或格式错误';
+        console.error(`[${new Date().toISOString()}] ${errorMsg}`);
+        throw new Error(errorMsg);
+      }
+
       const dataStr = response.data;
       
-      // 解析上证指数
+      // 提取各个指数数据
       const shMatch = dataStr.match(/var hq_str_s_sh000001="([^"]+)"/);
-      // 解析深证成指
       const szMatch = dataStr.match(/var hq_str_s_sz399001="([^"]+)"/);
-      // 解析创业板指
       const cyMatch = dataStr.match(/var hq_str_s_sz399006="([^"]+)"/);
       
+      // 验证数据是否成功解析
+      if (!shMatch || !shMatch[1] || !szMatch || !szMatch[1] || !cyMatch || !cyMatch[1]) {
+        const errorMsg = '获取新浪财经大盘指数失败: 返回数据格式不正确，无法提取指数数据';
+        console.error(`[${new Date().toISOString()}] ${errorMsg}`);
+        console.error('响应数据示例:', dataStr.substring(0, 100) + '...');
+        throw new Error(errorMsg);
+      }
+
+      // 解析指数数据
       const parseIndex = (match, name) => {
-        if (match && match[1]) {
-          const data = match[1].split(',');
-          return {
-            name: name,
-            open: parseFloat(data[1]),
-            pre_close: parseFloat(data[2]),
-            price: parseFloat(data[3]),
-            high: parseFloat(data[4]),
-            low: parseFloat(data[5]),
-            volume: parseFloat(data[8]),
-            amount: parseFloat(data[9]),
-            change: parseFloat(data[3]) - parseFloat(data[2]),
-            pct_change: ((parseFloat(data[3]) - parseFloat(data[2])) / parseFloat(data[2])) * 100
-          };
+        const values = match[1].split(',');
+        if (values.length < 10) {
+          throw new Error(`解析${name}失败: 数据字段不完整`);
         }
-        return null;
+        
+        const open = parseFloat(values[1]);
+        const pre_close = parseFloat(values[2]);
+        const price = parseFloat(values[3]);
+        const high = parseFloat(values[4]);
+        const low = parseFloat(values[5]);
+        const volume = parseInt(values[8]);
+        const amount = parseFloat(values[9]);
+        
+        // 验证数值有效性
+        if (isNaN(open) || isNaN(price) || isNaN(pre_close)) {
+          throw new Error(`解析${name}失败: 关键数值字段无效`);
+        }
+        
+        return {
+          name,
+          open,
+          pre_close,
+          price,
+          high,
+          low,
+          volume,
+          amount,
+          change: price - pre_close,
+          pct_change: ((price - pre_close) / pre_close * 100).toFixed(2)
+        };
       };
-      
-      const result = {
-        sh: parseIndex(shMatch, '上证指数'),
-        sz: parseIndex(szMatch, '深证成指'),
-        cy: parseIndex(cyMatch, '创业板指'),
-        timestamp: new Date()
-      };
-      
-      this.setCachedData(cacheKey, result);
-      return result;
+
+      try {
+        // 解析各个指数数据
+        const shData = parseIndex(shMatch, '上证指数');
+        const szData = parseIndex(szMatch, '深证成指');
+        const cyData = parseIndex(cyMatch, '创业板指');
+        
+        const result = {
+          sh: shData,
+          sz: szData,
+          cy: cyData,
+          timestamp: new Date()
+        };
+        
+        // 设置缓存
+        this.setCachedData(cacheKey, result);
+        return result;
+      } catch (parseError) {
+        const errorMsg = `获取新浪财经大盘指数失败: ${parseError.message}`;
+        console.error(`[${new Date().toISOString()}] ${errorMsg}`);
+        throw new Error(errorMsg);
+      }
     } catch (error) {
-      console.error('获取新浪财经大盘指数失败:', error);
+      // 确保所有错误都被正确抛出
+      const errorMsg = `获取新浪财经大盘指数失败: ${error.message}`;
+      console.error(`[${new Date().toISOString()}] ${errorMsg}`, error.stack || '');
+      throw new Error(errorMsg);
     }
-    return null;
   }
+  
+
 
   /**
    * 集思录API - 获取可转债数据
@@ -415,11 +833,33 @@ class ExternalDataService {
    */
   async getIntegratedStockData(symbol) {
     try {
-      // 并行请求多个数据源
-      const [eastMoneyData, sinaData] = await Promise.all([
-        this.getEastMoneyStockQuote(symbol),
-        this.getSinaStockQuote(symbol)
-      ]);
+      // 并行获取多个数据源的数据，但添加错误处理以确保一个失败不影响其他
+      let eastMoneyData = null;
+      let sinaData = null;
+      let eastMoneyError = null;
+      let sinaError = null;
+      const timestamp = new Date().toISOString();
+      
+      try {
+        eastMoneyData = await this.getEastMoneyStockQuote(symbol);
+      } catch (error) {
+        eastMoneyError = error;
+        console.error(`[${timestamp}] 获取东方财富数据失败 (${symbol}):`, error.stack || error.message);
+      }
+      
+      try {
+        sinaData = await this.getSinaStockQuote(symbol);
+      } catch (error) {
+        sinaError = error;
+        console.error(`[${timestamp}] 获取新浪数据失败 (${symbol}):`, error.stack || error.message);
+      }
+      
+      // 如果所有数据源都失败，抛出错误
+      if (!eastMoneyData && !sinaData) {
+        const errorMsg = `所有股票数据源获取失败 (${symbol}) - 东方财富错误: ${eastMoneyError?.message || '无'}, 新浪错误: ${sinaError?.message || '无'}`;
+        console.error(`[${timestamp}] ${errorMsg}`);
+        throw new Error(`[${timestamp}] ${errorMsg}`);
+      }
       
       // 整合数据，优先使用非空的数据
       const integratedData = {
@@ -446,10 +886,12 @@ class ExternalDataService {
       
       return integratedData;
     } catch (error) {
-      console.error(`获取整合股票数据失败:`, error);
-      return null;
+      console.error(`获取整合股票数据失败:`, error.message);
+      throw error;
     }
   }
+  
+
 
   /**
    * 获取行业估值数据
@@ -460,7 +902,16 @@ class ExternalDataService {
     if (cached) return cached;
 
     try {
-      // 从东方财富获取行业数据
+      // 优先使用Tushare API获取行业估值数据
+      const tushareData = await this.getTushareIndustryValuations();
+      
+      if (tushareData && tushareData.length > 0) {
+        this.setCachedData(cacheKey, tushareData);
+        return tushareData;
+      }
+      
+      // 如果Tushare API失败，回退到东方财富数据源
+      console.warn('Tushare行业估值数据获取失败，回退到东方财富数据源');
       const industries = await this.getEastMoneyIndustries();
       
       // 为每个行业获取详细的估值指标
@@ -490,6 +941,96 @@ class ExternalDataService {
     } catch (error) {
       console.error('获取行业估值数据失败:', error);
       return [];
+    }
+  }
+  
+  /**
+   * 获取综合行业股票列表
+   * @param {string} industry 行业名称
+   * @param {Object} options 查询选项
+   */
+  async getIndustryStocks(industry, options = {}) {
+    const cacheKey = `industry_stocks_${industry}_${JSON.stringify(options)}`;
+    const cached = this.getCachedData(cacheKey);
+    if (cached) return cached;
+
+    try {
+      // 优先使用Tushare API
+      const tushareData = await this.getTushareIndustryStocks(industry);
+      
+      if (tushareData && tushareData.length > 0) {
+        // 应用分页
+        const page = options.page || 1;
+        const limit = options.limit || 50;
+        const start = (page - 1) * limit;
+        const end = start + limit;
+        const paginatedData = tushareData.slice(start, end);
+        
+        const result = {
+          list: paginatedData,
+          total: tushareData.length,
+          page: page,
+          limit: limit,
+          source: 'tushare'
+        };
+        
+        this.setCachedData(cacheKey, result);
+        return result;
+      }
+      
+      // 如果Tushare API失败，可以添加其他数据源的回退逻辑
+      console.warn(`Tushare行业${industry}股票数据获取失败，返回空数据`);
+      return { list: [], total: 0, page: options.page || 1, limit: options.limit || 50, source: 'none' };
+    } catch (error) {
+      console.error(`获取行业${industry}股票数据失败:`, error);
+      return { list: [], total: 0, page: options.page || 1, limit: options.limit || 50, source: 'error' };
+    }
+  }
+  
+  /**
+   * 综合获取股票数据 - 从多个数据源整合信息
+   * @param {string} symbol 股票代码
+   * @param {Object} options 查询选项
+   */
+  async getStockData(symbol, options = {}) {
+    try {
+      // 构建数据源优先级列表
+      const dataSources = options.dataSources || ['tushare', 'eastmoney', 'sina'];
+      
+      // 依次尝试各个数据源
+      for (const source of dataSources) {
+        try {
+          let data = null;
+          
+          switch (source) {
+            case 'tushare':
+              data = await this.getTushareStockQuote(symbol);
+              break;
+            case 'eastmoney':
+              data = await this.getEastMoneyStockQuote(symbol);
+              break;
+            case 'sina':
+              data = await this.getSinaStockQuote(symbol);
+              break;
+          }
+          
+          if (data) {
+            return {
+              ...data,
+              source: source
+            };
+          }
+        } catch (error) {
+          console.warn(`从${source}获取${symbol}数据失败，尝试下一个数据源`, error);
+        }
+      }
+      
+      // 如果所有数据源都失败，返回默认数据
+      console.error(`从所有数据源获取${symbol}数据都失败`);
+      return null;
+    } catch (error) {
+      console.error(`获取股票${symbol}数据失败:`, error);
+      return null;
     }
   }
 }

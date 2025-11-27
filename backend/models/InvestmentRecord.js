@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 /**
  * 投资记录数据模型
@@ -85,4 +85,4 @@ InvestmentRecordSchema.pre('save', function(next) {
 InvestmentRecordSchema.index({ userId: 1, stockCode: 1 });
 InvestmentRecordSchema.index({ userId: 1, transactionDate: -1 });
 
-module.exports = mongoose.model('InvestmentRecord', InvestmentRecordSchema);
+export default mongoose.model('InvestmentRecord', InvestmentRecordSchema);

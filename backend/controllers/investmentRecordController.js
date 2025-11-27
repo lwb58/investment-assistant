@@ -1,6 +1,6 @@
-const InvestmentRecord = require('../models/InvestmentRecord');
-const StockService = require('../services/stockService');
-const { exportToCSV } = require('../utils/csvUtils');
+import InvestmentRecord from '../models/InvestmentRecord.js';
+import StockDataService from '../services/stockDataService.js';
+import { exportToCSV } from '../utils/csvUtils.js';
 
 /**
  * 投资记录控制器
@@ -16,13 +16,13 @@ const investmentRecordController = {
       const userId = req.user.id;
       
       // 查找用户的所有投资记录
-      const records = await InvestmentRecord.find({ userId })\n        .sort({ transactionDate: -1 });
+      const records = await InvestmentRecord.find({ userId }).sort({ transactionDate: -1 });
       
       // 为每条记录获取最新股票价格
       const recordsWithCurrentPrice = await Promise.all(
         records.map(async (record) => {
           try {
-            const stockData = await StockService.getStockDetail(record.stockCode);
+            const stockData = await StockDataService.getStockDetail(record.stockCode);
             return {
               ...record.toObject(),
               currentPrice: stockData?.price || record.price
@@ -464,4 +464,4 @@ function calculateRiskReturnAnalysis(positions) {
   };
 }
 
-module.exports = investmentRecordController;
+export default investmentRecordController;
