@@ -1,808 +1,1048 @@
 <template>
   <div class="stock-detail-container">
-    <div class="header">
-    <button @click="goBack" class="back-button">返回</button>
-    <h1>{{ stockData.name || '股票详情' }}</h1>
-    <div class="stock-info-header">
-      <span class="stock-code">{{ stockData.code }}</span>
-      <span class="stock-market">{{ stockData.market }}</span>
+    <!-- 加载状态 -->
+    <div v-if="loading" class="loading-container">
+      <div class="loading-spinner"></div>
+      <p class="loading-text">正在加载股票数据...</p>
     </div>
-  </div>
-  <div class="action-buttons">
-    <button 
-      @click="toggleFavorite" 
-      class="favorite-button" 
-      :class="{ 'favorited': isFavorite }"
-      :disabled="favoriteLoading"
-    >
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-      </svg>
-      {{ isFavorite ? '已关注' : '关注' }}
-    </button>
-    <button @click="goToAnalysis" class="analysis-button">查看分析</button>
-  </div>
-  <span v-if="favoriteError" class="favorite-error">{{ favoriteError }}</span>
     
-    <div v-if="loading" class="loading">加载中...</div>
-    
-    <div v-else-if="error" class="error-message">{{ error }}</div>
-    
-    <div v-else-if="Object.keys(stockData).length > 0">
-      <!-- 股价信息 -->
-      <div class="price-section">
-        <div class="current-price">¥{{ stockData.price }}</div>
-        <div class="price-change" :class="stockData.change > 0 ? 'up' : 'down'">
-          {{ stockData.change > 0 ? '+' : '' }}{{ stockData.change }} ({{ stockData.changePercent }})
-        </div>
-        <div class="update-time">更新时间: {{ stockData.updateTime }}</div>
-      </div>
-      
-      <!-- 股票基本信息选项卡 -->
-      <div class="tabs">
-        <div 
-          class="tab-item" 
-          :class="activeTab === 'basic' ? 'active' : ''"
-          @click="activeTab = 'basic'"
-        >
-          基本信息
-        </div>
-        <div 
-          class="tab-item" 
-          :class="activeTab === 'financial' ? 'active' : ''"
-          @click="activeTab = 'financial'"
-        >
-          财务数据
-        </div>
-        <div 
-          class="tab-item" 
-          :class="activeTab === 'industry' ? 'active' : ''"
-          @click="activeTab = 'industry'"
-        >
-          行业对比
-        </div>
-      </div>
-      
-      <!-- 基本信息面板 -->
-      <div v-if="activeTab === 'basic'" class="tab-content">
-        <div class="info-grid">
-          <div class="info-item">
-            <span class="label">开盘价:</span>
-            <span class="value">¥{{ stockData.open || '-' }}</span>
-          </div>
-          <div class="info-item">
-            <span class="label">最高价:</span>
-            <span class="value">¥{{ stockData.high || '-' }}</span>
-          </div>
-          <div class="info-item">
-            <span class="label">最低价:</span>
-            <span class="value">¥{{ stockData.low || '-' }}</span>
-          </div>
-          <div class="info-item">
-            <span class="label">昨收价:</span>
-            <span class="value">¥{{ stockData.preClose || '-' }}</span>
-          </div>
-          <div class="info-item">
-            <span class="label">成交量:</span>
-            <span class="value">{{ formatVolume(stockData.volume || 0) }}</span>
-          </div>
-          <div class="info-item">
-            <span class="label">成交额:</span>
-            <span class="value">¥{{ formatAmount(stockData.amount || 0) }}</span>
-          </div>
-          <div class="info-item">
-            <span class="label">换手率:</span>
-            <span class="value">{{ stockData.turnoverRate || '-' }}%</span>
-          </div>
-          <div class="info-item">
-            <span class="label">市盈率(TTM):</span>
-            <span class="value">{{ stockData.peTTM || '-' }}</span>
-          </div>
-          <div class="info-item">
-            <span class="label">市净率:</span>
-            <span class="value">{{ stockData.pbMRQ || '-' }}</span>
-          </div>
-          <div class="info-item">
-            <span class="label">总市值:</span>
-            <span class="value">¥{{ formatAmount(stockData.totalMarketCap || 0) }}</span>
-          </div>
-          <div class="info-item">
-            <span class="label">流通市值:</span>
-            <span class="value">¥{{ formatAmount(stockData.circulatingMarketCap || 0) }}</span>
-          </div>
-          <div class="info-item">
-            <span class="label">所属行业:</span>
-            <span class="value">{{ stockData.industry || '-' }}</span>
-          </div>
-        </div>
-      </div>
-      
-      <!-- 财务数据面板 -->
-      <div v-if="activeTab === 'financial'" class="tab-content">
-        <div v-if="!financialData || financialData.length === 0" class="no-data">暂无财务数据</div>
-        <div v-else>
-          <h3>最新财务数据</h3>
-          <div class="info-grid">
-            <div class="info-item">
-              <span class="label">营业收入:</span>
-              <span class="value">¥{{ formatAmount(financialData[0]?.revenue || 0) }}亿</span>
-            </div>
-            <div class="info-item">
-              <span class="label">净利润:</span>
-              <span class="value">¥{{ formatAmount(financialData[0]?.netProfit || 0) }}亿</span>
-            </div>
-            <div class="info-item">
-              <span class="label">每股收益:</span>
-              <span class="value">¥{{ financialData[0]?.eps || '-' }}</span>
-            </div>
-            <div class="info-item">
-              <span class="label">净资产收益率:</span>
-              <span class="value">{{ financialData[0]?.roe || '-' }}%</span>
-            </div>
-            <div class="info-item">
-              <span class="label">毛利率:</span>
-              <span class="value">{{ financialData[0]?.grossMargin || '-' }}%</span>
-            </div>
-            <div class="info-item">
-              <span class="label">净利率:</span>
-              <span class="value">{{ financialData[0]?.netMargin || '-' }}%</span>
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      <!-- 行业对比面板 -->
-      <div v-if="activeTab === 'industry'" class="tab-content">
-        <div v-if="!industryData || Object.keys(industryData).length === 0" class="no-data">暂无行业数据</div>
-        <div v-else>
-          <h3>行业对比</h3>
-          <div class="industry-comparison">
-            <div class="industry-stats">
-              <div class="stat-item">
-                <span class="label">行业平均市盈率:</span>
-                <span class="value">{{ industryData.avgPE || '-' }}</span>
-              </div>
-              <div class="stat-item">
-                <span class="label">行业平均市净率:</span>
-                <span class="value">{{ industryData.avgPB || '-' }}</span>
-              </div>
-              <div class="stat-item">
-                <span class="label">行业平均净利率:</span>
-                <span class="value">{{ industryData.avgNetMargin || '-' }}%</span>
-              </div>
-              <div class="stat-item">
-                <span class="label">行业平均净资产收益率:</span>
-                <span class="value">{{ industryData.avgROE || '-' }}%</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+    <!-- 错误状态 -->
+    <div v-else-if="error" class="error-container">
+      <div class="error-icon">⚠️</div>
+      <p class="error-text">{{ error }}</p>
+      <button class="btn primary retry-btn" @click="retryLoad">重试</button>
     </div>
+    
+    <!-- 正常内容 -->
+    <template v-else>
+      <!-- 股票概览卡片 -->
+      <div class="overview-card card mb-6">
+        <div class="overview-header">
+          <div class="header-left flex items-center">
+            <button class="btn-icon-round" @click="goBack" title="返回">
+              ←
+            </button>
+            <div class="stock-info">
+              <h1 class="stock-title">{{ stockInfo.name }}</h1>
+              <div class="stock-code">{{ stockInfo.code }}</div>
+            </div>
+          </div>
+          <div class="header-right">
+            <div class="price-display">
+              <div class="current-price">{{ formatPrice(stockInfo.price) }}</div>
+              <div 
+                :class="['price-change', 'inline-flex items-center px-3 py-1 rounded-full', 
+                  stockInfo.changeRate > 0 ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600']"
+              >
+                <span :class="['change-icon mr-1', stockInfo.changeRate > 0 ? 'up' : 'down']">
+                  {{ stockInfo.changeRate > 0 ? '↗️' : '↘️' }}
+                </span>
+                {{ stockInfo.changeRate > 0 ? '+' : '' }}{{ stockInfo.changeRate }}%
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 快捷指标 -->
+        <div class="quick-metrics grid grid-cols-4 gap-4">
+          <div class="metric-item">
+            <div class="metric-label">行业</div>
+            <div class="metric-value industry">{{ stockInfo.industry || '--' }}</div>
+          </div>
+          <div class="metric-item">
+            <div class="metric-label">总市值</div>
+            <div class="metric-value">{{ formatNumber(stockInfo.marketCap) }}亿</div>
+          </div>
+          <div class="metric-item">
+            <div class="metric-label">市盈率</div>
+            <div class="metric-value">{{ currentFinancialData.pe || '--' }}</div>
+          </div>
+          <div class="metric-item">
+            <div class="metric-label">净资产收益率</div>
+            <div class="metric-value">{{ currentFinancialData.roe || '--' }}%</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 主内容区域 -->
+      <div class="detail-content">
+        <!-- 基本信息卡片 -->
+        <div class="card mb-6">
+          <div class="card-header">
+            <h3 class="card-title">基本信息</h3>
+          </div>
+          <div class="card-body">
+            <div class="info-grid grid grid-cols-2 gap-6">
+              <div class="info-item">
+                <div class="info-label">公司全称</div>
+                <div class="info-value">{{ stockInfo.companyName || '--' }}</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">所属行业</div>
+                <div class="info-value">{{ stockInfo.industry || '--' }}</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">上市日期</div>
+                <div class="info-value">{{ stockInfo.listDate || '--' }}</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">总股本</div>
+                <div class="info-value">{{ formatNumber(stockInfo.totalShares) }}亿股</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">流通股本</div>
+                <div class="info-value">{{ formatNumber(stockInfo.floatShares) }}亿股</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">总市值</div>
+                <div class="info-value">{{ formatNumber(stockInfo.marketCap) }}亿元</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 财务数据卡片 -->
+        <div class="card mb-6">
+          <div class="card-header">
+            <h3 class="card-title">财务数据</h3>
+          </div>
+          <div class="card-body">
+            <!-- 财务数据标签页 -->
+            <div class="financial-tabs">
+              <button 
+                v-for="year in financialYears" 
+                :key="year"
+                class="tab-btn"
+                :class="{ active: activeYear === year, disabled: financeLoading }"
+                @click="activeYear = year"
+                :disabled="financeLoading"
+              >
+                {{ year }}年
+              </button>
+            </div>
+            
+            <!-- 财务数据加载状态 -->
+            <div v-if="financeLoading" class="finance-loading">
+              <div class="loading-spinner small"></div>
+              <span>加载中...</span>
+            </div>
+            
+            <div v-else class="financial-content">
+              <!-- 主要财务指标 -->
+              <div class="financial-highlights grid grid-cols-4 gap-4 mb-6">
+                <div class="highlight-item">
+                  <div class="highlight-label">营业收入</div>
+                  <div class="highlight-value">{{ formatNumber(currentFinancialData.revenue) }}亿元</div>
+                  <div 
+                    class="highlight-growth"
+                    :class="parseFloat(currentFinancialData.revenueGrowth) > 0 ? 'positive' : parseFloat(currentFinancialData.revenueGrowth) < 0 ? 'negative' : ''"
+                  >
+                    {{ parseFloat(currentFinancialData.revenueGrowth) > 0 ? '+' : '' }}{{ currentFinancialData.revenueGrowth || '0.0' }}%
+                  </div>
+                </div>
+                <div class="highlight-item">
+                  <div class="highlight-label">净利润</div>
+                  <div class="highlight-value">{{ formatNumber(currentFinancialData.netProfit) }}亿元</div>
+                  <div 
+                    class="highlight-growth"
+                    :class="parseFloat(currentFinancialData.netProfitGrowth) > 0 ? 'positive' : parseFloat(currentFinancialData.netProfitGrowth) < 0 ? 'negative' : ''"
+                  >
+                    {{ parseFloat(currentFinancialData.netProfitGrowth) > 0 ? '+' : '' }}{{ currentFinancialData.netProfitGrowth || '0.0' }}%
+                  </div>
+                </div>
+                <div class="highlight-item">
+                  <div class="highlight-label">每股收益</div>
+                  <div class="highlight-value">{{ currentFinancialData.eps || '0.00' }}元</div>
+                </div>
+                <div class="highlight-item">
+                  <div class="highlight-label">净资产收益率</div>
+                  <div class="highlight-value">{{ currentFinancialData.roe || '0.0' }}%</div>
+                </div>
+              </div>
+              
+              <!-- 详细财务数据 -->
+              <div class="info-grid grid grid-cols-3 gap-6">
+                <div class="info-item">
+                  <div class="info-label">每股净资产</div>
+                  <div class="info-value">{{ currentFinancialData.navps || '0.00' }}元</div>
+                </div>
+                <div class="info-item">
+                  <div class="info-label">市盈率（TTM）</div>
+                  <div class="info-value">{{ currentFinancialData.pe || '0.0' }}</div>
+                </div>
+                <div class="info-item">
+                  <div class="info-label">市净率</div>
+                  <div class="info-value">{{ currentFinancialData.pb || '0.0' }}</div>
+                </div>
+                <div class="info-item">
+                  <div class="info-label">毛利率</div>
+                  <div class="info-value">{{ currentFinancialData.grossMargin || '0.0' }}%</div>
+                </div>
+                <div class="info-item">
+                  <div class="info-label">净利率</div>
+                  <div class="info-value">{{ currentFinancialData.netMargin || '0.0' }}%</div>
+                </div>
+                <div class="info-item">
+                  <div class="info-label">负债率</div>
+                  <div class="info-value">{{ currentFinancialData.debtRatio || '0.0' }}%</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 股东信息卡片 -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">十大股东</h3>
+          </div>
+          <div class="card-body">
+            <div v-if="stockInfo.topShareholders && stockInfo.topShareholders.length > 0" class="shareholder-list">
+              <div 
+                class="shareholder-item" 
+                v-for="(holder, index) in stockInfo.topShareholders" 
+                :key="index"
+              >
+                <div class="shareholder-rank">
+                  <span class="rank-number">{{ index + 1 }}</span>
+                </div>
+                <div class="shareholder-details">
+                  <div class="holder-name">{{ holder.name }}</div>
+                  <div class="holder-type">{{ holder.type }}</div>
+                </div>
+                <div class="shareholder-percentage">
+                  <div class="percent-value">{{ holder.percentage }}%</div>
+                  <div class="progress-container">
+                    <div 
+                      class="progress-bar" 
+                      :style="{ width: holder.percentage + '%' }"
+                    ></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div v-else class="empty-state">
+              <div class="empty-icon">👥</div>
+              <p class="empty-text">暂无股东信息</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </template>
   </div>
 </template>
 
-<script setup lang="ts">
-import { ref, onMounted } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
-import apiService from '../services/apiService';
+<script setup>
+import { ref, computed, onMounted, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import apiService from '../api/apiService.js'
 
-interface StockDetail {
-  code: string;
-  name: string;
-  market: string;
-  price: string;
-  change: number;
-  changePercent: string;
-  open?: string;
-  high?: string;
-  low?: string;
-  preClose?: string;
-  volume?: number;
-  amount?: number;
-  turnoverRate?: string;
-  peTTM?: string;
-  pbMRQ?: string;
-  totalMarketCap?: number;
-  circulatingMarketCap?: number;
-  industry?: string;
-  updateTime?: string;
-}
+const route = useRoute()
+const router = useRouter()
 
-interface FinancialData {
-  revenue: number;
-  netProfit: number;
-  eps: string;
-  roe: string;
-  grossMargin: string;
-  netMargin: string;
-  reportDate?: string;
-}
+// 响应式状态
+const stockInfo = ref({
+  code: '',
+  name: '',
+  price: '0.00',
+  changeRate: 0,
+  industry: '',
+  companyName: '',
+  listDate: '',
+  totalShares: '0',
+  floatShares: '0',
+  marketCap: '0',
+  topShareholders: []
+})
 
-interface IndustryData {
-  avgPE: string;
-  avgPB: string;
-  avgNetMargin: string;
-  avgROE: string;
-}
-
-const route = useRoute();
-const router = useRouter();
-const stockCode = route.params.code as string;
-const stockData = ref<StockDetail>({} as StockDetail);
-const financialData = ref<FinancialData[]>([]);
-const industryData = ref<IndustryData>({} as IndustryData);
-const loading = ref(true);
-const error = ref('');
-const activeTab = ref('basic');
-const isFavorite = ref(false);
-const favoriteLoading = ref(false);
-const favoriteError = ref('');
-
-const fetchStockData = async () => {
-  loading.value = true;
-  error.value = '';
-  
-  try {
-    // 获取默认数据（API失败时使用）
-    const getDefaultStockData = (): StockDetail => ({
-      code: stockCode,
-      name: `股票${stockCode}`,
-      market: 'SZ',
-      price: '25.80',
-      change: 1.25,
-      changePercent: '+5.12%',
-      open: '24.55',
-      high: '26.10',
-      low: '24.40',
-      preClose: '24.55',
-      volume: 58000000,
-      amount: 1500000000,
-      turnoverRate: '3.25',
-      peTTM: '28.5',
-      pbMRQ: '3.1',
-      totalMarketCap: 50000000000,
-      circulatingMarketCap: 38000000000,
-      industry: '信息技术',
-      updateTime: new Date().toLocaleTimeString()
-    });
-    
-    const getDefaultFinancialData = (): FinancialData[] => [{
-      revenue: 12500000000,
-      netProfit: 1800000000,
-      eps: '1.25',
-      roe: '15.8',
-      grossMargin: '32.5',
-      netMargin: '14.4',
-      reportDate: '2023-09-30'
-    }];
-    
-    const getDefaultIndustryData = (): IndustryData => ({
-      avgPE: '25.3',
-      avgPB: '2.8',
-      avgNetMargin: '12.5',
-      avgROE: '14.2'
-    });
-    
-    try {
-      // 尝试获取股票基本数据
-      const stockResponse = await apiService.stock.getStockInfo(stockCode);
-      const apiData = stockResponse.data as StockDetail;
-      
-      // 确保所有必要字段都有值，使用默认值填充缺失字段
-      stockData.value = {
-        ...getDefaultStockData(),
-        ...apiData
-      };
-    } catch (apiError) {
-      console.warn('获取股票数据失败，使用默认数据');
-      // 使用默认股票数据
-      stockData.value = getDefaultStockData();
-    }
-    
-    // 使用默认财务数据确保界面正常显示
-    financialData.value = getDefaultFinancialData();
-    
-    // 使用默认行业数据
-    industryData.value = getDefaultIndustryData();
-    
-    // 检查是否已关注
-    await checkFavoriteStatus();
-  } catch (err) {
-    error.value = '获取实时数据失败，显示模拟数据';
-    console.error('获取股票数据失败:', err);
-    // 确保即使发生错误也有默认数据
-    if (!stockData.value.code) {
-      stockData.value = getDefaultStockData();
-    }
-    if (financialData.value.length === 0) {
-      financialData.value = getDefaultFinancialData();
-    }
-    if (!industryData.value.avgPE) {
-      industryData.value = getDefaultIndustryData();
-    }
-  } finally {
-    loading.value = false;
+const activeYear = ref('2024')
+const financialYears = ref(['2024', '2023', '2022'])
+const financialData = ref({
+  '2024': {
+    revenue: '0.00',
+    revenueGrowth: '0.0',
+    netProfit: '0.00',
+    netProfitGrowth: '0.0',
+    eps: '0.00',
+    navps: '0.00',
+    roe: '0.0',
+    pe: '0.0',
+    pb: '0.0',
+    grossMargin: '0.0',
+    netMargin: '0.0',
+    debtRatio: '0.0'
   }
-};
+})
 
-// 检查是否已关注
-const checkFavoriteStatus = async () => {
-  try {
-    const response = await apiService.favoriteStock.isFavorite(stockCode);
-    isFavorite.value = (response.data as any).isFavorite || false;
-  } catch (err) {
-    console.error('检查关注状态失败:', err);
-    // 不影响主功能，静默失败
+// 加载状态
+const loading = ref(false)
+const financeLoading = ref(false)
+const error = ref(null)
+
+// 当前年份的财务数据
+const currentFinancialData = computed(() => {
+  return financialData.value[activeYear.value] || financialData.value['2024']
+})
+
+// 获取股票代码
+const stockCode = computed(() => route.params.code)
+
+// 监听路由参数变化
+watch(stockCode, (newCode) => {
+  if (newCode) {
+    fetchStockData()
   }
-};
+})
 
-// 切换关注状态
-const toggleFavorite = async () => {
-  favoriteLoading.value = true;
-  favoriteError.value = '';
-  
-  try {
-    if (isFavorite.value) {
-      // 取消关注
-      await apiService.favoriteStock.removeFavorite(stockCode);
-      isFavorite.value = false;
-      alert(`已取消关注 ${stockData.value.name || stockCode}`);
-    } else {
-      // 添加关注
-      await apiService.favoriteStock.addFavorite(stockCode, stockData.value.name || '未知股票');
-      isFavorite.value = true;
-      alert(`已关注 ${stockData.value.name || stockCode}`);
-    }
-  } catch (err: any) {
-    favoriteError.value = err.response?.data?.message || '操作失败，请稍后重试';
-    console.error('切换关注状态失败:', err);
-  } finally {
-    favoriteLoading.value = false;
-  }
-};
+// 监听年份变化
+watch(activeYear, (newYear) => {
+  fetchFinancialData(newYear)
+})
 
+// 返回上一页
 const goBack = () => {
-  router.go(-1);
-};
+  router.back()
+}
 
-const goToAnalysis = () => {
-  router.push(`/stock/analysis/${stockCode}`);
-};
-
-const formatVolume = (volume: number): string => {
-  if (volume >= 100000000) {
-    return (volume / 100000000).toFixed(2) + '亿';
-  } else if (volume >= 10000) {
-    return (volume / 10000).toFixed(2) + '万';
+// 获取股票详细信息
+const fetchStockData = async () => {
+  if (!stockCode.value) {
+    error.value = '未找到股票代码'
+    loading.value = false
+    return
   }
-  return volume.toString();
-};
-
-const formatAmount = (amount: number): string => {
-  if (amount >= 100000000) {
-    return (amount / 100000000).toFixed(2);
-  } else if (amount >= 10000) {
-    return (amount / 10000).toFixed(2);
+  
+  loading.value = true
+  error.value = null
+  
+  try {
+    // apiService直接返回数据，不需要从data属性获取
+    const data = await apiService.getStockDetail(stockCode.value)
+    stockInfo.value = data || {
+      code: stockCode.value,
+      name: '未知股票',
+      price: '0.00',
+      changeRate: 0,
+      industry: '未知',
+      companyName: '未知公司',
+      listDate: '--',
+      totalShares: '0',
+      floatShares: '0',
+      marketCap: '0',
+      topShareholders: []
+    }
+    // 初始化获取当前年份的财务数据
+    fetchFinancialData(activeYear.value)
+  } catch (err) {
+    console.error('获取股票详细信息失败:', err)
+    error.value = '加载股票信息失败，请稍后重试'
+    
+    // 使用默认数据作为fallback
+    stockInfo.value = {
+      code: stockCode.value,
+      name: '未知股票',
+      price: '0.00',
+      changeRate: 0,
+      industry: '未知',
+      companyName: '未知公司',
+      listDate: '--',
+      totalShares: '0',
+      floatShares: '0',
+      marketCap: '0',
+      topShareholders: []
+    }
+  } finally {
+    loading.value = false
   }
-  return amount.toString();
-};
+}
 
-onMounted(() => {
+// 获取财务数据
+const fetchFinancialData = async (year) => {
+  financeLoading.value = true
+  
+  try {
+    // apiService直接返回数据，不需要从data属性获取
+    const data = await apiService.getStockFinancial(stockCode.value, year)
+    financialData.value[year] = data || {
+      revenue: '0.00',
+      revenueGrowth: '0.0',
+      netProfit: '0.00',
+      netProfitGrowth: '0.0',
+      eps: '0.00',
+      navps: '0.00',
+      roe: '0.0',
+      pe: '0.0',
+      pb: '0.0',
+      grossMargin: '0.0',
+      netMargin: '0.0',
+      debtRatio: '0.0'
+    }
+  } catch (err) {
+    console.error(`获取${year}年财务数据失败:`, err)
+    
+    // 如果获取失败，使用默认值
+    if (!financialData.value[year]) {
+      financialData.value[year] = {
+        revenue: '0.00',
+        revenueGrowth: '0.0',
+        netProfit: '0.00',
+        netProfitGrowth: '0.0',
+        eps: '0.00',
+        navps: '0.00',
+        roe: '0.0',
+        pe: '0.0',
+        pb: '0.0',
+        grossMargin: '0.0',
+        netMargin: '0.0',
+        debtRatio: '0.0'
+      }
+    }
+  } finally {
+    financeLoading.value = false
+  }
+}
+
+// 重试加载
+const retryLoad = () => {
+  loading.value = true;
+  error.value = null;
   fetchStockData();
-});
+}
+
+// 格式化价格显示 - 增强版本，支持数字和字符串输入
+const formatPrice = (price) => {
+  if (typeof price === 'undefined' || price === null) return '--';
+  const numPrice = parseFloat(price);
+  return isNaN(numPrice) ? '--' : numPrice.toFixed(2);
+}
+
+// 格式化数字显示 - 增强版本，支持数字和字符串输入，更好的错误处理
+const formatNumber = (num) => {
+  if (typeof num === 'undefined' || num === null) return '--';
+  const number = parseFloat(num);
+  if (isNaN(number)) return '--';
+  return number.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
+// 初始化数据
+onMounted(() => {
+  fetchStockData()
+})
 </script>
 
 <style scoped>
+/* 基础容器样式 */
 .stock-detail-container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 20px;
-  position: relative;
+  padding: var(--spacing-lg);
+  min-height: calc(100vh - 64px);
+  overflow-y: auto;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
 }
 
-.header {
-  text-align: center;
-  margin-bottom: 30px;
-  position: relative;
-  padding-top: 40px; /* 为返回按钮预留空间 */
-}
-
-.back-button {
-  position: absolute;
-  left: 20px;
-  top: 0;
-  padding: 8px 16px;
-  background-color: #f0f0f0;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: background-color 0.3s;
-  z-index: 10;
-  min-height: 44px; /* 提高触摸区域 */
-}
-
-.back-button:hover {
-  background-color: #e0e0e0;
-}
-
-.action-buttons {
+/* 加载和错误状态 */
+.loading-container,
+.error-container {
   display: flex;
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
-  gap: 15px;
-  margin: 20px 0;
-  flex-wrap: wrap;
-  padding: 0 10px;
+  height: 500px;
+  background-color: var(--bg-secondary);
+  border-radius: var(--border-radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: var(--spacing-lg);
+  text-align: center;
+  transition: all var(--transition-fast);
+  border: 1px solid var(--border-color);
 }
 
-.favorite-button {
+.loading-container:hover,
+.error-container:hover {
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-2px);
+}
+
+.loading-spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid var(--bg-tertiary);
+  border-top: 4px solid var(--primary-color);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: var(--spacing-lg);
+}
+
+.loading-spinner.small {
+  width: 24px;
+  height: 24px;
+  border-width: 3px;
+  margin-right: var(--spacing-sm);
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.loading-text,
+.error-text {
+  color: var(--text-secondary);
+  font-size: var(--text-base);
+  margin-bottom: var(--spacing-md);
+  line-height: 1.5;
+}
+
+.error-icon {
+  font-size: 48px;
+  margin-bottom: var(--spacing-lg);
+  opacity: 0.8;
+}
+
+/* 按钮样式 */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-sm) var(--spacing-lg);
+  border-radius: var(--border-radius-md);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  border: 1px solid transparent;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.btn.primary {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+.btn.primary:hover {
+  background-color: var(--primary-hover);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.retry-btn {
+  padding: var(--spacing-sm) var(--spacing-xl);
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: var(--border-radius-md);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  transition: all var(--transition-fast);
+  border: 1px solid transparent;
+}
+
+.retry-btn:hover {
+  background-color: var(--primary-hover);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+/* 页面头部样式 */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-xl);
+  padding: var(--spacing-md) var(--spacing-lg);
+  background: var(--bg-secondary);
+  border-radius: var(--border-radius-lg);
+  box-shadow: var(--shadow-sm);
+  transition: all var(--transition-fast);
+  border: 1px solid var(--border-color);
+  gap: var(--spacing-lg);
+}
+
+.page-header:hover {
+  box-shadow: var(--shadow-md);
+  border-color: var(--primary-color);
+}
+
+.header-left {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 12px 20px;
-  background-color: #fff;
-  color: #e74c3c;
-  border: 2px solid #e74c3c;
-  border-radius: 4px;
-  font-size: 16px;
-  cursor: pointer;
-  transition: all 0.3s;
-  min-height: 44px; /* 提高触摸区域 */
+  gap: var(--spacing-md);
   flex: 1;
-  justify-content: center;
-  max-width: 180px;
 }
 
-.favorite-button:hover:not(:disabled) {
-  background-color: #e74c3c;
-  color: white;
-}
-
-.favorite-button.favorited {
-  background-color: #e74c3c;
-  color: white;
-}
-
-.favorite-button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.analysis-button {
-  padding: 12px 24px;
-  background-color: #4a6cf7;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  font-size: 16px;
-  cursor: pointer;
-  transition: background-color 0.3s;
-  min-height: 44px; /* 提高触摸区域 */
-  flex: 1;
-  max-width: 180px;
-}
-
-.favorite-error {
-  display: block;
-  text-align: center;
-  color: #e74c3c;
-  margin-top: -10px;
-  margin-bottom: 15px;
-  font-size: 14px;
-}
-
-.analysis-button:hover {
-  background-color: #3a5be7;
-}
-
-.header h1 {
-  color: #333;
-  margin-bottom: 10px;
-}
-
-.stock-info-header {
+.back-icon {
+  width: 36px;
+  height: 36px;
   display: flex;
+  align-items: center;
   justify-content: center;
-  gap: 15px;
-  color: #666;
-  font-size: 14px;
+  background-color: var(--bg-tertiary);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-size: var(--text-lg);
 }
 
-.loading {
-  text-align: center;
-  padding: 40px;
-  color: #666;
+.back-icon:hover {
+  background-color: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
+  transform: scale(1.05);
 }
 
-.error-message {
-  text-align: center;
-  padding: 20px;
-  color: #e74c3c;
-  background-color: #fdf2f2;
-  border-radius: 4px;
+.stock-title {
+  margin: 0;
+  font-size: var(--text-2xl);
+  color: var(--text-primary);
+  font-weight: 700;
+  line-height: 1.2;
 }
 
-.price-section {
-  text-align: center;
-  padding: 30px;
-  background-color: #f9f9f9;
-  border-radius: 8px;
-  margin-bottom: 30px;
+.header-right {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.price-info {
+  display: flex;
+  align-items: baseline;
+  gap: var(--spacing-md);
+  background-color: var(--bg-tertiary);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--border-radius-md);
+  border: 1px solid var(--border-color);
 }
 
 .current-price {
-  font-size: 36px;
+  font-size: var(--text-2xl);
   font-weight: 700;
-  color: #333;
-  margin-bottom: 10px;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
 }
 
 .price-change {
-  font-size: 24px;
+  font-size: var(--text-lg);
   font-weight: 600;
-  margin-bottom: 10px;
+  font-variant-numeric: tabular-nums;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 9999px;
+  font-size: var(--text-sm);
 }
 
 .price-change.up {
-  color: #e74c3c;
+  color: var(--error-color);
+  background-color: rgba(255, 59, 48, 0.1);
 }
 
 .price-change.down {
-  color: #2ecc71;
+  color: var(--success-color);
+  background-color: rgba(52, 199, 89, 0.1);
 }
 
-.update-time {
-  color: #666;
-  font-size: 14px;
+/* 主内容区域 */
+.detail-content {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: var(--spacing-xl);
 }
 
-.tabs {
+/* 卡片样式 */
+.card {
+  background: var(--bg-secondary);
+  border-radius: var(--border-radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding: var(--spacing-lg);
+  overflow: hidden;
+  transition: all var(--transition-fast);
+  border: 1px solid var(--border-color);
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--primary-color);
+}
+
+.card-title {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-lg);
+  padding-bottom: var(--spacing-sm);
+  border-bottom: 2px solid var(--border-color);
   display: flex;
-  gap: 10px;
-  margin-bottom: 20px;
-  border-bottom: 2px solid #eee;
-  overflow-x: auto;
-  white-space: nowrap;
-  -webkit-overflow-scrolling: touch;
+  align-items: center;
+  gap: var(--spacing-sm);
 }
 
-.tabs::-webkit-scrollbar {
-  height: 4px;
-}
-
-.tabs::-webkit-scrollbar-thumb {
-  background-color: #ccc;
+.card-title::before {
+  content: '';
+  width: 4px;
+  height: 20px;
+  background-color: var(--primary-color);
   border-radius: 2px;
 }
 
-.tab-item {
-  padding: 12px 24px;
-  cursor: pointer;
-  color: #666;
-  transition: all 0.3s;
-  border-bottom: 3px solid transparent;
-  flex-shrink: 0;
-  font-size: 14px;
-}
-
-.tab-item:hover {
-  color: #4a6cf7;
-}
-
-.tab-item.active {
-  color: #4a6cf7;
-  border-bottom-color: #4a6cf7;
-  font-weight: 600;
-}
-
-.tab-content {
-  padding: 20px;
-  background-color: #fff;
-  border-radius: 4px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
+/* 信息网格 */
 .info-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-  gap: 15px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--spacing-lg);
 }
 
 .info-item {
   display: flex;
-  justify-content: space-between;
-  padding: 15px;
-  background-color: #f9f9f9;
-  border-radius: 4px;
-  min-height: 60px; /* 确保所有行高度一致 */
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-md);
+  background-color: var(--bg-tertiary);
+  border-radius: var(--border-radius-md);
+  border: 1px solid var(--border-color);
+  transition: all var(--transition-fast);
 }
 
-.info-item .label {
-  color: #666;
+.info-item:hover {
+  transform: translateY(-1px);
+  border-color: var(--primary-color);
+  box-shadow: var(--shadow-sm);
 }
 
-.info-item .value {
+.info-label {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 500;
+}
+
+.info-value {
+  font-size: var(--text-base);
   font-weight: 600;
-  color: #333;
+  color: var(--text-primary);
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
 }
 
-.industry-comparison {
-  background-color: #f9f9f9;
-  padding: 20px;
-  border-radius: 4px;
+.info-value.positive {
+  color: var(--error-color);
 }
 
-.industry-stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 15px;
+.info-value.negative {
+  color: var(--success-color);
 }
 
-.stat-item {
+/* 财务数据标签页 */
+.financial-tabs {
+  display: flex;
+  border-bottom: 2px solid var(--border-color);
+  margin-bottom: var(--spacing-lg);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.financial-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.tab-btn {
+  padding: var(--spacing-sm) var(--spacing-xl);
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: var(--text-base);
+  color: var(--text-secondary);
+  border-bottom: 2px solid transparent;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.tab-btn:hover:not(.disabled) {
+  color: var(--primary-color);
+  background-color: var(--bg-tertiary);
+}
+
+.tab-btn.active {
+  color: var(--primary-color);
+  font-weight: 600;
+}
+
+.tab-btn.active::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background-color: var(--primary-color);
+  border-radius: 2px 2px 0 0;
+}
+
+.tab-btn.disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* 财务数据加载状态 */
+.finance-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-2xl);
+  color: var(--text-secondary);
+  background-color: var(--bg-tertiary);
+  border-radius: var(--border-radius-md);
+  border: 1px dashed var(--border-color);
+}
+
+/* 股东信息列表 */
+.shareholder-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.shareholder-item {
   display: flex;
   justify-content: space-between;
-  padding: 10px;
-  background-color: #fff;
-  border-radius: 4px;
+  align-items: center;
+  padding: var(--spacing-md);
+  background-color: var(--bg-tertiary);
+  border-radius: var(--border-radius-md);
+  transition: all var(--transition-fast);
+  border: 1px solid var(--border-color);
+  gap: var(--spacing-md);
 }
 
-.stat-item .label {
-  color: #666;
+.shareholder-item:hover {
+  background-color: var(--bg-secondary);
+  border-color: var(--primary-color);
+  transform: translateX(3px);
+  box-shadow: var(--shadow-sm);
 }
 
-.stat-item .value {
+.shareholder-rank {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background-color: var(--primary-color);
+  color: white;
+  border-radius: 6px;
+  margin-right: var(--spacing-sm);
+  flex-shrink: 0;
   font-weight: 600;
-  color: #333;
 }
 
-.no-data {
+.rank-number {
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.shareholder-details {
+  flex: 1;
+  min-width: 0;
+}
+
+.holder-name {
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 4px;
+  font-size: var(--text-sm);
+}
+
+.holder-type {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  background-color: var(--bg-secondary);
+  padding: 2px 6px;
+  border-radius: 3px;
+  display: inline-block;
+}
+
+.shareholder-percentage {
+  text-align: right;
+  flex-shrink: 0;
+  margin-left: var(--spacing-md);
+  min-width: 120px;
+}
+
+.percent-value {
+  font-weight: 600;
+  color: var(--primary-color);
+  font-size: var(--text-lg);
+  margin-bottom: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.progress-container {
+  width: 100%;
+  height: 8px;
+  background-color: var(--bg-secondary);
+  border-radius: 4px;
+  overflow: hidden;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary-color) 0%, var(--primary-hover) 100%);
+  transition: width var(--transition-fast);
+  border-radius: 4px;
+  position: relative;
+}
+
+.progress-bar::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.3) 50%, transparent 100%);
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+/* 空数据状态 */
+.empty-data {
   text-align: center;
-  padding: 40px;
-  color: #666;
+  padding: var(--spacing-2xl);
+  color: var(--text-tertiary);
+  background-color: var(--bg-tertiary);
+  border-radius: var(--border-radius-md);
+  border: 1px dashed var(--border-color);
+  margin-top: var(--spacing-lg);
+  transition: all var(--transition-fast);
 }
 
-/* 响应式设计 - 大屏幕优化 */
-@media (max-width: 1200px) {
-  .stock-detail-container {
-    padding: 15px;
-  }
+.empty-data:hover {
+  border-color: var(--primary-color);
+  background-color: var(--bg-secondary);
 }
 
-/* 平板设备 */
+.empty-data::before {
+  content: '📊';
+  display: block;
+  font-size: 48px;
+  margin-bottom: var(--spacing-md);
+  opacity: 0.5;
+}
+
+/* 响应式设计 */
 @media (max-width: 1024px) {
-  .header {
-    padding-top: 30px;
+  .detail-content {
+    grid-template-columns: 1fr;
+    gap: var(--spacing-lg);
   }
   
-  .header h1 {
-    font-size: 24px;
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--spacing-lg);
   }
   
-  .info-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 12px;
+  .header-right {
+    width: 100%;
   }
   
-  .industry-stats {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 12px;
-  }
-  
-  .tab-content {
-    padding: 15px;
+  .price-info {
+    width: 100%;
+    justify-content: space-between;
   }
 }
 
-/* 小型平板和大型手机 */
 @media (max-width: 768px) {
   .stock-detail-container {
-    padding: 10px;
+    padding: var(--spacing-md);
   }
   
-  .header {
-    padding-top: 45px;
-  }
-  
-  .back-button {
-    left: 10px;
-    top: 10px;
-    padding: 6px 12px;
-  }
-  
-  .header h1 {
-    font-size: 20px;
-  }
-  
-  .stock-info-header {
-    flex-direction: column;
-    gap: 5px;
-  }
-  
-  .action-buttons {
-    padding: 0 5px;
-  }
-  
-  .favorite-button,
-  .analysis-button {
-    max-width: none;
-    font-size: 15px;
+  .card {
+    padding: var(--spacing-md);
   }
   
   .info-grid {
     grid-template-columns: 1fr;
-    gap: 12px;
+    gap: var(--spacing-md);
   }
   
-  .industry-stats {
-    grid-template-columns: 1fr;
-  }
-  
-  .tab-content {
-    padding: 12px;
-  }
-  
-  .price-section {
-    padding: 20px;
+  .stock-title {
+    font-size: var(--text-xl);
   }
   
   .current-price {
-    font-size: 28px;
+    font-size: var(--text-xl);
   }
   
-  .price-change {
-    font-size: 20px;
+  .loading-container,
+  .error-container {
+    height: 300px;
+    padding: var(--spacing-md);
+  }
+  
+  .financial-tabs {
+    justify-content: flex-start;
+  }
+  
+  .shareholder-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--spacing-md);
+  }
+  
+  .shareholder-percentage {
+    width: 100%;
+    margin-left: 0;
+    text-align: left;
+  }
+  
+  .progress-container {
+    width: 100%;
   }
 }
 
-/* 手机设备 */
 @media (max-width: 480px) {
-  .header {
-    padding-top: 40px;
+  .stock-detail-container {
+    padding: var(--spacing-sm);
   }
   
-  .header h1 {
-    font-size: 18px;
+  .page-header {
+    padding: var(--spacing-sm);
   }
   
-  .tab-item {
-    padding: 10px 16px;
-    font-size: 13px;
+  .card {
+    padding: var(--spacing-sm);
   }
   
-  .info-item {
-    padding: 12px;
+  .back-icon {
+    width: 32px;
+    height: 32px;
   }
   
-  .info-item .label {
-    font-size: 14px;
+  .stock-title {
+    font-size: var(--text-lg);
   }
   
-  .info-item .value {
-    font-size: 14px;
-  }
-  
-  .price-section {
-    padding: 15px;
-  }
-  
-  .current-price {
-    font-size: 24px;
-  }
-  
-  .price-change {
-    font-size: 18px;
-  }
-  
-  .industry-comparison {
-    padding: 15px;
-  }
-  
-  .stat-item {
-    padding: 12px;
-  }
-  
-  .favorite-error {
-    font-size: 13px;
+  .tab-btn {
+    padding: var(--spacing-sm) var(--spacing-md);
   }
 }
 </style>
