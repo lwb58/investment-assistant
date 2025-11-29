@@ -83,7 +83,7 @@
                   <span 
                     v-for="tag in note.tags.split(',')" 
                     :key="tag"
-                    class="tag"
+                    class="note-tag"
                   >
                     {{ tag.trim() }}
                   </span>
@@ -158,16 +158,16 @@
                 {{ selectedNote.stockCode }} {{ selectedNote.stockName || '' }}
               </router-link>
             </span>
-            <span v-if="selectedNote.tags" class="meta-item">
-              <span class="meta-label">标签：</span>
-              <span 
-                v-for="tag in selectedNote.tags.split(',')" 
-                :key="tag"
-                class="tag"
-              >
-                {{ tag.trim() }}
-              </span>
-            </span>
+            <span v-if="selectedNote.tags" class="meta-item tags-container">
+                  <span class="meta-label">标签：</span>
+                  <span 
+                    v-for="tag in selectedNote.tags.split(',')" 
+                    :key="tag"
+                    class="note-tag"
+                  >
+                    {{ tag.trim() }}
+                  </span>
+                </span>
           </div>
           <div class="detail-content" v-html="formatContent(selectedNote.content)"></div>
         </div>
@@ -813,6 +813,8 @@ const getStockName = async (code) => {
   position: relative;
   overflow: hidden;
   transform-origin: center left;
+  height: auto;
+  margin-bottom: var(--space-sm);
 }
 
 .note-item:hover {
@@ -826,9 +828,23 @@ const getStockName = async (code) => {
 .note-item.active {
   background-color: var(--primary-light);
   border-left-color: var(--primary-color);
-  border-color: var(--primary-light);
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1), var(--shadow-md);
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2), var(--shadow-md);
   transform: translateX(4px);
+  font-weight: 500;
+}
+
+/* 笔记项选中时的微动画 */
+.note-item.active::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.1), transparent);
+  animation: shimmer 1.5s ease-in-out;
+  pointer-events: none;
 }
 
 /* 笔记卡片标签样式 */
@@ -837,6 +853,10 @@ const getStockName = async (code) => {
   gap: var(--space-xs);
   margin-top: var(--space-xs);
   flex-wrap: wrap;
+  padding: var(--space-sm);
+  background-color: var(--bg-secondary);
+  border-radius: var(--border-radius-md);
+  border: 1px solid var(--border-light);
 }
 
 .note-tag {
@@ -847,6 +867,35 @@ const getStockName = async (code) => {
   font-size: 11px;
   font-weight: 500;
   transition: var(--transition-fast);
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  position: relative;
+  overflow: hidden;
+}
+
+.tag {
+  background-color: var(--primary-light);
+  color: var(--primary-color);
+  padding: 2px 8px;
+  border-radius: var(--border-radius-full);
+  font-size: 11px;
+  font-weight: 500;
+  transition: var(--transition-fast);
+}
+
+.note-tag:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+  background-color: var(--primary-color);
+  color: white;
+}
+
+.tags-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  margin-top: var(--space-xs);
 }
 
 .note-item:hover .note-tag {
@@ -857,6 +906,12 @@ const getStockName = async (code) => {
   font-weight: 500;
   margin-bottom: var(--space-xs);
   color: var(--text-primary);
+  transition: color 0.3s ease;
+}
+
+.note-item:hover .note-title {
+  color: var(--primary-color);
+  text-shadow: 0 1px 2px rgba(59, 130, 246, 0.1);
 }
 
 .note-meta {
@@ -881,7 +936,7 @@ const getStockName = async (code) => {
   flex: 1;
   background-color: var(--bg-primary);
   border-radius: var(--border-radius-md);
-  box-shadow: var(--shadow-md);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
   overflow-y: auto;
   padding: var(--space-2xl);
   position: relative;
@@ -891,6 +946,7 @@ const getStockName = async (code) => {
 .note-detail {
   animation: fadeIn 0.3s ease-out, slideInUp 0.3s ease-out;
   transition: var(--transition-base);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
 }
 
 /* 增强动画效果 */
@@ -1002,8 +1058,16 @@ const getStockName = async (code) => {
   color: var(--text-regular);
   font-weight: 400;
   background-color: var(--bg-primary);
-  padding: var(--space-md);
+  padding: var(--space-xl);
   border-radius: var(--border-radius-md);
+  border: 1px solid var(--border-light);
+  margin: var(--space-md);
+  transition: all 0.3s ease;
+}
+
+.detail-content:hover {
+  border-color: var(--primary-light);
+  box-shadow: 0 2px 12px rgba(59, 130, 246, 0.08);
 }
 
 /* 增强markdown内容的样式 */
@@ -1451,22 +1515,33 @@ const getStockName = async (code) => {
   color: var(--text-secondary);
   text-align: center;
   padding: var(--space-2xl);
-  background-color: var(--bg-secondary);
+  background: linear-gradient(135deg, var(--bg-secondary), rgba(59, 130, 246, 0.03));
+  border: 2px dashed var(--border-light);
   border-radius: var(--border-radius-lg);
   animation: fadeInUp 0.5s ease-out;
+  transition: all 0.3s ease;
+}
+
+.empty-detail:hover {
+  border-color: var(--primary-light);
+  background: linear-gradient(135deg, var(--bg-secondary), rgba(59, 130, 246, 0.05));
+  transform: translateY(-2px);
 }
 
 .empty-icon {
   font-size: 64px;
   margin-bottom: var(--space-md);
   opacity: 0.3;
-  color: var(--primary-light);
+  background: linear-gradient(45deg, var(--primary-color), var(--primary-light));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
   transition: var(--transition-base);
 }
 
 .empty-icon:hover {
-  opacity: 0.6;
-  transform: scale(1.1);
+  opacity: 0.8;
+  transform: scale(1.1) rotate(5deg);
 }
 
 .empty-title {
