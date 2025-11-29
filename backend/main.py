@@ -1,4 +1,5 @@
 import re
+
 import time
 import json
 from datetime import datetime, date, timedelta
@@ -137,48 +138,57 @@ class DataSource:
     @staticmethod
     def get_sina_industry_concept_top5(target_date: str) -> Dict[str, List[Dict]]:
         """
-        新浪指定接口：行业/概念涨跌幅TOP5（适配实际返回格式，修复参数问题）
+        严格按你要求：两个独立接口，不合并！
+        1. 行业专属接口：仅获取行业数据（sinaindustry_up, sinaindustry_down）
+        2. 概念专属接口：仅获取概念数据（si_api4, si_api5, si_api6, si_api7）
+        完全独立请求，互不干扰，保留所有错误修复
         """
         random_num = round(time.time() * 1000) + 0.1
-        url = f"https://hq.sinajs.cn/ran={random_num}&format=json&list=sinaindustry_up,sinaindustry_down,si_api2,si_api3"
         
-        # 调用时传递 is_sina_var=True（其他调用处无需修改，因默认False）
-        raw_text = fetch_url(url, is_sina_var=True)
-        if not raw_text:
-            return {"industry_up": [], "industry_down": [], "concept_up": [], "concept_down": []}
+        # ============== 1. 行业专属接口（独立请求，不包含任何概念参数）==============
+        industry_url = f"https://hq.sinajs.cn/ran={random_num}&format=json&list=sinaindustry_up,sinaindustry_down"
+        industry_raw_text = fetch_url(industry_url, is_sina_var=True)  # 仅请求行业接口
         
-        # 正则提取4个变量的值（优化正则，避免匹配失败）
-        def extract_var_value(var_name: str) -> Optional[str]:
-            pattern = rf"var\s+hq_json_{var_name}\s*=\s*(.*?);"  # 兼容空格
+        # ============== 2. 概念专属接口（独立请求，不包含任何行业参数）==============
+        concept_url = f"https://hq.sinajs.cn/ran={random_num}&format=json&list=si_api4,si_api5,si_api6,si_api7"
+        concept_raw_text = fetch_url(concept_url, is_sina_var=True)  # 仅请求概念接口
+        
+        # 正则提取工具（独立处理两个接口的原始数据，不混淆）
+        def extract_var_value(raw_text: str, var_name: str) -> Optional[str]:
+            if not raw_text:
+                return None
+            pattern = rf"var\s+hq_json_{var_name}\s*=\s*(.*?);"
             match = re.search(pattern, raw_text, re.DOTALL | re.IGNORECASE)
             return match.group(1).strip() if match else None
         
-        # 提取各变量值
-        industry_up_str = extract_var_value("sinaindustry_up")
-        industry_down_str = extract_var_value("sinaindustry_down")
-        concept_up_str = extract_var_value("si_api2")
-        concept_down_str = extract_var_value("si_api3")
+        # ============== 行业数据提取+解析（完全独立，不依赖概念接口）==============
+        industry_up_str = extract_var_value(industry_raw_text, "sinaindustry_up")
+        industry_down_str = extract_var_value(industry_raw_text, "sinaindustry_down")
         
-        # 1. 解析行业涨幅TOP5（字符串数组格式）
         industry_up = []
         if industry_up_str:
             try:
-                # 安全解析字符串数组（替换单引号为双引号，用json.loads避免eval风险）
                 safe_str = industry_up_str.replace("'", '"')
-                industry_up_list = json.loads(safe_str)[:5]  # 取前5
+                industry_up_list = json.loads(safe_str)[:5]
                 for item in industry_up_list:
                     fields = item.split(',')
-                    if len(fields) >= 12:  # 确保字段足够
+                    if len(fields) >= 13:
+                        industry_name = fields[1].strip()
+                        industry_change = round(float(fields[5].strip()), 2) if fields[5].strip().replace('.','').isdigit() else 0.0
+                        leader_name = fields[12].strip()  # 领涨股名称（*ST松发）
+                        leader_code = fields[8].strip().replace('sh', '').replace('sz', '')
+                        leader_change = fields[9].strip() 
                         industry_up.append({
                             "type": "industry_up",
-                            "name": fields[1],  # 行业名称
-                            "changeRate": round(float(fields[5]), 2),  # 涨跌幅（%）
-                            "leaderStock": fields[11]  # 领涨股
+                            "name": industry_name,
+                            "changeRate": industry_change,
+                            "leaderStock": leader_name,
+                            "leaderStockCode": leader_code,
+                            "leaderStockChange": leader_change
                         })
             except Exception as e:
                 print(f"行业涨幅解析失败：{str(e)}")
         
-        # 2. 解析行业跌幅TOP5
         industry_down = []
         if industry_down_str:
             try:
@@ -186,52 +196,103 @@ class DataSource:
                 industry_down_list = json.loads(safe_str)[:5]
                 for item in industry_down_list:
                     fields = item.split(',')
-                    if len(fields) >= 12:
+                    if len(fields) >= 13:
+                        industry_name = fields[1].strip()
+                        industry_change = round(float(fields[5].strip()), 2) if fields[5].strip().replace('.','').replace('-','').isdigit() else 0.0
+                        leader_name = fields[12].strip()  # 领跌股名称（中国银行）
+                        leader_code = fields[8].strip().replace('sh', '').replace('sz', '')
+                        leader_change =fields[9].strip() 
                         industry_down.append({
                             "type": "industry_down",
-                            "name": fields[1],
-                            "changeRate": round(float(fields[5]), 2),
-                            "leaderStock": fields[11]
+                            "name": industry_name,
+                            "changeRate": industry_change,
+                            "leaderStock": leader_name,
+                            "leaderStockCode": leader_code,
+                            "leaderStockChange": leader_change
                         })
             except Exception as e:
                 print(f"行业跌幅解析失败：{str(e)}")
         
-        # 3. 解析概念涨幅TOP5（JSON数组格式）
+        # ============== 概念数据提取+解析（完全独立，不依赖行业接口）==============
+        api4_str = extract_var_value(concept_raw_text, "si_api4")
+        api5_str = extract_var_value(concept_raw_text, "si_api5")
+        api6_str = extract_var_value(concept_raw_text, "si_api6")
+        api7_str = extract_var_value(concept_raw_text, "si_api7")
+        
         concept_up = []
-        if concept_up_str:
+        all_concept_up = []
+        for api_str in [api4_str, api6_str]:
+            if not api_str:
+                continue
             try:
-                concept_up_list = json.loads(concept_up_str)[:5]
-                for item in concept_up_list:
-                    change_ratio = float(item.get("avg_changeratio", 0)) * 100  # 转换为百分比
-                    concept_up.append({
-                        "type": "concept_up",
-                        "name": item.get("name", ""),
-                        "changeRate": round(change_ratio, 2),
-                        "leaderStock": item.get("ts_name", "")
-                    })
+                concept_list = json.loads(api_str)
+                for item in concept_list:
+                    concept_name = item.get("name", "").strip()
+                    concept_change = round(float(item.get("avg_changeratio", 0)) * 100, 2)
+                    leader_name = item.get("ts_name", "").strip()
+                    leader_code = item.get("ts_symbol", "").strip().replace('sh', '').replace('sz', '')
+                    leader_change = round(float(item.get("ts_changeratio", 0)) * 100, 2)
+                    if concept_name and concept_change > 0:
+                        all_concept_up.append({
+                            "type": "concept_up",
+                            "name": concept_name,
+                            "changeRate": concept_change,
+                            "leaderStock": leader_name,
+                            "leaderStockCode": leader_code,
+                            "leaderStockChange": leader_change
+                        })
             except Exception as e:
                 print(f"概念涨幅解析失败：{str(e)}")
         
-        # 4. 解析概念跌幅TOP5
+        unique_concept_up = []
+        seen_names = set()
+        for item in sorted(all_concept_up, key=lambda x: x["changeRate"], reverse=True):
+            if item["name"] not in seen_names:
+                seen_names.add(item["name"])
+                unique_concept_up.append(item)
+        concept_up = unique_concept_up[:5]
+        
         concept_down = []
-        if concept_down_str:
+        all_concept_down = []
+        for api_str in [api5_str, api7_str]:
+            if not api_str:
+                continue
             try:
-                concept_down_list = json.loads(concept_down_str)[:5]
-                for item in concept_down_list:
-                    change_ratio = float(item.get("avg_changeratio", 0)) * 100
-                    concept_down.append({
-                        "type": "concept_down",
-                        "name": item.get("name", ""),
-                        "changeRate": round(change_ratio, 2),
-                        "leaderStock": item.get("ts_name", "")
-                    })
+                # 修复JSON格式：无引号key加双引号
+                fixed_api_str = re.sub(r'(\w+):', r'"\1":', api_str)
+                fixed_api_str = fixed_api_str.replace("'", '"')
+                concept_list = json.loads(fixed_api_str)
+                for item in concept_list:
+                    concept_name = item.get("name", "").strip()
+                    concept_change = round(float(item.get("avg_changeratio", 0)) * 100, 2)
+                    leader_name = item.get("ts_name", "").strip()
+                    leader_code = item.get("ts_symbol", "").strip().replace('sh', '').replace('sz', '')
+                    leader_change = round(float(item.get("ts_changeratio", 0)) * 100, 2)
+                    if concept_name and concept_change < 0:
+                        all_concept_down.append({
+                            "type": "concept_down",
+                            "name": concept_name,
+                            "changeRate": concept_change,
+                            "leaderStock": leader_name,
+                            "leaderStockCode": leader_code,
+                            "leaderStockChange": leader_change
+                        })
             except Exception as e:
                 print(f"概念跌幅解析失败：{str(e)}")
         
+        unique_concept_down = []
+        seen_names = set()
+        for item in sorted(all_concept_down, key=lambda x: x["changeRate"]):
+            if item["name"] not in seen_names:
+                seen_names.add(item["name"])
+                unique_concept_down.append(item)
+        concept_down = unique_concept_down[:5]
+        
+        # 独立返回两个接口的数据，无任何合并逻辑
         return {
-            "industry_up": industry_up,
+            "industry_up": industry_up,    # 纯行业接口数据
             "industry_down": industry_down,
-            "concept_up": concept_up,
+            "concept_up": concept_up,      # 纯概念接口数据
             "concept_down": concept_down
         }
 
