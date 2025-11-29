@@ -1,5 +1,5 @@
 import re
-
+import random
 import time
 import json
 from datetime import datetime, date, timedelta
@@ -298,43 +298,98 @@ class DataSource:
 
 
     @staticmethod
-    def get_sina_market_stats() -> Dict[str, Union[int, float, str]]:
-        """新浪市场统计（修复编码和分割逻辑）"""
-        url = "http://hq.sinajs.cn/list=s_sh000001"
+    def get_sina_market_stats() -> Dict[str, Optional[Union[int, float, str]]]:
+        """新浪市场统计（迁移分市场汇总逻辑，无任何兜底数据）"""
+        # 初始化返回结构（键名完整，值默认为None）
+        result = {
+            "upStocks": None,
+            "downStocks": None,
+            "flatStocks": None,
+            "totalVolume": None,
+            "totalAmount": None,
+            "medianChangeRate": None
+        }
+
         try:
-            headers = {"User-Agent": "Mozilla/5.0"}
-            response = requests.get(url, headers=headers, timeout=10)
-            response.encoding = "gbk"  # 修复编码
-            text_data = response.text.split('"')[1].split(',')
-            if len(text_data) < 30:
-                raise Exception("数据格式异常")
-            
-            # 解析涨跌平、成交量（字段索引确认）
-            up_stocks = int(text_data[4]) if text_data[4].strip().isdigit() else 1500
-            down_stocks = int(text_data[5]) if text_data[5].strip().isdigit() else 1000
-            flat_stocks = int(text_data[6]) if text_data[6].strip().isdigit() else 300
-            total_volume = round(float(text_data[2]) / 10000, 2) if text_data[2].strip() else 8000.00
-            total_amount = round(float(text_data[3]) / 100000000, 2) if text_data[3].strip() else 9500.00
-            
-            # 涨幅中位数（基于行业数据推导）
-            top5_data = DataSource.get_sina_industry_concept_top5(get_last_trade_date())
-            all_rates = [item["changeRate"] for item in 
-                        top5_data["industry_up"] + top5_data["industry_down"] +
-                        top5_data["concept_up"] + top5_data["concept_down"]]
-            median = round(sum(all_rates)/len(all_rates) if all_rates else 0.65, 2)
-            
-            return {
-                "upStocks": up_stocks, "downStocks": down_stocks, "flatStocks": flat_stocks,
-                "totalVolume": f"{total_volume:.2f}", "totalAmount": f"{total_amount:.2f}",
+            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36"}
+            random_r = random.random()
+
+            # ---------------------- 1. 上证A股（无兜底，字段不足抛异常）----------------------
+            sh_url = f"https://qt.gtimg.cn/r={random_r}&q=bkqtRank_A_sh"
+            sh_response = requests.get(sh_url, headers=headers, timeout=15, verify=False)
+            sh_response.encoding = "utf-8"
+            sh_line = [l for l in sh_response.text.split('\n') if "v_bkqtRank_A_sh" in l][0]
+            sh_data = sh_line.split('"')[1].split('~')
+            sh_up = int(sh_data[2].strip())
+            sh_down = int(sh_data[4].strip())
+            sh_flat = int(sh_data[3].strip())
+            sh_amount = round(int(sh_data[10].strip()) / 10000, 2)
+            sh_volume = round(int(sh_data[9].strip()) / 10000 / 100, 2)
+
+            # ---------------------- 2. 深证A股（无兜底，字段不足抛异常）----------------------
+            sz_url = f"https://qt.gtimg.cn/r={random_r}&q=bkqtRank_A_sz"
+            sz_response = requests.get(sz_url, headers=headers, timeout=15, verify=False)
+            sz_response.encoding = "utf-8"
+            sz_line = [l for l in sz_response.text.split('\n') if "v_bkqtRank_A_sz" in l][0]
+            sz_data = sz_line.split('"')[1].split('~')
+            sz_up = int(sz_data[2].strip())
+            sz_down = int(sz_data[4].strip())
+            sz_flat = int(sz_data[3].strip())
+            sz_amount = round(int(sz_data[10].strip()) / 10000, 2)
+            sz_volume = round(int(sz_data[9].strip()) / 10000 / 100, 2)
+
+            # ---------------------- 3. 创业板A股（无兜底，字段不足抛异常）----------------------
+            cyb_url = f"https://web.ifzq.gtimg.cn/appstock/app/minute/query?_var=min_data_sz399006&code=sz399006&r={random_r}"
+            cyb_response = requests.get(cyb_url, headers=headers, timeout=15, verify=False)
+            cyb_response.encoding = "utf-8"
+            cyb_text = cyb_response.text.strip().split('=', 1)[1]
+            cyb_json = requests.models.complexjson.loads(cyb_text)
+            sz399006_qt = cyb_json["data"]["sz399006"]["qt"]  # 无get，字段不存在直接抛异常
+            zhishu_list = sz399006_qt["zhishu"]
+            sz399006_data = sz399006_qt["sz399006"]
+            cyb_up = int(zhishu_list[2].strip())
+            cyb_down = int(zhishu_list[4].strip())
+            cyb_flat = int(zhishu_list[3].strip())
+            # 成交额：元→亿元（无默认值）
+            cyb_amount_str = sz399006_data[35].split('/')[2].strip().replace(',', '')
+            cyb_amount = round(int(cyb_amount_str) / 100000000, 2)
+            # 成交量：股→万手（无默认值）
+            cyb_volume_str = sz399006_data[35].split('/')[1].strip().replace(',', '')
+            cyb_volume = round(int(cyb_volume_str) / 10000 / 100, 2)
+
+            # ---------------------- 总汇总（无兜底）----------------------
+            total_up = sh_up + sz_up + cyb_up
+            total_down = sh_down + sz_down + cyb_down
+            total_flat = sh_flat + sz_flat + cyb_flat
+            total_volume = round(sh_volume + sz_volume + cyb_volume, 2)
+            total_amount = round(sh_amount + sz_amount + cyb_amount, 2)
+
+            # 涨幅中位数（无兜底，获取失败设为None）
+            median = None
+            try:
+                top5_data = DataSource.get_sina_industry_concept_top5(get_last_trade_date())
+                all_rates = [item["changeRate"] for item in 
+                            top5_data["industry_up"] + top5_data["industry_down"] +
+                            top5_data["concept_up"] + top5_data["concept_down"]]
+                if all_rates:
+                    median = round(sum(all_rates)/len(all_rates), 2)
+            except:
+                pass  # 不设兜底，保持None
+
+            # 填充结果（完全匹配你的返回格式）
+            result = {
+                "upStocks": total_up,
+                "downStocks": total_down,
+                "flatStocks": total_flat,
+                "totalVolume": f"{total_volume:.2f}" if total_volume is not None else None,
+                "totalAmount": f"{total_amount:.2f}" if total_amount is not None else None,
                 "medianChangeRate": median
             }
         except Exception as e:
             print(f"市场统计解析失败：{str(e)}")
-            # 兜底默认值
-            return {
-                "upStocks": 1500, "downStocks": 1000, "flatStocks": 300,
-                "totalVolume": "8000.00", "totalAmount": "9500.00", "medianChangeRate": 0.65
-            }
+            # 失败时返回键名完整、值为None的字典（无任何兜底假数据）
+
+        return result
 
     @staticmethod
     def get_sina_index_data() -> Dict[str, Union[str, float]]:
