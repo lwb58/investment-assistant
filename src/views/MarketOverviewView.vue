@@ -17,7 +17,7 @@
     </div>
 
     <!-- 核心数据卡片区（复用全局 card 类） -->
-    <div v-else class="stats-grid grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 mb-3">
+    <div v-else class="stats-grid grid gap-2 mb-3">
       <!-- 上证指数 -->
       <div class="card hover:shadow-medium transition-all">
         <div class="flex justify-between items-start mb-3">
@@ -98,10 +98,10 @@
       </div>
     </div>
 
-    <!-- 市场统计+行业排行区 -->
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-2">
+    <!-- 市场统计+行业排行区（添加专属类） -->
+    <div class="market-stats-grid grid gap-2">
       <!-- 市场统计（复用 card 类） -->
-      <div class="card">
+      <div class="card lg:col-span-1">
         <h2 class="card-title flex items-center">
           <span class="inline-block mr-2 text-primary">📊</span>
           市场统计
@@ -144,7 +144,7 @@
       </div>
 
       <!-- 行业涨幅榜 -->
-      <div class="card">
+      <div class="card lg:col-span-1">
         <h2 class="card-title flex items-center">
           <span class="inline-block mr-2 text-error">⬆️</span>
           行业涨幅榜 TOP5
@@ -166,7 +166,7 @@
       </div>
 
       <!-- 行业跌幅榜 -->
-      <div class="card">
+      <div class="card lg:col-span-1">
         <h2 class="card-title flex items-center">
           <span class="inline-block mr-2 text-success">⬇️</span>
           行业跌幅榜 TOP5
@@ -217,12 +217,16 @@ const marketOverview = ref({
 const loading = ref(true)
 const error = ref(null)
 
-// 拆分涨幅/跌幅行业（核心逻辑：按 type 区分）
+// 拆分涨幅/跌幅行业（添加数据容错）
 const upIndustries = computed(() => {
-  return marketOverview.value.marketHotspots.filter(item => item.type === 'up')
+  return marketOverview.value.marketHotspots
+    .filter(item => item && item.type === 'up' && item.industry && typeof item.changeRate === 'number')
+    .slice(0, 5)
 })
 const downIndustries = computed(() => {
-  return marketOverview.value.marketHotspots.filter(item => item.type === 'down')
+  return marketOverview.value.marketHotspots
+    .filter(item => item && item.type === 'down' && item.industry && typeof item.changeRate === 'number')
+    .slice(0, 5)
 })
 
 // 获取市场概览数据
@@ -232,6 +236,9 @@ const fetchMarketOverview = async () => {
   try {
     const data = await apiService.getMarketOverview()
     marketOverview.value = { ...marketOverview.value, ...data }
+    // 调试用：打印后端返回数据
+    console.log('市场概览原始数据：', data)
+    console.log('跌幅行业数据：', downIndustries.value)
   } catch (err) {
     error.value = '加载市场数据失败：' + (err.message || '未知错误')
     console.error('市场数据加载失败：', err)
@@ -248,18 +255,19 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* 仅补充少量组件内私有样式，优先复用全局样式 */
+/* 组件内私有样式 */
 .loading-state {
   min-height: 300px;
 }
 
-/* 卡片样式 */
+/* 卡片基础样式 */
 .card {
   background-color: var(--bg-primary);
   border-radius: var(--border-radius-base);
   box-shadow: var(--shadow-base);
   padding: var(--spacing-md);
   transition: var(--transition-base);
+  min-width: 0; /* 解决网格布局内容溢出问题 */
 }
 
 .card-title {
@@ -273,13 +281,43 @@ onMounted(() => {
   padding-top: 0;
 }
 
-/* 响应式适配：复用 main.css 的 768px 断点 */
+/* 响应式布局 */
+/* 小屏（手机，≤768px）：1列堆叠 */
 @media (max-width: 768px) {
-      .stats-grid {
-        grid-template-columns: 1fr;
-      }
-      .grid-cols-3 {
-        grid-template-columns: 1fr;
-      }
-    }
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+  .market-stats-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 中屏（平板，769px-1023px）：2列布局 */
+@media (min-width: 769px) and (max-width: 1023px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .market-stats-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .market-stats-grid .card:nth-child(2),
+  .market-stats-grid .card:nth-child(3) {
+    grid-column: 2 / 3;
+  }
+}
+
+/* 大屏（电脑，≥1024px）：3列并列 */
+@media (min-width: 1024px) {
+  .stats-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  .market-stats-grid {
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: var(--spacing-md);
+  }
+  .market-stats-grid .card {
+    width: 100%;
+    box-sizing: border-box;
+  }
+}
 </style>
