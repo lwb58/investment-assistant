@@ -176,7 +176,7 @@
               <div class="relative flex space-x-2">
                 <input 
                   type="text" 
-                  v-model="searchKeyword"
+                  v-model="modalSearchKeyword"
                   :disabled="!!editingStock"
                   placeholder="输入股票代码或名称搜索"
                   class="flex-1 p-2 border rounded"
@@ -188,7 +188,7 @@
                   type="button" 
                   class="btn primary whitespace-nowrap"
                   @click="handleStockSearch"
-                  :disabled="!searchKeyword.trim() || !!editingStock"
+                  :disabled="!modalSearchKeyword.trim() || !!editingStock"
                 >
                   查询
                 </button>
@@ -301,7 +301,8 @@ const formData = ref({
 const searchResults = ref([])
 const showSearchResults = ref(false)
 const searching = ref(false)
-const searchKeyword = ref('')
+const searchKeyword = ref('') // 主列表搜索关键词
+const modalSearchKeyword = ref('') // 弹窗搜索关键词，独立变量
 
 // 计算过滤后的股票列表
 const filteredStocks = computed(() => {
@@ -363,7 +364,7 @@ const formatPrice = (price) => {
 const editStock = (stock) => {
   editingStock.value = stock
   formData.value = { ...stock }
-  searchKeyword.value = `${stock.name} (${stock.code})`
+  modalSearchKeyword.value = `${stock.name} (${stock.code})`
   showAddModal.value = true
 }
 
@@ -442,7 +443,7 @@ const closeModal = () => {
 
 // 处理股票搜索
 const handleStockSearch = async () => {
-  if (searchKeyword.value.trim().length < 1) {
+  if (modalSearchKeyword.value.trim().length < 1) {
     searchResults.value = []
     showSearchResults.value = false
     return
@@ -451,7 +452,7 @@ const handleStockSearch = async () => {
   searching.value = true
   try {
     // 调用后端接口查询股票信息
-    searchResults.value = await apiService.searchStocks(searchKeyword.value)
+    searchResults.value = await apiService.searchStocks(modalSearchKeyword.value)
     showSearchResults.value = true
   } catch (error) {
     console.error('搜索股票失败:', error)
@@ -481,7 +482,7 @@ const selectSearchResult = (stock) => {
   formData.value.code = stock.code
   formData.value.name = stock.name
   formData.value.industry = stock.industry
-  searchKeyword.value = `${stock.name} (${stock.code})`
+  modalSearchKeyword.value = `${stock.name} (${stock.code})`
   showSearchResults.value = false
   searchResults.value = []
 }
@@ -494,7 +495,7 @@ const resetForm = () => {
     industry: '',
     holding: false
   }
-  searchKeyword.value = ''
+  modalSearchKeyword.value = '' // 重置弹窗搜索关键词
   searchResults.value = []
   showSearchResults.value = false
 }
