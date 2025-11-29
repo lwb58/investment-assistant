@@ -295,19 +295,18 @@ const formData = ref({
 
 // 获取笔记列表（修复API调用逻辑）
 const fetchNotes = async () => {
+  loading.value = true
+  error.value = ''
   try {
-    loading.value = true
-    error.value = null
-    const response = await apiService.getReviewNotes()
-    // 确保正确处理后端返回格式（假设后端返回 { data: [...] }）
-    notes.value = response.data || response || []
-    // 默认选中第一个笔记
+    const response = await apiService.getNotes()
+    // 关键修复：后端直接返回数组，无需通过 response.data 提取
+    notes.value = response || []
     if (notes.value.length > 0 && !selectedNoteId.value) {
       selectedNoteId.value = notes.value[0].id
     }
   } catch (err) {
-    error.value = '获取笔记列表失败: ' + (err.message || '未知错误')
-    console.error('获取笔记列表失败:', err)
+    error.value = '加载笔记失败: ' + (err.message || '未知错误')
+    console.error('加载笔记失败:', err)
   } finally {
     loading.value = false
   }
@@ -519,12 +518,12 @@ const formatContent = (content) => {
 const getStockName = async (code) => {
   if (!code) return ''
   try {
-    const result = await apiService.getStockDetail(code)
-    const stockDetail = result.data || result
+    // 关键修复：后端返回的是直接数据，无 data 字段
+    const stockDetail = await apiService.getStockDetail(code)
     return stockDetail?.name || ''
   } catch (err) {
     console.error('获取股票名称失败:', err)
-    return ''
+    return ''  // 失败时返回空字符串，避免页面报错
   }
 }
 </script>
@@ -532,100 +531,232 @@ const getStockName = async (code) => {
 <style scoped>
 /* 保持原有样式不变，此处省略重复样式 */
 :root {
-  --primary-color: #1890ff;
-  --primary-light: #e6f7ff;
-  --success-color: #52c41a;
-  --warning-color: #faad14;
-  --danger-color: #f5222d;
-  --text-primary: #333333;
-  --text-regular: #666666;
-  --text-secondary: #999999;
-  --text-placeholder: #bfbfbf;
-  --border-color: #d9d9d9;
-  --border-light: #f0f0f0;
-  --border-hover: #40a9ff;
+  /* 更现代的颜色方案 */
+  --primary-color: #3b82f6;
+  --primary-light: #eff6ff;
+  --primary-dark: #2563eb;
+  --success-color: #10b981;
+  --warning-color: #f59e0b;
+  --danger-color: #ef4444;
+  --text-primary: #1f2937;
+  --text-regular: #4b5563;
+  --text-secondary: #9ca3af;
+  --text-placeholder: #d1d5db;
+  --border-color: #e5e7eb;
+  --border-light: #f3f4f6;
+  --border-hover: #60a5fa;
   --bg-primary: #ffffff;
-  --bg-secondary: #f5f5f5;
-  --bg-disabled: #f5f5f5;
-  --bg-hover: #fafafa;
-  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.09);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.15);
-  --border-radius-sm: 4px;
+  --bg-secondary: #f9fafb;
+  --bg-tertiary: #f3f4f6;
+  --bg-disabled: #f3f4f6;
+  --bg-hover: #f9fafb;
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --border-radius-sm: 6px;
   --border-radius-md: 8px;
   --border-radius-lg: 12px;
+  --border-radius-full: 9999px;
   --space-xs: 4px;
   --space-sm: 8px;
   --space-md: 16px;
   --space-lg: 24px;
   --space-xl: 32px;
+  --space-2xl: 48px;
   --transition-base: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   --transition-fast: all 0.2s ease;
+  --transition-slow: all 0.5s ease;
 }
 
 .review-notes-container {
-  padding: var(--space-lg);
+  padding: var(--space-md);
   height: calc(100vh - 64px);
   overflow: hidden;
   display: flex;
   flex-direction: column;
   background-color: var(--bg-secondary);
+  position: relative;
 }
 
 .page-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: var(--space-lg);
-  padding-bottom: var(--space-md);
-  border-bottom: 1px solid var(--border-light);
+  margin-bottom: var(--space-md);
+  padding: var(--space-md);
+  background-color: var(--bg-primary);
+  border-radius: var(--border-radius-lg);
+  box-shadow: var(--shadow-sm);
+  flex-wrap: wrap;
+  gap: var(--space-sm);
 }
 
 .page-title {
   margin: 0;
-  font-size: 22px;
-  font-weight: 600;
-  color: var(--text-primary);
+  font-size: 20px;
+  font-weight: 700;
   display: flex;
   align-items: center;
   gap: var(--space-sm);
+  background: linear-gradient(to right, var(--primary-color), var(--primary-dark));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .notes-stats {
   margin-top: var(--space-sm);
   color: var(--text-secondary);
   font-size: 14px;
+  display: flex;
+  gap: var(--space-md);
 }
 
 .stats-item {
-  margin-right: var(--space-md);
+  background-color: var(--bg-tertiary);
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--border-radius-full);
+  font-weight: 500;
 }
 
 .notes-content {
   display: flex;
-  gap: var(--space-lg);
+  gap: var(--space-md);
   height: calc(100% - 60px);
+  flex: 1;
 }
 
 .notes-sidebar {
-  width: 360px;
+  width: 320px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
   height: 100%;
 }
 
+/* 响应式设计 */
+@media (max-width: 1024px) {
+  .review-notes-container {
+    padding: var(--space-sm);
+  }
+  
+  .page-header {
+    padding: var(--space-sm);
+  }
+  
+  .notes-sidebar {
+    width: 280px;
+  }
+  
+  .notes-main {
+    padding: var(--space-lg);
+  }
+}
+
+@media (max-width: 768px) {
+  .notes-content {
+    flex-direction: column;
+    height: auto;
+  }
+  
+  .review-notes-container {
+    height: auto;
+    min-height: 100vh;
+    padding-bottom: var(--space-xl);
+  }
+  
+  .notes-sidebar {
+    width: 100%;
+    height: 40vh;
+    margin-bottom: var(--space-md);
+  }
+  
+  .notes-main {
+    height: 50vh;
+    padding: var(--space-md);
+  }
+  
+  .page-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-md);
+  }
+  
+  .btn-group {
+    display: flex;
+    gap: var(--space-sm);
+  }
+  
+  .page-title {
+    justify-content: center;
+    font-size: 18px;
+  }
+  
+  .stats-item {
+    font-size: 12px;
+  }
+  
+  .detail-title {
+    font-size: 22px;
+  }
+  
+  .modal-content {
+    width: 95%;
+    margin: var(--space-md);
+    max-height: 95vh;
+  }
+}
+
+@media (max-width: 480px) {
+  .note-item {
+    padding: var(--space-sm);
+  }
+  
+  .note-title {
+    font-size: 14px;
+  }
+  
+  .note-meta {
+    font-size: 11px;
+  }
+  
+  .note-preview {
+    font-size: 12px;
+  }
+  
+  .detail-content {
+    font-size: 14px;
+  }
+  
+  .modal-header,
+  .modal-body {
+    padding: var(--space-md);
+  }
+}
+
 .search-box {
   position: relative;
   margin-bottom: var(--space-md);
+  transition: var(--transition-base);
 }
 
 .search-input {
   width: 100%;
-  padding: var(--space-sm) var(--space-md) var(--space-sm) 40px;
-  border: 1px solid var(--border-color);
+  padding: var(--space-md) var(--space-md) var(--space-md) 40px;
+  border: 2px solid var(--border-light);
   border-radius: var(--border-radius-md);
   font-size: 14px;
   transition: var(--transition-base);
+  font-weight: 500;
+  color: var(--text-primary);
+  background-color: var(--bg-primary);
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  transform: translateY(-1px);
 }
 
 .search-icon {
@@ -634,6 +765,7 @@ const getStockName = async (code) => {
   top: 50%;
   transform: translateY(-50%);
   color: var(--text-secondary);
+  font-size: 16px;
 }
 
 .clear-search {
@@ -645,12 +777,18 @@ const getStockName = async (code) => {
   border: none;
   color: var(--text-secondary);
   cursor: pointer;
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
+  transition: var(--transition-base);
+}
+
+.clear-search:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 .notes-list {
@@ -658,22 +796,61 @@ const getStockName = async (code) => {
   overflow-y: auto;
   background-color: var(--bg-primary);
   border-radius: var(--border-radius-md);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-md);
   padding: var(--space-md);
+  transition: var(--transition-base);
 }
 
 .note-item {
   padding: var(--space-md);
-  border-radius: var(--border-radius-sm);
-  margin-bottom: var(--space-sm);
+  border-radius: var(--border-radius-md);
+  margin-bottom: var(--space-md);
   cursor: pointer;
   transition: var(--transition-base);
-  border-left: 3px solid transparent;
+  border-left: 4px solid transparent;
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-light);
+  position: relative;
+  overflow: hidden;
+  transform-origin: center left;
+}
+
+.note-item:hover {
+  background-color: var(--bg-hover);
+  transform: translateX(4px) translateY(-2px) scale(1.01);
+  border-color: var(--primary-light);
+  box-shadow: var(--shadow-md);
+  z-index: 10;
 }
 
 .note-item.active {
   background-color: var(--primary-light);
   border-left-color: var(--primary-color);
+  border-color: var(--primary-light);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1), var(--shadow-md);
+  transform: translateX(4px);
+}
+
+/* 笔记卡片标签样式 */
+.note-tags {
+  display: flex;
+  gap: var(--space-xs);
+  margin-top: var(--space-xs);
+  flex-wrap: wrap;
+}
+
+.note-tag {
+  background-color: var(--primary-light);
+  color: var(--primary-color);
+  padding: 2px 8px;
+  border-radius: var(--border-radius-full);
+  font-size: 11px;
+  font-weight: 500;
+  transition: var(--transition-fast);
+}
+
+.note-item:hover .note-tag {
+  transform: scale(1.05);
 }
 
 .note-title {
@@ -704,52 +881,168 @@ const getStockName = async (code) => {
   flex: 1;
   background-color: var(--bg-primary);
   border-radius: var(--border-radius-md);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-md);
   overflow-y: auto;
-  padding: var(--space-lg);
+  padding: var(--space-2xl);
+  position: relative;
+  transition: var(--transition-base);
 }
 
 .note-detail {
-  animation: fadeIn 0.3s ease;
+  animation: fadeIn 0.3s ease-out, slideInUp 0.3s ease-out;
+  transition: var(--transition-base);
+}
+
+/* 增强动画效果 */
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+/* 笔记状态指示器 */
+.note-status {
+  position: absolute;
+  top: var(--space-md);
+  right: var(--space-md);
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--success-color);
+  transition: var(--transition-base);
+}
+
+.note-item:hover .note-status {
+  transform: scale(1.5);
+}
+
+/* 添加加载动画 */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.shimmer {
+  background: linear-gradient(90deg, var(--bg-tertiary) 25%, var(--bg-secondary) 50%, var(--bg-tertiary) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
 }
 
 .detail-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: var(--space-md);
+  margin-bottom: var(--space-lg);
   padding-bottom: var(--space-md);
-  border-bottom: 1px solid var(--border-light);
+  border-bottom: 2px solid var(--border-light);
+  position: relative;
 }
 
 .detail-title {
   margin: 0;
-  font-size: 20px;
+  font-size: 28px;
+  font-weight: 700;
   color: var(--text-primary);
+  line-height: 1.3;
 }
 
 .detail-meta {
   margin-bottom: var(--space-lg);
   padding: var(--space-md);
-  background-color: var(--bg-secondary);
-  border-radius: var(--border-radius-sm);
-  font-size: 13px;
+  background-color: var(--bg-tertiary);
+  border-radius: var(--border-radius-md);
+  font-size: 14px;
+  border-left: 4px solid var(--primary-color);
 }
 
 .meta-item {
   margin-right: var(--space-lg);
   display: inline-block;
   margin-bottom: var(--space-xs);
+  font-weight: 500;
 }
 
 .meta-label {
   color: var(--text-secondary);
+  margin-right: var(--space-xs);
 }
 
 .detail-content {
-  font-size: 15px;
+  font-size: 16px;
   line-height: 1.8;
+  color: var(--text-regular);
+  font-weight: 400;
+  background-color: var(--bg-primary);
+  padding: var(--space-md);
+  border-radius: var(--border-radius-md);
+}
+
+/* 增强markdown内容的样式 */
+.detail-content :deep(h1),
+.detail-content :deep(h2),
+.detail-content :deep(h3),
+.detail-content :deep(h4),
+.detail-content :deep(h5),
+.detail-content :deep(h6) {
   color: var(--text-primary);
+  margin-top: var(--space-lg);
+  margin-bottom: var(--space-md);
+  font-weight: 600;
+}
+
+.detail-content :deep(p) {
+  margin-bottom: var(--space-md);
+}
+
+.detail-content :deep(blockquote) {
+  border-left: 4px solid var(--primary-color);
+  padding-left: var(--space-md);
+  color: var(--text-secondary);
+  margin-left: 0;
+}
+
+.detail-content :deep(pre) {
+  background-color: var(--bg-tertiary);
+  padding: var(--space-md);
+  border-radius: var(--border-radius-md);
+  overflow-x: auto;
+  margin-bottom: var(--space-md);
+}
+
+.detail-content :deep(code) {
+  background-color: var(--bg-tertiary);
+  padding: 2px 6px;
+  border-radius: var(--border-radius-sm);
+  font-family: monospace;
 }
 
 .markdown-h1 {
@@ -812,6 +1105,7 @@ const getStockName = async (code) => {
   right: 0;
   bottom: 0;
   background-color: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -819,6 +1113,7 @@ const getStockName = async (code) => {
   opacity: 0;
   visibility: hidden;
   transition: var(--transition-base);
+  animation: fadeIn 0.3s ease;
 }
 
 .modal-overlay.modal-open {
@@ -828,14 +1123,17 @@ const getStockName = async (code) => {
 
 .modal {
   background-color: var(--bg-primary);
-  border-radius: var(--border-radius-md);
+  border-radius: var(--border-radius-lg);
+  box-shadow: var(--shadow-lg);
   width: 90%;
-  max-width: 800px;
+  max-width: 650px;
   max-height: 90vh;
   display: flex;
   flex-direction: column;
   transform: translateY(-20px);
   transition: var(--transition-base);
+  animation: slideIn 0.3s ease;
+  border: 1px solid var(--border-light);
 }
 
 .modal-overlay.modal-open .modal {
@@ -843,16 +1141,18 @@ const getStockName = async (code) => {
 }
 
 .modal-header {
-  padding: var(--space-md) var(--space-lg);
+  padding: var(--space-lg);
   border-bottom: 1px solid var(--border-light);
   display: flex;
   justify-content: space-between;
   align-items: center;
+  background-color: var(--bg-secondary);
 }
 
 .modal-title {
   margin: 0;
-  font-size: 18px;
+  font-size: 20px;
+  font-weight: 600;
   color: var(--text-primary);
 }
 
@@ -883,14 +1183,16 @@ const getStockName = async (code) => {
 }
 
 .form-group {
-  margin-bottom: var(--space-md);
+  margin-bottom: var(--space-lg);
+  position: relative;
 }
 
 .form-label {
   display: block;
-  margin-bottom: var(--space-xs);
+  margin-bottom: var(--space-sm);
   color: var(--text-primary);
-  font-weight: 500;
+  font-weight: 600;
+  font-size: 14px;
 }
 
 .required {
@@ -899,17 +1201,29 @@ const getStockName = async (code) => {
 
 .form-input {
   width: 100%;
-  padding: 10px 12px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--border-radius-sm);
+  padding: var(--space-md) var(--space-md);
+  border: 2px solid var(--border-light);
+  border-radius: var(--border-radius-md);
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
   font-size: 14px;
   transition: var(--transition-base);
+  font-weight: 500;
 }
 
 .form-input:focus {
-  border-color: var(--border-hover);
+  border-color: var(--primary-color);
   outline: none;
-  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  transform: translateY(-1px);
+}
+
+.form-input.error {
+  border-color: var(--danger-color);
+}
+
+.form-input.error:focus {
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
 }
 
 .form-input-error {
@@ -918,18 +1232,100 @@ const getStockName = async (code) => {
 
 .form-textarea {
   width: 100%;
-  padding: 10px 12px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--border-radius-sm);
+  padding: var(--space-md) var(--space-md);
+  border: 2px solid var(--border-light);
+  border-radius: var(--border-radius-md);
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
   font-size: 14px;
-  resize: none;
+  resize: vertical;
   transition: var(--transition-base);
+  font-weight: 500;
+  height: 250px;
+  min-height: 150px;
+  font-family: inherit;
 }
 
 .form-textarea:focus {
-  border-color: var(--border-hover);
+  border-color: var(--primary-color);
   outline: none;
-  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  transform: translateY(-1px);
+}
+
+.form-textarea.error {
+  border-color: var(--danger-color);
+}
+
+.form-textarea.error:focus {
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+}
+
+/* 表单验证和帮助文本 */
+.form-error {
+  color: var(--danger-color);
+  font-size: 12px;
+  margin-top: var(--space-xs);
+  display: block;
+}
+
+.form-help {
+  color: var(--text-secondary);
+  font-size: 12px;
+  margin-top: var(--space-xs);
+  display: block;
+}
+
+/* 标签输入增强 */
+.tags-input-container {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-sm) var(--space-md);
+  border: 2px solid var(--border-light);
+  border-radius: var(--border-radius-md);
+  min-height: 48px;
+  transition: var(--transition-base);
+}
+
+.tags-input-container:focus-within {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.tags-input {
+  border: none;
+  outline: none;
+  flex: 1;
+  min-width: 120px;
+  padding: var(--space-xs) 0;
+  font-size: 14px;
+}
+
+.tag {
+  background-color: var(--primary-light);
+  color: var(--primary-color);
+  padding: 4px 10px;
+  border-radius: var(--border-radius-full);
+  font-size: 13px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  transition: var(--transition-fast);
+}
+
+.tag:hover {
+  background-color: var(--primary-color);
+  color: white;
+  transform: scale(1.05);
+}
+
+.tag-remove {
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
 }
 
 .modal-footer {
@@ -938,38 +1334,77 @@ const getStockName = async (code) => {
   display: flex;
   justify-content: flex-end;
   gap: var(--space-md);
+  background-color: var(--bg-secondary);
+}
+
+/* 提交按钮加载状态 */
+.btn-loading {
+  opacity: 0.7;
+  cursor: not-allowed;
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-loading::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+  animation: loadingShine 1.5s infinite;
+}
+
+@keyframes loadingShine {
+  100% {
+    left: 100%;
+  }
 }
 
 .btn {
-  padding: 8px 16px;
-  border-radius: var(--border-radius-sm);
+  padding: var(--space-md) calc(var(--space-md) + 8px);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-md);
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
   transition: var(--transition-base);
-  border: 1px solid var(--border-color);
-  background-color: var(--bg-primary);
-  color: var(--text-primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  position: relative;
+  overflow: hidden;
 }
 
 .btn:hover {
   background-color: var(--bg-hover);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
 }
 
 .btn.primary {
   background-color: var(--primary-color);
   color: white;
   border-color: var(--primary-color);
+  background-image: linear-gradient(45deg, var(--primary-color), var(--primary-dark));
 }
 
 .btn.primary:hover {
-  background-color: #40a9ff;
+  background-color: var(--primary-dark);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+  background-image: linear-gradient(45deg, var(--primary-dark), var(--primary-color));
 }
 
 .btn.text {
   background-color: transparent;
   border-color: transparent;
   color: var(--text-primary);
+  padding: var(--space-xs) var(--space-sm);
 }
 
 .btn.text.danger {
@@ -985,18 +1420,20 @@ const getStockName = async (code) => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: var(--space-lg);
+  padding: var(--space-xl);
   color: var(--text-secondary);
+  background-color: var(--bg-secondary);
+  border-radius: var(--border-radius-lg);
 }
 
 .loading-spinner {
-  width: 24px;
-  height: 24px;
-  border: 3px solid rgba(24, 144, 255, 0.2);
+  width: 32px;
+  height: 32px;
+  border: 3px solid rgba(59, 130, 246, 0.1);
   border-radius: 50%;
   border-top-color: var(--primary-color);
   animation: spin 1s ease-in-out infinite;
-  margin-bottom: var(--space-sm);
+  margin-bottom: var(--space-md);
 }
 
 .loading-spinner.small {
@@ -1005,23 +1442,7 @@ const getStockName = async (code) => {
   margin-right: 6px;
 }
 
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-xl);
-  color: var(--text-secondary);
-  text-align: center;
-}
-
-.empty-icon {
-  font-size: 48px;
-  margin-bottom: var(--space-md);
-  opacity: 0.5;
-}
-
-.empty-detail {
+.empty-state, .empty-detail {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1029,18 +1450,41 @@ const getStockName = async (code) => {
   height: 100%;
   color: var(--text-secondary);
   text-align: center;
-  padding: var(--space-xl);
+  padding: var(--space-2xl);
+  background-color: var(--bg-secondary);
+  border-radius: var(--border-radius-lg);
+  animation: fadeInUp 0.5s ease-out;
+}
+
+.empty-icon {
+  font-size: 64px;
+  margin-bottom: var(--space-md);
+  opacity: 0.3;
+  color: var(--primary-light);
+  transition: var(--transition-base);
+}
+
+.empty-icon:hover {
+  opacity: 0.6;
+  transform: scale(1.1);
 }
 
 .empty-title {
   font-size: 18px;
+  font-weight: 600;
   margin-bottom: var(--space-sm);
   color: var(--text-primary);
 }
 
+.empty-description {
+  font-size: 14px;
+  margin-bottom: var(--space-lg);
+  max-width: 400px;
+}
+
 .error-message {
-  background-color: #fff2f0;
-  border: 1px solid #ffccc7;
+  background-color: rgba(239, 68, 68, 0.05);
+  border: 1px solid var(--danger-light);
   border-radius: var(--border-radius-md);
   padding: var(--space-md);
   margin-bottom: var(--space-lg);
@@ -1048,7 +1492,8 @@ const getStockName = async (code) => {
   align-items: center;
   gap: var(--space-md);
   color: var(--danger-color);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 1px 3px rgba(239, 68, 68, 0.1);
+  animation: slideInRight 0.3s ease-out;
 }
 
 .error-close {
@@ -1063,17 +1508,15 @@ const getStockName = async (code) => {
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: var(--transition-fast);
 }
 
-.tag {
-  display: inline-block;
-  padding: 2px 6px;
-  background-color: var(--bg-secondary);
-  border-radius: 4px;
-  font-size: 12px;
-  margin-right: 4px;
-  color: var(--text-secondary);
+.error-close:hover {
+  background-color: rgba(239, 68, 68, 0.1);
+  transform: rotate(90deg);
 }
+
+/* 移除重复的标签样式定义，保留之前更现代的实现 */
 
 @keyframes spin {
   to { transform: rotate(360deg); }
@@ -1082,6 +1525,35 @@ const getStockName = async (code) => {
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* 确保CSS变量定义完整 */
+:root {
+  --primary-light: rgba(59, 130, 246, 0.1);
+  --danger-light: rgba(239, 68, 68, 0.2);
+  --space-2xl: 2rem;
 }
 
 @media (max-width: 768px) {

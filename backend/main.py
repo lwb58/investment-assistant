@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Query, Depends  # 新增导入 Depends
+from fastapi import FastAPI, HTTPException, Query, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional, Tuple, FrozenSet
@@ -9,18 +9,18 @@ import requests
 from functools import wraps
 from datetime import datetime
 
-# ===================== 数据库依赖（SQLAlchemy 2.x 正确写法）=====================
-from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, select
+# 数据库依赖（SQLAlchemy 2.x）
+from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, select, or_
 from sqlalchemy.orm import sessionmaker, Session, declarative_base
 
-# ===================== 应用初始化 =====================
+# 应用初始化
 app = FastAPI(
     title="股票投资清单管理系统API",
-    description="真实数据+SQLite笔记存储（Python 3.9+ 兼容，无错）",
+    description="真实数据+SQLite笔记存储",
     version="2.0.2"
 )
 
-# CORS配置（支持前端跨域）
+# CORS配置
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://localhost:5173"],
@@ -29,12 +29,33 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ===================== 数据模型（Pydantic 2.x 语法）=====================
+# 数据模型（Pydantic 2.x）
 class StockBase(BaseModel):
     code: str
     name: str
     industry: Optional[str] = None
     holding: bool = False
+# 添加 MarketOverview 模型（关键修复）
+class MarketOverview(BaseModel):
+    date: str  # 日期时间（格式：YYYY-MM-DD HH:MM:SS）
+    shIndex: str  # 上证指数
+    shChange: float  # 上证涨跌额
+    shChangeRate: float  # 上证涨跌幅
+    szIndex: str  # 深证成指
+    szChange: float  # 深证涨跌额
+    szChangeRate: float  # 深证涨跌幅
+    cyIndex: str  # 创业板指
+    cyChange: float  # 创业板涨跌额
+    cyChangeRate: float  # 创业板涨跌幅
+    totalVolume: str  # 市场总成交量（亿手）
+    totalAmount: str  # 市场总成交额（亿元）
+    upStocks: int  # 上涨家数
+    downStocks: int  # 下跌家数
+    flatStocks: int  # 平盘家数
+    marketHotspots: List[dict]  # 市场热点行业（[{industry: str, changeRate: float}]）
+
+    class Config:
+        from_attributes = True  # 兼容 SQLAlchemy 模型（如果后续用到）
 
 class StockCreate(StockBase):
     pass
@@ -49,7 +70,7 @@ class Stock(StockBase):
     changeRate: float = 0.0
     
     class Config:
-        from_attributes = True  # Pydantic 2.x 替代 orm_mode
+        from_attributes = True
 
 class NoteBase(BaseModel):
     title: str
@@ -102,9 +123,9 @@ class FinancialData(BaseModel):
     netMargin: str
     debtRatio: str
 
-# ===================== 工具函数 =====================
+# 工具函数
 def cache_with_timeout(seconds: int = 300):
-    """带超时的缓存装饰器（默认5分钟，避免API限流）"""
+    """带超时的缓存装饰器（默认5分钟）"""
     def decorator(func):
         cache: dict[Tuple[Tuple, FrozenSet], Tuple[float, any]] = {}
         
@@ -123,10 +144,19 @@ def cache_with_timeout(seconds: int = 300):
     return decorator
 
 def fetch_url(url: str, timeout: int = 10, is_jsonp: bool = False) -> Optional[str]:
-    """通用HTTP请求函数（支持JSONP解析）"""
+    """通用HTTP请求函数（增强反爬，模拟真实浏览器）"""
     try:
-        response = requests.get(url, timeout=timeout, headers={"User-Agent": "Mozilla/5.0"})
-        response.raise_for_status()  # 抛出4xx/5xx错误
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36",
+            "Referer": "https://finance.sina.cn",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+            "Cache-Control": "no-cache",
+            "Pragma": "no-cache"
+        }
+        response = requests.get(url, timeout=timeout, headers=headers)
+        response.raise_for_status()
+        response.encoding = response.apparent_encoding  # 自动识别编码（解决中文乱码）
         data = response.text
         
         if is_jsonp:
@@ -135,7 +165,7 @@ def fetch_url(url: str, timeout: int = 10, is_jsonp: bool = False) -> Optional[s
             if start_idx != -1 and end_idx != 0:
                 data = data[start_idx:end_idx]
             else:
-                print(f"JSONP解析失败：{url}")
+                print(f"JSONP解析失败：{url} | 原始数据：{data[:100]}")
                 return None
         return data
     except requests.exceptions.RequestException as e:
@@ -151,12 +181,12 @@ def get_market_prefix(stock_code: str) -> str:
     else:
         raise HTTPException(status_code=400, detail="仅支持A股沪/深市场（6/0/3开头代码）")
 
-# ===================== SQLite数据库（SQLAlchemy 2.x 正确写法）=====================
+# SQLite数据库（SQLAlchemy 2.x）
 SQLALCHEMY_DATABASE_URL = "sqlite:///./stock_notes.db"
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL,
-    connect_args={"check_same_thread": False},  # SQLite必填
-    echo=False  # 关闭SQL执行日志
+    connect_args={"check_same_thread": False},
+    echo=False
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
@@ -177,17 +207,17 @@ class DBNote(Base):
 # 创建数据库表
 Base.metadata.create_all(bind=engine)
 
-# 数据库会话依赖（FastAPI 官方标准写法）
+# 数据库会话依赖
 def get_db() -> Session:
     db = SessionLocal()
     try:
-        yield db  # 生成器自动管理会话生命周期
+        yield db
     finally:
         db.close()
 
 # 初始化默认笔记
 def init_default_notes():
-    db = next(get_db())  # 这里用 next 没问题（非接口内依赖）
+    db = next(get_db())
     note_list = db.scalars(select(DBNote)).all()
     if len(note_list) == 0:
         default_notes = [
@@ -214,10 +244,9 @@ def init_default_notes():
         print("默认笔记初始化成功！")
     db.close()
 
-# 启动时执行初始化
 init_default_notes()
 
-# ===================== 用户股票清单 =====================
+# 用户股票清单（实际项目中应存储在数据库，这里为演示用）
 user_stocks = [
     {"code": "600519", "name": "贵州茅台", "industry": "白酒", "holding": True},
     {"code": "000858", "name": "五粮液", "industry": "白酒", "holding": False},
@@ -226,7 +255,7 @@ user_stocks = [
     {"code": "601318", "name": "中国平安", "industry": "金融", "holding": True}
 ]
 
-# ===================== 真实股票数据获取 =====================
+# 真实股票数据获取
 @cache_with_timeout(300)
 def fetch_stock_quote(stock_code: str) -> Optional[dict]:
     """获取实时行情（新浪财经API）"""
@@ -281,293 +310,404 @@ def fetch_top_shareholders(stock_code: str) -> List[dict]:
         return []
     try:
         shareholders = json.loads(data)
-        # 提取前十大股东数据（完善解析逻辑）
-        result = []
-        for item in shareholders.get("gdList", [])[:10]:  # 取前10条
-            result.append({
-                "name": item.get("gdmc", ""),  # 股东名称
-                "holdShares": item.get("cgsl", ""),  # 持股数量
-                "holdRatio": item.get("cgbl", "")  # 持股比例
-            })
-        return result
-    except Exception as e:
-        print(f"股东数据解析失败：{stock_code} | {str(e)}")
+        if "gdList" in shareholders:
+            return [
+                {
+                    "name": item.get("gdxm", ""),
+                    "holdings": item.get("cgsl", ""),
+                    "percentage": item.get("cgbl", "")
+                } 
+                for item in shareholders["gdList"]
+            ]
         return []
-
-# 补充市场概况接口（原缺失）
-@app.get("/api/market/overview")
-async def get_market_overview():
-    """获取市场概况数据"""
-    return {
-        "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "shIndex": "3225.08",
-        "shChange": 25.36,
-        "shChangeRate": 0.79,
-        "szIndex": "11065.88",
-        "szChange": 89.25,
-        "szChangeRate": 0.81,
-        "cyIndex": "2256.77",
-        "cyChange": 28.45,
-        "cyChangeRate": 1.28,
-        "totalVolume": "9682.45",
-        "totalAmount": "12345.67",
-        "upStocks": 2345,
-        "downStocks": 1678,
-        "flatStocks": 123,
-        "marketHotspots": [
-            {"industry": "半导体", "changeRate": 2.85},
-            {"industry": "新能源汽车", "changeRate": 1.98},
-            {"industry": "军工", "changeRate": 1.76}
-        ]
+    except Exception as e:
+        print(f"股东信息解析失败：{stock_code} | {str(e)}")
+        return []
+@cache_with_timeout(300)  # 缓存5分钟
+def fetch_market_overview_data() -> dict:
+    """抓取真实市场概况数据（所有数值保留两位小数）"""
+    market_data = {
+        "shIndex": "0.00", "shChange": 0.00, "shChangeRate": 0.00,
+        "szIndex": "0.00", "szChange": 0.00, "szChangeRate": 0.00,
+        "cyIndex": "0.00", "cyChange": 0.00, "cyChangeRate": 0.00,
+        "totalVolume": "0.00", "totalAmount": "0.00",
+        "upStocks": 0, "downStocks": 0, "flatStocks": 0,
+        "marketHotspots": []
     }
 
-@cache_with_timeout(3600)
-def fetch_financial_data(stock_code: str, year: str) -> Optional[dict]:
-    """获取年度财务数据（东方财富API）"""
-    market_prefix = get_market_prefix(stock_code)
-    url = f"http://emweb.securities.eastmoney.com/PC_HSF10/FinanceAnalysis/FinanceAnalysisAjax?type=web&code={market_prefix}{stock_code}&reportType=yearly"
-    data = fetch_url(url, is_jsonp=True)
-    if not data:
-        return None
     try:
-        financial = json.loads(data)
-        annual_data = next((item for item in financial.get("data", []) if item.get("reportDate", "")[:4] == year), None)
-        if not annual_data:
-            return None
-        return {
-            "revenue": str(round(float(annual_data.get("operatingIncome", 0)) / 10000, 2)),
-            "revenueGrowth": str(round(float(annual_data.get("operatingIncomeYoY", 0)), 2)),
-            "netProfit": str(round(float(annual_data.get("netProfit", 0)) / 10000, 2)),
-            "netProfitGrowth": str(round(float(annual_data.get("netProfitYoY", 0)), 2)),
-            "eps": str(round(float(annual_data.get("basicEPS", 0)), 2)),
-            "navps": str(round(float(annual_data.get("navps", 0)), 2)),
-            "roe": str(round(float(annual_data.get("roe", 0)), 2)),
-            "pe": str(round(float(annual_data.get("peTTM", 0)), 2)),
-            "pb": str(round(float(annual_data.get("pb", 0)), 2)),
-            "grossMargin": str(round(float(annual_data.get("grossProfitRate", 0)), 2)),
-            "netMargin": str(round(float(annual_data.get("netProfitRate", 0)), 2)),
-            "debtRatio": str(round(float(annual_data.get("assetLiabilityRatio", 0)), 2))
-        }
-    except Exception as e:
-        print(f"财务数据解析失败：{stock_code}({year}) | {str(e)}")
-        return None
+        # -------------------------- 1. 三大指数解析（强制保留两位小数）--------------------------
+        index_url = "http://hq.sinajs.cn/list=sh000001,sz399001,sz399006"
+        index_data = fetch_url(index_url)
+        if index_data:
+            index_list = [item for item in index_data.split(';') if item.strip()]
+            
+            # 上证指数
+            if len(index_list) >= 1:
+                try:
+                    sh_data = index_list[0].split('"')[1].split(',')
+                    if len(sh_data) >= 30:
+                        sh_prev_close = float(sh_data[2])
+                        sh_current = float(sh_data[3])
+                        # 强制保留两位小数
+                        sh_change = round(sh_current - sh_prev_close, 2)
+                        sh_change_rate = round((sh_current - sh_prev_close)/sh_prev_close*100, 2)
+                        
+                        market_data["shIndex"] = f"{sh_current:.2f}"  # 字符串类型，两位小数
+                        market_data["shChange"] = sh_change  # 浮点数，两位小数
+                        market_data["shChangeRate"] = sh_change_rate  # 浮点数，两位小数
+                except Exception as e:
+                    print(f"上证指数解析失败：{str(e)}")
 
-# ===================== API接口（修正依赖注入，无错）=====================
+            # 深证成指
+            if len(index_list) >= 2:
+                try:
+                    sz_data = index_list[1].split('"')[1].split(',')
+                    if len(sz_data) >= 30:
+                        sz_prev_close = float(sz_data[2])
+                        sz_current = float(sz_data[3])
+                        sz_change = round(sz_current - sz_prev_close, 2)
+                        sz_change_rate = round((sz_current - sz_prev_close)/sz_prev_close*100, 2)
+                        
+                        market_data["szIndex"] = f"{sz_current:.2f}"
+                        market_data["szChange"] = sz_change
+                        market_data["szChangeRate"] = sz_change_rate
+                except Exception as e:
+                    print(f"深证成指解析失败：{str(e)}")
+
+            # 创业板指
+            if len(index_list) >= 3:
+                try:
+                    cy_data = index_list[2].split('"')[1].split(',')
+                    if len(cy_data) >= 30:
+                        cy_prev_close = float(cy_data[2])
+                        cy_current = float(cy_data[3])
+                        cy_change = round(cy_current - cy_prev_close, 2)
+                        cy_change_rate = round((cy_current - cy_prev_close)/cy_prev_close*100, 2)
+                        
+                        market_data["cyIndex"] = f"{cy_current:.2f}"
+                        market_data["cyChange"] = cy_change
+                        market_data["cyChangeRate"] = cy_change_rate
+                except Exception as e:
+                    print(f"创业板指解析失败：{str(e)}")
+
+        # -------------------------- 2. 市场整体数据（成交量/成交额强制两位小数）--------------------------
+        market_summary_url = "http://vip.stock.finance.sina.cn/q/view/vRiseFall.php?page=1&num=1&t=0"
+        summary_data = fetch_url(market_summary_url)
+        if summary_data:
+            try:
+                summary_json = json.loads(summary_data)
+                if "data" in summary_json and len(summary_json["data"]) > 0:
+                    data = summary_json["data"][0]
+                    market_data["upStocks"] = int(data.get("up", 0))
+                    market_data["downStocks"] = int(data.get("down", 0))
+                    market_data["flatStocks"] = int(data.get("flat", 0))
+                    
+                    # 成交量：手 → 亿手，保留两位小数
+                    total_volume = round(float(data.get('volume', 0)) / 10000, 2)
+                    market_data["totalVolume"] = f"{total_volume:.2f}"
+                    
+                    # 成交额：元 → 亿元，保留两位小数
+                    total_amount = round(float(data.get('amount', 0)) / 100000000, 2)
+                    market_data["totalAmount"] = f"{total_amount:.2f}"
+            except Exception as e:
+                print(f"市场汇总数据解析失败：{str(e)}")
+
+        # -------------------------- 3. 行业涨跌幅（强制两位小数）--------------------------
+        def fetch_industry_ranking(is_up: bool = True) -> List[dict]:
+            sort_type = 1 if is_up else 2
+            industry_url = (
+                f"http://64.push2.eastmoney.com/api/qt/clist/get?"
+                f"pn=1&pz=5&po={sort_type}&np=1&"
+                f"ut=bd1d9ddb04089700cf9c27f6f7426281&"
+                f"fltt=2&invt=2&fid=f3&"
+                f"fs=m:90+t:2+f:!50&"
+                f"fields=f14,f3&"
+                f"_={int(time.time() * 1000)}"
+            )
+            industry_data = fetch_url(industry_url)
+            if not industry_data:
+                return []
+            
+            try:
+                industry_json = json.loads(industry_data)
+                if "data" in industry_json and "diff" in industry_json["data"]:
+                    return [
+                        {
+                            "industry": item.get("f14", "未知行业"),
+                            "changeRate": round(float(item.get("f3", 0.00)), 2),  # 强制两位小数
+                            "type": "up" if is_up else "down"
+                        }
+                        for item in industry_json["data"]["diff"]
+                    ]
+            except Exception as e:
+                print(f"{'涨幅' if is_up else '跌幅'}行业解析失败：{str(e)}")
+            return []
+
+        up_industries = fetch_industry_ranking(is_up=True)
+        down_industries = fetch_industry_ranking(is_up=False)
+        market_data["marketHotspots"] = up_industries + down_industries
+
+    except Exception as e:
+        print(f"市场概况数据抓取失败：{str(e)}")
+
+    return market_data
+
+@app.get("/api/market/overview", response_model=MarketOverview)
+async def get_market_overview():
+    """获取真实市场概况数据（含涨幅前5+跌幅前5行业）"""
+    real_data = fetch_market_overview_data()
+    return {
+        "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "shIndex": real_data["shIndex"],
+        "shChange": real_data["shChange"],
+        "shChangeRate": real_data["shChangeRate"],
+        "szIndex": real_data["szIndex"],
+        "szChange": real_data["szChange"],
+        "szChangeRate": real_data["szChangeRate"],
+        "cyIndex": real_data["cyIndex"],
+        "cyChange": real_data["cyChange"],
+        "cyChangeRate": real_data["cyChangeRate"],
+        "totalVolume": real_data["totalVolume"],
+        "totalAmount": real_data["totalAmount"],
+        "upStocks": real_data["upStocks"],
+        "downStocks": real_data["downStocks"],
+        "flatStocks": real_data["flatStocks"],
+        "marketHotspots": real_data["marketHotspots"]  # 含 type 字段
+    }
+# API路由 - 股票清单管理
 @app.get("/api/stocks", response_model=List[Stock])
-async def get_stocks(search: Optional[str] = Query(None, description="搜索关键词（代码/名称/行业）")):
-    """获取股票清单（含实时行情）"""
-    updated_stocks = []
+async def get_stocks(search: Optional[str] = Query(None, description="模糊搜索关键词（代码/名称/行业）")):
+    """获取股票列表（支持模糊搜索）"""
+    result = []
     for stock in user_stocks:
+        # 模糊搜索逻辑：如果提供了搜索词，检查是否匹配代码、名称或行业
+        if search:
+            search_lower = search.lower()
+            # 三个字段任一包含搜索词即匹配（不区分大小写）
+            if (search_lower not in stock["code"].lower() and 
+                search_lower not in stock["name"].lower() and 
+                (not stock["industry"] or search_lower not in stock["industry"].lower())):
+                continue  # 不匹配则跳过
+            
+        # 获取实时行情
         quote = fetch_stock_quote(stock["code"]) or {}
-        updated_stocks.append({
+        result.append({
             "code": stock["code"],
-            "name": quote.get("name", stock["name"]),
+            "name": stock["name"],
             "industry": stock["industry"],
             "holding": stock["holding"],
             "price": quote.get("price", "0.00"),
             "changeRate": quote.get("changeRate", 0.0)
         })
-    if search:
-        search_lower = search.lower()
-        updated_stocks = [
-            s for s in updated_stocks
-            if search_lower in s["code"].lower() or search_lower in s["name"].lower() or search_lower in (s["industry"] or "").lower()
-        ]
-    return updated_stocks
+    return result
 
 @app.post("/api/stocks", response_model=Stock)
-async def create_stock(stock: StockCreate):
-    """新增股票（自动获取真实行业和行情）"""
+async def add_stock(stock: StockCreate):
+    """添加新股票"""
+    # 检查股票是否已存在
     if any(s["code"] == stock.code for s in user_stocks):
-        raise HTTPException(status_code=400, detail="股票代码已存在")
+        raise HTTPException(status_code=400, detail=f"股票代码 {stock.code} 已存在")
+    
+    # 获取股票实时数据
     quote = fetch_stock_quote(stock.code) or {}
-    profile = fetch_company_profile(stock.code) or {}
+    
+    # 添加到股票列表
     new_stock = {
         "code": stock.code,
-        "name": stock.name or quote.get("name", stock.code),
-        "industry": stock.industry or profile.get("industry", "未知行业"),
-        "holding": stock.holding,
-        "price": quote.get("price", "0.00"),
-        "changeRate": quote.get("changeRate", 0.0)
+        "name": stock.name,
+        "industry": stock.industry,
+        "holding": stock.holding
     }
     user_stocks.append(new_stock)
-    return new_stock
+    
+    return {**new_stock,** quote}
 
 @app.put("/api/stocks/{stock_code}", response_model=Stock)
-async def update_stock(stock_code: str, stock_update: StockUpdate):
+async def update_stock(stock_code: str, update_data: StockUpdate):
     """更新股票信息"""
-    for i, stock in enumerate(user_stocks):
+    for stock in user_stocks:
         if stock["code"] == stock_code:
+            # 更新字段（只更新提供的字段）
+            if update_data.name is not None:
+                stock["name"] = update_data.name
+            if update_data.industry is not None:
+                stock["industry"] = update_data.industry
+            if update_data.holding is not None:
+                stock["holding"] = update_data.holding
+            
+            # 获取实时行情
             quote = fetch_stock_quote(stock_code) or {}
-            update_data = stock_update.model_dump(exclude_unset=True)
-            updated_stock = {**stock, **update_data, "price": quote.get("price", stock["price"]), "changeRate": quote.get("changeRate", stock["changeRate"])}
-            user_stocks[i] = updated_stock
-            return updated_stock
-    raise HTTPException(status_code=404, detail="股票不存在")
+            return {**stock,** quote}
+    
+    raise HTTPException(status_code=404, detail=f"股票代码 {stock_code} 不存在")
 
 @app.delete("/api/stocks/{stock_code}")
 async def delete_stock(stock_code: str):
     """删除股票"""
     global user_stocks
-    original_len = len(user_stocks)
+    initial_length = len(user_stocks)
     user_stocks = [s for s in user_stocks if s["code"] != stock_code]
-    if len(user_stocks) == original_len:
-        raise HTTPException(status_code=404, detail="股票不存在")
-    return {"message": "删除成功"}
+    
+    if len(user_stocks) == initial_length:
+        raise HTTPException(status_code=404, detail=f"股票代码 {stock_code} 不存在")
+    
+    return {"message": f"股票 {stock_code} 已成功删除"}
 
+# API路由 - 股票详情
 @app.get("/api/stocks/{stock_code}/detail", response_model=StockDetail)
 async def get_stock_detail(stock_code: str):
-    """获取股票详细信息（公司信息+股东+行情）"""
+    """获取股票详细信息"""
+    # 获取基本信息
     stock = next((s for s in user_stocks if s["code"] == stock_code), None)
     if not stock:
-        raise HTTPException(status_code=404, detail="股票不存在")
+        raise HTTPException(status_code=404, detail=f"股票代码 {stock_code} 不存在")
+    
+    # 获取实时行情
     quote = fetch_stock_quote(stock_code) or {}
+    
+    # 获取公司信息
     profile = fetch_company_profile(stock_code) or {}
-    top_shareholders = fetch_top_shareholders(stock_code)
+    
+    # 获取股东信息
+    shareholders = fetch_top_shareholders(stock_code)
+    
     return {
         "code": stock_code,
-        "name": quote.get("name", stock["name"]),
-        "price": quote.get("price", stock["price"]),
-        "changeRate": quote.get("changeRate", stock["changeRate"]),
-        "industry": stock["industry"],
-        "companyName": profile.get("companyName", f"{stock['name']}股份有限公司"),
-        "listDate": profile.get("listDate", "2020-01-01"),
-        "totalShares": profile.get("totalShares", "0.00"),
-        "floatShares": profile.get("floatShares", "0.00"),
-        "marketCap": profile.get("marketCap", "0.00"),
-        "topShareholders": top_shareholders
+        "name": stock["name"],
+        "price": quote.get("price", "0.00"),
+        "changeRate": quote.get("changeRate", 0.0),
+        "industry": profile.get("industry", stock["industry"] or ""),
+        "companyName": profile.get("companyName", ""),
+        "listDate": profile.get("listDate", ""),
+        "totalShares": profile.get("totalShares", ""),
+        "floatShares": profile.get("floatShares", ""),
+        "marketCap": profile.get("marketCap", ""),
+        "topShareholders": shareholders
     }
 
-@app.get("/api/stocks/{stock_code}/financial/{year}", response_model=FinancialData)
-async def get_stock_financial(stock_code: str, year: str):
-    """获取指定年份财务数据"""
-    if not any(s["code"] == stock_code for s in user_stocks):
-        raise HTTPException(status_code=404, detail="股票不存在")
-    financial_data = fetch_financial_data(stock_code, year)
-    return financial_data or {
-        k: "0.00" if k not in ["revenueGrowth", "netProfitGrowth", "roe", "grossMargin", "netMargin", "debtRatio"] else "0.0"
-        for k in FinancialData.model_fields.keys()
-    }
-
-# -------------------- 笔记相关接口（核心修正：Depends(get_db)）--------------------
+# API路由 - 笔记管理
 @app.get("/api/notes", response_model=List[Note])
-async def get_notes(
-    search: Optional[str] = Query(None, description="搜索关键词（标题/内容/股票代码）"),
-    db: Session = Depends(get_db)  # 修正：用 Depends 声明依赖
-):
-    """获取笔记列表（支持模糊搜索）"""
-    stmt = select(DBNote)
+async def get_notes(search: Optional[str] = Query(None), db: Session = Depends(get_db)):
+    """获取笔记列表（支持搜索）"""
+    query = select(DBNote)
+    
+    # 笔记搜索逻辑（模糊匹配标题、内容、股票代码）
     if search:
         search_lower = f"%{search.lower()}%"
-        stmt = stmt.filter(
-            DBNote.title.ilike(search_lower) |
-            DBNote.content.ilike(search_lower) |
-            DBNote.stockCode.ilike(search_lower)
+        query = query.filter(
+            or_(
+                DBNote.title.ilike(search_lower),
+                DBNote.content.ilike(search_lower),
+                DBNote.stockCode.ilike(search_lower)
+            )
         )
-    notes = db.scalars(stmt).all()
-    return notes
+    
+    # 按创建时间倒序
+    query = query.order_by(DBNote.createTime.desc())
+    notes = db.scalars(query).all()
+    
+    return [
+        {
+            "id": note.id,
+            "title": note.title,
+            "content": note.content,
+            "stockCode": note.stockCode,
+            "stockName": note.stockName,
+            "tags": note.tags,
+            "createTime": note.createTime.isoformat(),
+            "updateTime": note.updateTime.isoformat() if note.updateTime else None
+        }
+        for note in notes
+    ]
+
+@app.get("/api/notes/{note_id}", response_model=Note)
+async def get_note(note_id: int, db: Session = Depends(get_db)):
+    """获取单条笔记"""
+    note = db.scalar(select(DBNote).where(DBNote.id == note_id))
+    if not note:
+        raise HTTPException(status_code=404, detail=f"笔记ID {note_id} 不存在")
+    
+    return {
+        "id": note.id,
+        "title": note.title,
+        "content": note.content,
+        "stockCode": note.stockCode,
+        "stockName": note.stockName,
+        "tags": note.tags,
+        "createTime": note.createTime.isoformat(),
+        "updateTime": note.updateTime.isoformat() if note.updateTime else None
+    }
 
 @app.post("/api/notes", response_model=Note)
-async def create_note(
-    note: NoteCreate,
-    db: Session = Depends(get_db)  # 修正：用 Depends 声明依赖
-):
-    """创建笔记（自动补全股票名称）"""
-    stock_name = note.stockName
-    if note.stockCode and not stock_name:
-        stock = next((s for s in user_stocks if s["code"] == note.stockCode), None)
-        stock_name = stock["name"] if stock else ""
-    
+async def create_note(note: NoteCreate, db: Session = Depends(get_db)):
+    """创建新笔记"""
     db_note = DBNote(
         title=note.title,
         content=note.content,
-        stockCode=note.stockCode or "",
-        stockName=stock_name or "",
-        tags=note.tags or "",
+        stockCode=note.stockCode,
+        stockName=note.stockName,
+        tags=note.tags,
         createTime=datetime.now()
     )
     db.add(db_note)
     db.commit()
     db.refresh(db_note)
-    return db_note
-
-@app.get("/api/notes/{note_id}", response_model=Note)
-async def get_note(
-    note_id: int,
-    db: Session = Depends(get_db)  # 修正：用 Depends 声明依赖
-):
-    """获取笔记详情"""
-    note = db.scalars(select(DBNote).where(DBNote.id == note_id)).first()
-    if not note:
-        raise HTTPException(status_code=404, detail="笔记不存在")
-    return note
+    
+    return {
+        "id": db_note.id,
+        "title": db_note.title,
+        "content": db_note.content,
+        "stockCode": db_note.stockCode,
+        "stockName": db_note.stockName,
+        "tags": db_note.tags,
+        "createTime": db_note.createTime.isoformat(),
+        "updateTime": db_note.updateTime.isoformat() if db_note.updateTime else None
+    }
 
 @app.put("/api/notes/{note_id}", response_model=Note)
-async def update_note(
-    note_id: int,
-    note_update: NoteUpdate,
-    db: Session = Depends(get_db)  # 修正：用 Depends 声明依赖
-):
+async def update_note(note_id: int, update_data: NoteUpdate, db: Session = Depends(get_db)):
     """更新笔记"""
-    note = db.scalars(select(DBNote).where(DBNote.id == note_id)).first()
+    note = db.scalar(select(DBNote).where(DBNote.id == note_id))
     if not note:
-        raise HTTPException(status_code=404, detail="笔记不存在")
+        raise HTTPException(status_code=404, detail=f"笔记ID {note_id} 不存在")
     
-    update_data = note_update.model_dump(exclude_unset=True)
-    if "stockCode" in update_data and not update_data.get("stockName"):
-        stock = next((s for s in user_stocks if s["code"] == update_data["stockCode"]), None)
-        update_data["stockName"] = stock["name"] if stock else ""
-    update_data["updateTime"] = datetime.now()
+    # 更新字段
+    if update_data.title is not None:
+        note.title = update_data.title
+    if update_data.content is not None:
+        note.content = update_data.content
+    if update_data.stockCode is not None:
+        note.stockCode = update_data.stockCode
+    if update_data.tags is not None:
+        note.tags = update_data.tags
     
-    for k, v in update_data.items():
-        setattr(note, k, v)
-    
+    note.updateTime = datetime.now()
     db.commit()
     db.refresh(note)
-    return note
+    
+    return {
+        "id": note.id,
+        "title": note.title,
+        "content": note.content,
+        "stockCode": note.stockCode,
+        "stockName": note.stockName,
+        "tags": note.tags,
+        "createTime": note.createTime.isoformat(),
+        "updateTime": note.updateTime.isoformat() if note.updateTime else None
+    }
 
 @app.delete("/api/notes/{note_id}")
-async def delete_note(
-    note_id: int,
-    db: Session = Depends(get_db)  # 修正：用 Depends 声明依赖
-):
+async def delete_note(note_id: int, db: Session = Depends(get_db)):
     """删除笔记"""
-    note = db.scalars(select(DBNote).where(DBNote.id == note_id)).first()
+    note = db.scalar(select(DBNote).where(DBNote.id == note_id))
     if not note:
-        raise HTTPException(status_code=404, detail="笔记不存在")
+        raise HTTPException(status_code=404, detail=f"笔记ID {note_id} 不存在")
+    
     db.delete(note)
     db.commit()
-    return {"message": "删除成功"}
+    return {"message": f"笔记 {note_id} 已成功删除"}
 
-@app.get("/")
-async def root():
-    return {
-        "message": "股票投资清单API（最终无错版本）",
-        "version": "2.0.2",
-        "docs": "/docs",
-        "python_required": "3.9+"
-    }
-
-@app.get("/health")
-async def health_check():
-    return {
-        "status": "healthy",
-        "database": "SQLite connected",
-        "timestamp": datetime.now().isoformat(),
-        "dependencies": {
-            "fastapi": "0.111.0",
-            "sqlalchemy": "2.0.30",
-            "pydantic": "2.8.2"
-        }
-    }
-
-# ===================== 启动服务 =====================
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True,
-        workers=1
-    )
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
