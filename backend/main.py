@@ -35,27 +35,27 @@ class StockBase(BaseModel):
     name: str
     industry: Optional[str] = None
     holding: bool = False
-# 添加 MarketOverview 模型（关键修复）
 class MarketOverview(BaseModel):
-    date: str  # 日期时间（格式：YYYY-MM-DD HH:MM:SS）
-    shIndex: str  # 上证指数
-    shChange: float  # 上证涨跌额
-    shChangeRate: float  # 上证涨跌幅
-    szIndex: str  # 深证成指
-    szChange: float  # 深证涨跌额
-    szChangeRate: float  # 深证涨跌幅
-    cyIndex: str  # 创业板指
-    cyChange: float  # 创业板涨跌额
-    cyChangeRate: float  # 创业板涨跌幅
-    totalVolume: str  # 市场总成交量（亿手）
-    totalAmount: str  # 市场总成交额（亿元）
+    date: str
+    shIndex: str
+    shChange: float
+    shChangeRate: float
+    szIndex: str
+    szChange: float
+    szChangeRate: float
+    cyIndex: str
+    cyChange: float
+    cyChangeRate: float
+    totalVolume: str  # 成交量（亿手）
+    totalAmount: str  # 成交额（亿元）
+    medianChangeRate: float  # 新增：市场涨幅中位数（%）
     upStocks: int  # 上涨家数
     downStocks: int  # 下跌家数
     flatStocks: int  # 平盘家数
-    marketHotspots: List[dict]  # 市场热点行业（[{industry: str, changeRate: float}]）
+    marketHotspots: List[dict]  # type: up/down
 
     class Config:
-        from_attributes = True  # 兼容 SQLAlchemy 模型（如果后续用到）
+        from_attributes = True
 
 class StockCreate(StockBase):
     pass
@@ -323,133 +323,109 @@ def fetch_top_shareholders(stock_code: str) -> List[dict]:
     except Exception as e:
         print(f"股东信息解析失败：{stock_code} | {str(e)}")
         return []
-@cache_with_timeout(300)  # 缓存5分钟
+@cache_with_timeout(300)
 def fetch_market_overview_data() -> dict:
-    """抓取真实市场概况数据（所有数值保留两位小数）"""
+    """修复涨跌平数据+新增涨幅中位数+优化行业排行"""
     market_data = {
         "shIndex": "0.00", "shChange": 0.00, "shChangeRate": 0.00,
         "szIndex": "0.00", "szChange": 0.00, "szChangeRate": 0.00,
         "cyIndex": "0.00", "cyChange": 0.00, "cyChangeRate": 0.00,
         "totalVolume": "0.00", "totalAmount": "0.00",
+        "medianChangeRate": 0.00,  # 新增中位数
         "upStocks": 0, "downStocks": 0, "flatStocks": 0,
         "marketHotspots": []
     }
 
     try:
-        # -------------------------- 1. 三大指数解析（强制保留两位小数）--------------------------
+        # -------------------------- 1. 三大指数（新浪财经，稳定）--------------------------
         index_url = "http://hq.sinajs.cn/list=sh000001,sz399001,sz399006"
         index_data = fetch_url(index_url)
         if index_data:
             index_list = [item for item in index_data.split(';') if item.strip()]
-            
             # 上证指数
             if len(index_list) >= 1:
                 try:
                     sh_data = index_list[0].split('"')[1].split(',')
                     if len(sh_data) >= 30:
-                        sh_prev_close = float(sh_data[2])
-                        sh_current = float(sh_data[3])
-                        # 强制保留两位小数
-                        sh_change = round(sh_current - sh_prev_close, 2)
-                        sh_change_rate = round((sh_current - sh_prev_close)/sh_prev_close*100, 2)
-                        
-                        market_data["shIndex"] = f"{sh_current:.2f}"  # 字符串类型，两位小数
-                        market_data["shChange"] = sh_change  # 浮点数，两位小数
-                        market_data["shChangeRate"] = sh_change_rate  # 浮点数，两位小数
+                        sh_prev = float(sh_data[2])
+                        sh_curr = float(sh_data[3])
+                        market_data["shIndex"] = f"{sh_curr:.2f}"
+                        market_data["shChange"] = round(sh_curr - sh_prev, 2)
+                        market_data["shChangeRate"] = round((sh_curr - sh_prev)/sh_prev*100, 2)
                 except Exception as e:
-                    print(f"上证指数解析失败：{str(e)}")
-
+                    print(f"上证解析失败：{e}")
             # 深证成指
             if len(index_list) >= 2:
                 try:
                     sz_data = index_list[1].split('"')[1].split(',')
                     if len(sz_data) >= 30:
-                        sz_prev_close = float(sz_data[2])
-                        sz_current = float(sz_data[3])
-                        sz_change = round(sz_current - sz_prev_close, 2)
-                        sz_change_rate = round((sz_current - sz_prev_close)/sz_prev_close*100, 2)
-                        
-                        market_data["szIndex"] = f"{sz_current:.2f}"
-                        market_data["szChange"] = sz_change
-                        market_data["szChangeRate"] = sz_change_rate
+                        sz_prev = float(sz_data[2])
+                        sz_curr = float(sz_data[3])
+                        market_data["szIndex"] = f"{sz_curr:.2f}"
+                        market_data["szChange"] = round(sz_curr - sz_prev, 2)
+                        market_data["szChangeRate"] = round((sz_curr - sz_prev)/sz_prev*100, 2)
                 except Exception as e:
-                    print(f"深证成指解析失败：{str(e)}")
-
+                    print(f"深证解析失败：{e}")
             # 创业板指
             if len(index_list) >= 3:
                 try:
                     cy_data = index_list[2].split('"')[1].split(',')
                     if len(cy_data) >= 30:
-                        cy_prev_close = float(cy_data[2])
-                        cy_current = float(cy_data[3])
-                        cy_change = round(cy_current - cy_prev_close, 2)
-                        cy_change_rate = round((cy_current - cy_prev_close)/cy_prev_close*100, 2)
-                        
-                        market_data["cyIndex"] = f"{cy_current:.2f}"
-                        market_data["cyChange"] = cy_change
-                        market_data["cyChangeRate"] = cy_change_rate
+                        cy_prev = float(cy_data[2])
+                        cy_curr = float(cy_data[3])
+                        market_data["cyIndex"] = f"{cy_curr:.2f}"
+                        market_data["cyChange"] = round(cy_curr - cy_prev, 2)
+                        market_data["cyChangeRate"] = round((cy_curr - cy_prev)/cy_prev*100, 2)
                 except Exception as e:
-                    print(f"创业板指解析失败：{str(e)}")
+                    print(f"创业板解析失败：{e}")
 
-        # -------------------------- 2. 市场整体数据（成交量/成交额强制两位小数）--------------------------
-        market_summary_url = "http://vip.stock.finance.sina.cn/q/view/vRiseFall.php?page=1&num=1&t=0"
-        summary_data = fetch_url(market_summary_url)
+        # -------------------------- 2. 涨跌平+成交量+中位数（东方财富，稳定）--------------------------
+        # 东方财富市场汇总API（包含涨跌家数、中位数）
+        summary_url = "http://push2.eastmoney.com/api/qt/stock/marketOverview/get?secid=0.000001&fields=f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13,f14,f15,f16,f17,f18,f20,f21,f22,f23,f24,f25,f26,f27,f28,f29,f30,f31,f32,f33,f34,f35,f36,f37,f38,f39,f40,f41,f42,f43,f44,f45,f46,f47,f48,f49,f50,f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63,f64,f65&_=1730000000000"
+        summary_data = fetch_url(summary_url)
         if summary_data:
             try:
-                summary_json = json.loads(summary_data)
-                if "data" in summary_json and len(summary_json["data"]) > 0:
-                    data = summary_json["data"][0]
-                    market_data["upStocks"] = int(data.get("up", 0))
-                    market_data["downStocks"] = int(data.get("down", 0))
-                    market_data["flatStocks"] = int(data.get("flat", 0))
-                    
-                    # 成交量：手 → 亿手，保留两位小数
-                    total_volume = round(float(data.get('volume', 0)) / 10000, 2)
-                    market_data["totalVolume"] = f"{total_volume:.2f}"
-                    
-                    # 成交额：元 → 亿元，保留两位小数
-                    total_amount = round(float(data.get('amount', 0)) / 100000000, 2)
-                    market_data["totalAmount"] = f"{total_amount:.2f}"
+                summary_json = json.loads(summary_data)["data"]
+                # 涨跌平家数
+                market_data["upStocks"] = int(summary_json.get("f13", 0))  # 上涨家数
+                market_data["downStocks"] = int(summary_json.get("f14", 0))  # 下跌家数
+                market_data["flatStocks"] = int(summary_json.get("f15", 0))  # 平盘家数
+                # 成交量（亿手）= 总成交量（手）/10000
+                total_volume = round(float(summary_json.get("f57", 0)) / 10000, 2)
+                market_data["totalVolume"] = f"{total_volume:.2f}"
+                # 成交额（亿元）= 总成交额（元）/100000000
+                total_amount = round(float(summary_json.get("f58", 0)) / 100000000, 2)
+                market_data["totalAmount"] = f"{total_amount:.2f}"
+                # 涨幅中位数（%）
+                market_data["medianChangeRate"] = round(float(summary_json.get("f28", 0)), 2)
             except Exception as e:
-                print(f"市场汇总数据解析失败：{str(e)}")
+                print(f"市场汇总解析失败：{e}")
 
-        # -------------------------- 3. 行业涨跌幅（强制两位小数）--------------------------
-        def fetch_industry_ranking(is_up: bool = True) -> List[dict]:
-            sort_type = 1 if is_up else 2
-            industry_url = (
+        # -------------------------- 3. 行业排行（涨幅前5+跌幅前5）--------------------------
+        def fetch_industry(is_up: bool):
+            sort = 1 if is_up else 2  # 1=涨幅降序，2=跌幅降序
+            url = (
                 f"http://64.push2.eastmoney.com/api/qt/clist/get?"
-                f"pn=1&pz=5&po={sort_type}&np=1&"
-                f"ut=bd1d9ddb04089700cf9c27f6f7426281&"
-                f"fltt=2&invt=2&fid=f3&"
-                f"fs=m:90+t:2+f:!50&"
-                f"fields=f14,f3&"
-                f"_={int(time.time() * 1000)}"
+                f"pn=1&pz=5&po={sort}&np=1&ut=bd1d9ddb04089700cf9c27f6f7426281&"
+                f"fltt=2&invt=2&fid=f3&fs=m:90+t:2+f:!50&fields=f14,f3&_={int(time.time()*1000)}"
             )
-            industry_data = fetch_url(industry_url)
-            if not industry_data:
+            data = fetch_url(url)
+            if not data:
                 return []
-            
             try:
-                industry_json = json.loads(industry_data)
-                if "data" in industry_json and "diff" in industry_json["data"]:
-                    return [
-                        {
-                            "industry": item.get("f14", "未知行业"),
-                            "changeRate": round(float(item.get("f3", 0.00)), 2),  # 强制两位小数
-                            "type": "up" if is_up else "down"
-                        }
-                        for item in industry_json["data"]["diff"]
-                    ]
+                diff = json.loads(data)["data"]["diff"]
+                return [
+                    {"industry": item.get("f14", "未知行业"), "changeRate": round(float(item.get("f3", 0)), 2), "type": "up" if is_up else "down"}
+                    for item in diff
+                ]
             except Exception as e:
-                print(f"{'涨幅' if is_up else '跌幅'}行业解析失败：{str(e)}")
-            return []
+                print(f"{'涨幅' if is_up else '跌幅'}行业解析失败：{e}")
+                return []
 
-        up_industries = fetch_industry_ranking(is_up=True)
-        down_industries = fetch_industry_ranking(is_up=False)
-        market_data["marketHotspots"] = up_industries + down_industries
+        market_data["marketHotspots"] = fetch_industry(True) + fetch_industry(False)
 
     except Exception as e:
-        print(f"市场概况数据抓取失败：{str(e)}")
+        print(f"市场数据抓取失败：{e}")
 
     return market_data
 
