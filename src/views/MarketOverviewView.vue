@@ -67,7 +67,8 @@
               <div class="rank industry-rank">{{ index + 1 }}</div>
               <div class="info">
                 <div class="name">{{ item.name }}</div>
-                <div class="leader-stock">领涨股：{{ item.leaderStock }}({{ item.leaderStockCode }})</div>
+                <!-- 修复：添加空值判断，无数据时显示0.00% -->
+<div class="leader-stock">领涨股：{{ item.leaderStock }}({{ item.leaderStockCode }})<span class="rise"> {{ (Number(item.leaderStockChange) ?? 0) >= 0 ? '+' : '' }}{{ (Number(item.leaderStockChange) ?? 0).toFixed(2) }}%</span></div>
               </div>
               <div class="change-rate rise">{{ item.changeRate >= 0 ? '+' : '' }}{{ item.changeRate }}%</div>
             </div>
@@ -84,7 +85,8 @@
               <div class="rank industry-rank">{{ index + 1 }}</div>
               <div class="info">
                 <div class="name">{{ item.name }}</div>
-                <div class="leader-stock">领跌股：{{ item.leaderStock }}({{ item.leaderStockCode }})</div>
+                <!-- 修复：添加空值判断 -->
+<div class="leader-stock">领跌股：{{ item.leaderStock }}({{ item.leaderStockCode }})<span class="fall"> {{ (Number(item.leaderStockChange) ?? 0) >= 0 ? '+' : '' }}{{ (Number(item.leaderStockChange) ?? 0).toFixed(2) }}%</span></div>
               </div>
               <div class="change-rate fall">{{ item.changeRate >= 0 ? '+' : '' }}{{ item.changeRate }}%</div>
             </div>
@@ -93,7 +95,7 @@
       </div>
     </div>
 
-    <!-- 概念涨跌幅TOP5（新增，样式参考行业模块但有区分度） -->
+    <!-- 概念涨跌幅TOP5 -->
     <div class="industry-concept-card concept-card">
       <h2 class="card-title">
         <i class="el-icon-lightbulb"></i> 概念涨跌幅TOP5
@@ -110,7 +112,8 @@
               <div class="rank concept-rank">{{ index + 1 }}</div>
               <div class="info">
                 <div class="name">{{ item.name }}</div>
-                <div class="leader-stock">领涨股：{{ item.leaderStock }}({{ item.leaderStockCode }})</div>
+                <!-- 修复：添加空值判断 -->
+<div class="leader-stock">领涨股：{{ item.leaderStock }}({{ item.leaderStockCode }})<span class="rise"> {{ (Number(item.leaderStockChange) ?? 0) >= 0 ? '+' : '' }}{{ (Number(item.leaderStockChange) ?? 0).toFixed(2) }}%</span></div>
               </div>
               <div class="change-rate rise">{{ item.changeRate >= 0 ? '+' : '' }}{{ item.changeRate }}%</div>
             </div>
@@ -127,7 +130,8 @@
               <div class="rank concept-rank">{{ index + 1 }}</div>
               <div class="info">
                 <div class="name">{{ item.name }}</div>
-                <div class="leader-stock">领跌股：{{ item.leaderStock }}({{ item.leaderStockCode }})</div>
+                <!-- 修复：添加空值判断 -->
+<div class="leader-stock">领跌股：{{ item.leaderStock }}({{ item.leaderStockCode }})<span class="fall"> {{ (Number(item.leaderStockChange) ?? 0) >= 0 ? '+' : '' }}{{ (Number(item.leaderStockChange) ?? 0).toFixed(2) }}%</span></div>
               </div>
               <div class="change-rate fall">{{ item.changeRate >= 0 ? '+' : '' }}{{ item.changeRate }}%</div>
             </div>
@@ -137,6 +141,7 @@
     </div>
   </div>
 </template>
+
 
 <script>
 import { ref, onMounted } from 'vue';
