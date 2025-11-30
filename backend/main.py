@@ -1,3 +1,5 @@
+from urllib.parse import urlencode  # 新增导入，无需额外安装
+from urllib.parse import quote
 from bs4 import BeautifulSoup  # 新增导入（需放在文件顶部）
 import re
 import random
@@ -552,9 +554,15 @@ class DataSource:
         return index_data
 @cache_with_timeout(300)  # 300秒缓存，与市场概览缓存逻辑一致
 def _get_cached_stock_quotes(stock_code: str) -> Dict[str, Any]:
-    """带缓存的行情获取（复用装饰器，内部调用原路由逻辑）"""
-    # 直接调用之前抽离的核心行情逻辑（无HTTP上下文依赖）
-    return get_stock_quotes(stock_code)
+    data = get_stock_quotes(stock_code)
+    # 新增：检查行情数据是否有效
+    if data and "coreQuotes" in data:
+        current_price = data["coreQuotes"].get("currentPrice", 0)
+        prev_close = data["coreQuotes"].get("prevClosePrice", 0)
+        if current_price <= 0 or prev_close <= 0:
+            logger.warning(f"股票{stock_code}行情数据无效（current_price={current_price}, prev_close={prev_close}），不缓存")
+            return None  # 无效数据不缓存，下次重新获取
+    return data
 
 # -------------- 核心数据整合（市场概览）--------------
 @cache_with_timeout(300)
@@ -764,7 +772,7 @@ async def add_stock(stock: StockCreate):
         logger.error(f"添加股票时发生未预期错误: {str(e)}")
         raise HTTPException(status_code=500, detail=f"添加股票时发生错误: {str(e)}")
 @app.get("/api/stocks/{stock_code}/quotes", response_model=StockQuoteResponse, summary="获取股票实时行情")
-async def get_stock_quotes(stock_code: str):
+def get_stock_quotes(stock_code: str):
     """
     获取指定股票的实时行情数据（复用用新浪财经接口）
     - stock_code: 6位股票代码（如600036）
@@ -861,7 +869,7 @@ async def get_all_stocks(search: Optional[str] = None):
         try:
             # 关键优化：直接调用带缓存的函数，装饰器自动处理缓存逻辑
             logger.info(f"获取股票{stock_code}行情数据")
-            quote_data = await _get_cached_stock_quotes(stock_code)  # 无需手动判断缓存
+            quote_data = _get_cached_stock_quotes(stock_code)  # 无需手动判断缓存
             
             # 提取价格和涨跌幅信息（原逻辑不变）
             if quote_data and "coreQuotes" in quote_data:
@@ -964,15 +972,15 @@ async def get_stock_base_info(stockCode: str):
 
 @app.get("/api/stocks/search/{keyword}")
 async def search_stocks(keyword: str):
-    """搜索股票（精准适配页面：解析默认+隐藏容器，提取全部50条个股数据）"""
+    """搜索股票（正则兜底+调试日志，确保匹配成功）"""
     if not keyword.strip():
         raise HTTPException(status_code=400, detail="搜索关键词不能为空")
     
     try:
-        search_url = f"https://biz.finance.sina.com.cn/suggest/lookup_n.php?country=stock&q={keyword.strip()}"
+        encoded_keyword = quote(keyword.strip(), encoding='utf-8')
+        search_url = f"https://biz.finance.sina.com.cn/suggest/lookup_n.php?country=stock&q={encoded_keyword}"
         logger.info(f"请求搜索接口：{search_url}")
         
-        # 保持稳定的请求逻辑
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36",
             "Referer": "https://finance.sina.com.cn/",
@@ -980,7 +988,7 @@ async def search_stocks(keyword: str):
         }
         response = requests.get(search_url, headers=headers, timeout=15)
         response.raise_for_status()
-        response.encoding = response.apparent_encoding or "gb2312"
+        response.encoding = "gb2312"  # 匹配你的HTML编码
         response_text = response.text
         logger.info(f"接口返回HTML长度：{len(response_text)} 字符")
         
@@ -988,79 +996,85 @@ async def search_stocks(keyword: str):
         stock_list = []
         seen_codes = set()
         
-        # 关键修改1：精准定位个股板块（沪深股市-个股）
+        # 精准定位容器（不变）
         stock_market_div = soup.find("div", id="stock_stock")
         if not stock_market_div:
             logger.warning("未找到沪深个股板块，返回空结果")
             return {"stocks": []}
         
-        # 关键修改2：获取所有个股容器（2个来源）
-        stock_containers = []
-        # 来源1：默认显示的股票容器（class="list"）
-        default_list = stock_market_div.find_next_sibling("div", class_="list")
-        if default_list:
-            stock_containers.append(default_list)
-            logger.info("找到默认显示的股票容器")
-        # 来源2：隐藏的更多股票容器（id="sotck_stock_more"，注意页面拼写是sotck不是stock）
-        hidden_list = soup.find("div", id="sotck_stock_more")
-        if hidden_list:
-            stock_containers.append(hidden_list)
-            logger.info("找到隐藏的更多股票容器")
-        
-        if not stock_containers:
-            logger.warning("未找到任何股票数据容器，返回空结果")
+        stock_list_div = stock_market_div.find_next_sibling("div", class_="list")
+        if not stock_list_div:
+            logger.warning("未找到股票列表容器，返回空结果")
             return {"stocks": []}
+        logger.info("找到股票列表容器，开始解析")
         
-        # 关键修改3：解析所有容器中的股票数据
-        all_stock_links = []
-        for container in stock_containers:
-            # 提取容器中所有股票链接（a标签href含"realstock/company/"）
-            links = container.find_all("a", href=re.compile(r"realstock/company/"))
-            all_stock_links.extend(links)
-            logger.info(f"从容器中提取到 {len(links)} 个股票链接")
+        # 提取a标签（不变）
+        stock_links = stock_list_div.find_all("a")
+        logger.info(f"从容器中提取到 {len(stock_links)} 个股票链接")
         
-        logger.info(f"共提取到 {len(all_stock_links)} 个股票链接（含默认+隐藏）")
+        # 核心改动1：超级宽松正则（兼容全角空格、半角空格、多空格，不区分大小写）
+        # 匹配规则：任意位置的 sz/sh + 6位数字 + 任意字符（名称）
+        stock_pattern = re.compile(
+            r"(sz|sh)(\d{6})[\s\u3000]+(.+)",  # [\s\u3000]兼容半角/全角空格
+            re.IGNORECASE  # 忽略大小写（SZ/SH/sz/sh都能匹配）
+        )
         
-        # 关键修改4：精准解析股票信息（适配页面文本格式：sz300308 中际旭创）
-        for link in all_stock_links:
-            link_text = link.get_text(strip=True).replace("\n", "").replace("\t", "")
+        # 核心改动2：添加详细调试日志，看清每一步
+        for idx, link in enumerate(stock_links):
+            link_text = link.get_text(strip=True)
+            logger.debug(f"第{idx+1}个链接文本：{repr(link_text)}")  # repr()显示隐藏字符（如全角空格）
+            
             if not link_text:
+                logger.debug("跳过空文本链接")
                 continue
             
-            # 正则优化：精准匹配「sz/sh + 6位数字 + 股票名称」格式
-            # 匹配示例：sz300308 中际旭创、sh600036 招商银行
-            match = re.match(r"^(sz|sh)(\d{6})\s+(.+)$", link_text.lower())
+            # 尝试匹配正则
+            match = stock_pattern.search(link_text)  # 用search代替match，允许文本前后有多余字符
             if not match:
-                logger.debug(f"跳过非标准格式：{link_text}")
-                continue
+                logger.debug(f"正则未匹配到：{repr(link_text)}，尝试手动分割")
+                # 兜底方案：手动分割（如果正则还是失败，强制按“6位数字”分割）
+                import re as re_split
+                code_match = re_split.search(r"\d{6}", link_text)
+                if code_match:
+                    stock_code = code_match.group()
+                    # 提取前缀（sz/sh）
+                    if "sz" in link_text.lower():
+                        market_prefix = "sz"
+                    elif "sh" in link_text.lower():
+                        market_prefix = "sh"
+                    else:
+                        logger.debug(f"未找到市场前缀，跳过：{link_text}")
+                        continue
+                    # 提取名称（6位数字后面的内容）
+                    stock_name = link_text.split(stock_code)[-1].strip()
+                    logger.debug(f"手动分割成功：{market_prefix} | {stock_code} | {stock_name}")
+                else:
+                    logger.debug(f"手动分割也失败，跳过：{link_text}")
+                    continue
+            else:
+                market_prefix = match.group(1).lower()
+                stock_code = match.group(2)
+                stock_name = match.group(3).strip()
             
-            market_prefix = match.group(1)  # sz/sh
-            stock_code = match.group(2)     # 6位纯数字代码
-            stock_name = match.group(3).strip()  # 股票名称（去空格）
-            
-            # 过滤无效名称
-            if not stock_name or len(stock_name) < 2:
-                logger.debug(f"跳过无效名称：{link_text}")
+            # 过滤无效数据
+            if len(stock_name) < 2 or stock_code in seen_codes:
+                logger.debug(f"无效数据（重复/名称过短）：{stock_code} | {stock_name}")
                 continue
             
             # 确定市场
             market = "深A" if market_prefix == "sz" else "沪A"
-            
-            # 去重（避免默认+隐藏容器重复数据）
-            if stock_code not in seen_codes:
-                seen_codes.add(stock_code)
-                stock_list.append({
-                    "stockCode": stock_code,
-                    "stockName": stock_name,
-                    "market": market
-                })
-                logger.debug(f"✅ 解析成功：{stock_code} | {stock_name} | {market}")
+            seen_codes.add(stock_code)
+            stock_list.append({
+                "stockCode": stock_code,
+                "stockName": stock_name,
+                "market": market
+            })
+            logger.info(f"✅ 解析成功：{stock_code} | {stock_name} | {market}")
         
-        # 按代码排序（可选，让结果更规整）
+        # 按代码排序
         stock_list.sort(key=lambda x: x["stockCode"])
-        
         logger.info(f"解析完成，共得到 {len(stock_list)} 支有效个股（去重后）")
-        # 返回前10条（保持原有逻辑，避免数据过多）
+        
         return {"stocks": stock_list[:50]}
     
     except requests.exceptions.RequestException as e:
@@ -1069,7 +1083,6 @@ async def search_stocks(keyword: str):
     except Exception as e:
         logger.error(f"股票搜索解析失败：{str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="股票搜索失败，请重试")
-
 @app.put("/api/stocks/{stock_id}", response_model=StockItem)
 async def update_stock(stock_id: str, update_data: StockUpdate):
     """更新股票信息"""
