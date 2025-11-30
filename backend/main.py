@@ -219,7 +219,7 @@ class StockQuoteResponse(BaseModel):
     baseInfo: Dict[str, str]
     coreQuotes: Dict[str, Union[str, float, int]]
     supplementInfo: Dict[str, Union[str, float, bool]]
-    dataValidity: Dict[str, str]
+    dataValidity: Dict[str, Union[bool, str]]  # 支持 bool（isValid）和 str（reason）
 class NoteItem(BaseModel):
     id: str
     title: str
@@ -753,7 +753,7 @@ async def add_stock(stock: StockCreate):
     except Exception as e:
         logger.error(f"添加股票时发生未预期错误: {str(e)}")
         raise HTTPException(status_code=500, detail=f"添加股票时发生错误: {str(e)}")
-@app.get("/stocks/{stock_code}/quotes", response_model=StockQuoteResponse, summary="获取股票实时行情")
+@app.get("/api/stocks/{stock_code}/quotes", response_model=StockQuoteResponse, summary="获取股票实时行情")
 async def get_stock_quotes(stock_code: str):
     """
     获取指定股票的实时行情数据（复用用新浪财经接口）
@@ -769,7 +769,7 @@ async def get_stock_quotes(stock_code: str):
     market = get_stock_market(stock_code)
     if not market:
         raise HTTPException(status_code=400, detail="仅支持沪深A（60/00/30开头）")
-    
+    logger.info(f"获取股票{market}行情数据")
     # 构造新浪行情接口URL（复用现有工具）
     sina_list = f"{market}{stock_code},{market}{stock_code}_i"
     sina_url = f"https://hq.sinajs.cn/rn={int(time.time()*1000)}&list={sina_list}"
@@ -779,7 +779,7 @@ async def get_stock_quotes(stock_code: str):
         hq_data = fetch_url(sina_url, is_sina_var=True)
         if not hq_data:
             raise Exception("新浪接口返回空数据")
-        
+        logger.info(f"新浪接口返回数据：{hq_data}")
         # 复用用解析函数
         parsed_data = parse_sina_hq(hq_data)
         stock_key = f"{market}{stock_code}"
@@ -798,7 +798,7 @@ async def get_stock_quotes(stock_code: str):
         for field, (idx, _, _, formatter) in SUPPLEMENT_FIELDS.items():
             value = supplement_data[idx] if len(supplement_data) > idx else ""
             supplement_info[field] = format_field(value, formatter)
-        
+        logger.info(f"股票{stock_code}核心行情数据：{supplement_data}")
         # 构造响应
         return {
             "baseInfo": {
@@ -815,6 +815,13 @@ async def get_stock_quotes(stock_code: str):
                           else "股票数据无效（可能停牌、退市或代码错误）"
             }
         }
+    
+    except requestsHTTPException as e:
+        logger.error(f"行情接口请求失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="获取行情失败（接口访问受限）")
+    except Exception as e:
+        logger.error(f"行情数据解析失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="行情数据解析失败")
     
     except requestsHTTPException as e:
         logger.error(f"行情接口请求失败: {str(e)}")
@@ -908,7 +915,7 @@ async def get_stock_base_info(stockCode: str):
         parsed_data = parse_sina_hq(hq_data)
         stock_key = f"{market}{stockCode}"
         supplement_key = f"{market}{stockCode}_i"
-        
+        logger.info(f"股票{stockCode}核心行情数据：{supplement_key}")
         # 解析核心行情（不变）
         core_data = parsed_data.get(stock_key, [])
         core_quotes = {}
@@ -924,6 +931,7 @@ async def get_stock_base_info(stockCode: str):
             supplement_info[field] = format_field(value, formatter)
         
         # 关键修改2：baseInfo中直接用补充信息里的真实行业（替换之前的plateName）
+        logger.info(f"股票{stockCode}行业：{supplement_info['industry']}")
         final_result = {
             "baseInfo": {
                 "stockCode": stockCode,
