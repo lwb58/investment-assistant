@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from functools import lru_cache
 from uuid import uuid4  # 用于生成笔记/股票清单唯一ID
 import logging  # 新增：用于日志排查
+import db  # 导入数据库操作模块
 
 # 新增：配置简单日志（方便看排查信息）
 logging.basicConfig(level=logging.INFO)
@@ -26,11 +27,60 @@ app.add_middleware(
     allow_headers=["*"]
 )
 
-# -------------- 内存存储（模拟数据库，前端兼容）--------------
-# 笔记模块存储（id: str, title: str, content: str, createTime: str, updateTime: str）
+# 为了向后兼容，保留内存存储变量
+# 但实际数据操作将通过数据库完成
 NOTES_STORAGE: List[Dict[str, str]] = []
-# 股票清单存储（id: str, stockCode: str, stockName: str, addTime: str, remark: str, isHold: bool）
 STOCK_LIST_STORAGE: List[Dict[str, Any]] = []
+
+# 初始化数据库
+# 将内存存储作为参数传入，以便迁移数据
+db.init_database(notes_storage=NOTES_STORAGE, stock_storage=STOCK_LIST_STORAGE)
+
+# -------------- 缓存机制类 --------------
+class StockQuoteCache:
+    """
+    股票行情数据缓存类
+    - 缓存时间：30分钟
+    - 存储结构：{"stock_code": {"data": {...}, "timestamp": 1234567890}}
+    """
+    def __init__(self, expiry_seconds: int = 1800):
+        """初始化缓存，默认30分钟过期"""
+        self.cache = {}
+        self.expiry_seconds = expiry_seconds
+    
+    def get(self, stock_code: str) -> Optional[Dict[str, Any]]:
+        """获取缓存的股票行情数据，如果过期则返回None"""
+        if stock_code not in self.cache:
+            return None
+        
+        cache_item = self.cache[stock_code]
+        current_time = time.time()
+        
+        # 检查是否过期
+        if current_time - cache_item["timestamp"] > self.expiry_seconds:
+            # 删除过期缓存
+            del self.cache[stock_code]
+            return None
+        
+        return cache_item["data"]
+    
+    def set(self, stock_code: str, data: Dict[str, Any]) -> None:
+        """设置股票行情缓存数据"""
+        self.cache[stock_code] = {
+            "data": data,
+            "timestamp": time.time()
+        }
+    
+    def clear(self, stock_code: str = None) -> None:
+        """清除指定股票或所有缓存"""
+        if stock_code:
+            if stock_code in self.cache:
+                del self.cache[stock_code]
+        else:
+            self.cache.clear()
+
+# 创建全局缓存实例
+stock_quote_cache = StockQuoteCache()
 
 # 1. 新增：字段含义映射（新浪财经标准字段，确保不理解错）
 CORE_QUOTES_FIELDS = {
@@ -567,83 +617,142 @@ async def get_market_overview():
 @app.get("/api/notes", response_model=List[NoteItem])
 async def get_all_notes():
     """获取所有笔记"""
-    return NOTES_STORAGE
+    # 使用db模块中的函数
+    notes = db.get_all_notes()
+    
+    # 同时更新内存存储以便兼容
+    global NOTES_STORAGE
+    NOTES_STORAGE = notes
+    
+    return notes
 
 @app.get("/api/notes/{note_id}", response_model=NoteItem)
 async def get_note(note_id: str):
     """获取单条笔记"""
-    note = next((item for item in NOTES_STORAGE if item["id"] == note_id), None)
+    # 使用db模块中的函数
+    note = db.get_note(note_id)
+    
     if not note:
         raise HTTPException(status_code=404, detail="笔记不存在")
+    
+    note = {
+        "id": row["id"],
+        "title": row["title"],
+        "content": row["content"],
+        "createTime": row["create_time"],
+        "updateTime": row["update_time"]
+    }
+    
     return note
 
 @app.post("/api/notes", response_model=NoteItem)
 async def create_note(note: NoteCreate):
     """创建笔记"""
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    new_note = {
-        "id": str(uuid4()),  # 唯一ID
-        "title": note.title,
-        "content": note.content,
-        "createTime": now,
-        "updateTime": now
-    }
+    # 使用db模块中的函数
+    new_note = db.create_note(note.title, note.content)
+    
+    # 更新内存存储以便兼容
+    global NOTES_STORAGE
     NOTES_STORAGE.append(new_note)
+    
     return new_note
 
 @app.put("/api/notes/{note_id}", response_model=NoteItem)
 async def update_note(note_id: str, update_data: NoteUpdate):
     """更新笔记"""
-    note = next((item for item in NOTES_STORAGE if item["id"] == note_id), None)
-    if not note:
+    # 构建更新数据字典
+    update_dict = {}
+    if update_data.title:
+        update_dict["title"] = update_data.title
+    if update_data.content:
+        update_dict["content"] = update_data.content
+    
+    # 使用db模块中的函数
+    updated_note = db.update_note(note_id, update_dict)
+    
+    if not updated_note:
         raise HTTPException(status_code=404, detail="笔记不存在")
     
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    if update_data.title:
-        note["title"] = update_data.title
-    if update_data.content:
-        note["content"] = update_data.content
-    note["updateTime"] = now
-    return note
+    # 更新内存存储以便兼容
+    global NOTES_STORAGE
+    for note in NOTES_STORAGE:
+        if note["id"] == note_id:
+            note.update(updated_note)
+            break
+    
+    return updated_note
 
 @app.delete("/api/notes/{note_id}")
 async def delete_note(note_id: str):
     """删除笔记"""
-    global NOTES_STORAGE
-    note = next((item for item in NOTES_STORAGE if item["id"] == note_id), None)
-    if not note:
+    # 使用db模块中的函数
+    success = db.delete_note(note_id)
+    
+    if not success:
         raise HTTPException(status_code=404, detail="笔记不存在")
+    
+    # 更新内存存储以便兼容
+    global NOTES_STORAGE
     NOTES_STORAGE = [item for item in NOTES_STORAGE if item["id"] != note_id]
+    
     return {"detail": "笔记删除成功"}
 
 @app.get("/api/stocks/{stock_id}", response_model=StockItem)
 async def get_stock(stock_id: str):
     """获取单只股票"""
+    # 先从内存中查找
     stock = next((item for item in STOCK_LIST_STORAGE if item["id"] == stock_id), None)
+    
+    # 如果内存中没有，从数据库查找
+    if not stock:
+        stock = db.get_stock_by_id(stock_id)
+        
     if not stock:
         raise HTTPException(status_code=404, detail="股票不存在")
+    
     return stock
 
 @app.post("/api/stocks/add", response_model=StockItem)
 async def add_stock(stock: StockCreate):
     """添加股票到清单"""
-    # 检查股票代码是否已存在
-    exists = any(item["stockCode"] == stock.stockCode for item in STOCK_LIST_STORAGE)
-    if exists:
-        raise HTTPException(status_code=400, detail="该股票已在清单中")
-    
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    new_stock = {
-        "id": str(uuid4()),  # 唯一ID
-        "stockCode": stock.stockCode,
-        "stockName": stock.stockName,
-        "addTime": now,
-        "remark": stock.remark,
-        "isHold": stock.isHold,
-        "industry": stock.industry,
-    }
-    STOCK_LIST_STORAGE.append(new_stock)
-    return new_stock
+    # 更严格地检查股票代码是否已存在
+    try:
+        # 1. 先检查数据库中的唯一约束（更权威）
+        stocks = db.get_all_stocks()
+        exists_in_db = any(item["stockCode"] == stock.stockCode for item in stocks)
+        exists_in_memory = any(item["stockCode"] == stock.stockCode for item in STOCK_LIST_STORAGE)
+        
+        if exists_in_db or exists_in_memory:
+            raise HTTPException(status_code=400, detail=f"股票代码 {stock.stockCode} 已存在于清单中")
+        
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        new_stock = {
+            "id": str(uuid4()),  # 唯一ID
+            "stockCode": stock.stockCode,
+            "stockName": stock.stockName,
+            "addTime": now,
+            "remark": stock.remark or "",
+            "isHold": stock.isHold,
+            "industry": stock.industry or "",
+        }
+        
+        # 保存到数据库
+        saved_stock = db.create_stock(new_stock)
+        if not saved_stock:
+            raise HTTPException(status_code=500, detail=f"股票 {stock.stockCode} {stock.stockName} 保存失败，请稍后重试")
+        
+        # 同时更新内存存储
+        STOCK_LIST_STORAGE.append(new_stock)
+        logger.info(f"成功添加股票: {stock.stockCode} {stock.stockName}")
+        return new_stock
+    except HTTPException:
+        raise  # 重新抛出已定义的HTTP异常
+    except sqlite3.IntegrityError:
+        # 捕获数据库唯一约束错误，提供更明确的错误信息
+        raise HTTPException(status_code=400, detail=f"股票代码 {stock.stockCode} 已存在，请使用其他股票代码")
+    except Exception as e:
+        logger.error(f"添加股票时发生未预期错误: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"添加股票时发生错误: {str(e)}")
 @app.get("/stocks/{stock_code}/quotes", response_model=StockQuoteResponse, summary="获取股票实时行情")
 async def get_stock_quotes(stock_code: str):
     """
@@ -713,34 +822,68 @@ async def get_stock_quotes(stock_code: str):
     except Exception as e:
         logger.error(f"行情数据解析失败: {str(e)}")
         raise HTTPException(status_code=500, detail="行情数据解析失败")
-@app.get("/stocks/quotes")
-async def get_stock_quotes(codes: str):
-    """
-    获取股票行情接口
-    :param codes: 股票代码逗号分隔（如sh600000,sz000001,hk00700,gbBABA）
-    :return: 行情数据
-    """
-    stock_codes = codes.split(',')
-    quotes = DataSource.get_stock_quotes(stock_codes)
-    return {"data": quotes}
 @app.get("/api/stocks", response_model=List[StockItem])
 async def get_all_stocks(search: Optional[str] = None):
-    """获取股票清单（支持搜索功能）"""
+    """获取股票清单（支持搜索功能，并集成行情数据）"""
+    # 使用db模块中的函数获取股票数据
+    stocks_to_process = db.get_all_stocks(search=search)
+    
+    # 更新内存存储以便兼容
+    global STOCK_LIST_STORAGE
     if not search or not search.strip():
-        return STOCK_LIST_STORAGE
+        STOCK_LIST_STORAGE = stocks_to_process.copy()
     
-    # 转换关键词为小写以支持大小写不敏感的搜索
-    keyword = search.strip().lower()
+    # 为每个股票添加行情数据
+    result_stocks = []
+    for stock in stocks_to_process:
+        # 创建股票的副本，避免修改原始数据
+        stock_with_quotes = stock.copy()
+        stock_code = stock["stockCode"]
+        
+        try:
+            # 先从缓存中获取行情数据
+            quote_data = stock_quote_cache.get(stock_code)
+            
+            if not quote_data:
+                # 缓存未命中，调用get_stock_quotes获取数据
+                logger.info(f"缓存未命中，获取股票{stock_code}行情数据")
+                quote_data = await get_stock_quotes(stock_code)
+                # 存入缓存
+                stock_quote_cache.set(stock_code, quote_data)
+            else:
+                logger.info(f"缓存命中，使用股票{stock_code}的缓存数据")
+            
+            # 提取价格和涨跌幅信息
+            if quote_data and "coreQuotes" in quote_data:
+                core_quotes = quote_data["coreQuotes"]
+                # 计算涨跌幅
+                current_price = core_quotes.get("currentPrice", 0)
+                prev_close = core_quotes.get("prevClosePrice", 0)
+                
+                if prev_close > 0:
+                    change_amount = current_price - prev_close
+                    change_rate = (change_amount / prev_close) * 100
+                else:
+                    change_amount = 0
+                    change_rate = 0
+                
+                # 添加行情信息到股票对象
+                stock_with_quotes["currentPrice"] = current_price
+                stock_with_quotes["changeAmount"] = change_amount
+                stock_with_quotes["changeRate"] = change_rate
+                stock_with_quotes["updateTime"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                
+        except Exception as e:
+            # 行情数据获取失败时记录错误，但不影响股票列表返回
+            logger.error(f"获取股票{stock_code}行情数据失败: {str(e)}")
+            # 设置默认值
+            stock_with_quotes["currentPrice"] = 0
+            stock_with_quotes["changeAmount"] = 0
+            stock_with_quotes["changeRate"] = 0
+        
+        result_stocks.append(stock_with_quotes)
     
-    # 过滤股票清单：匹配股票代码、名称或行业
-    filtered_stocks = [
-        stock for stock in STOCK_LIST_STORAGE
-        if keyword in stock["stockCode"].lower() or
-           keyword in stock["stockName"].lower() or
-           ("industry" in stock and keyword in stock["industry"].lower())
-    ]
-    
-    return filtered_stocks
+    return result_stocks
 
 @app.get("/api/stock/baseInfo/{stockCode}")
 async def get_stock_base_info(stockCode: str):
@@ -919,26 +1062,49 @@ async def search_stocks(keyword: str):
 @app.put("/api/stocks/{stock_id}", response_model=StockItem)
 async def update_stock(stock_id: str, update_data: StockUpdate):
     """更新股票信息"""
-    stock = next((item for item in STOCK_LIST_STORAGE if item["id"] == stock_id), None)
-    if not stock:
+    # 构建更新数据字典
+    update_dict = {}
+    if update_data.stockName:
+        update_dict["stock_name"] = update_data.stockName
+    if update_data.remark is not None:
+        update_dict["remark"] = update_data.remark
+    if update_data.isHold is not None:
+        update_dict["is_hold"] = 1 if update_data.isHold else 0
+    if hasattr(update_data, 'industry') and update_data.industry is not None:
+        update_dict["industry"] = update_data.industry
+    
+    # 使用db模块中的函数
+    updated_stock = db.update_stock(stock_id, update_dict)
+    
+    if not updated_stock:
         raise HTTPException(status_code=404, detail="股票不存在")
     
-    if update_data.stockName:
-        stock["stockName"] = update_data.stockName
-    if update_data.remark is not None:
-        stock["remark"] = update_data.remark
-    if update_data.isHold is not None:
-        stock["isHold"] = update_data.isHold
-    return stock
+    # 更新内存存储
+    global STOCK_LIST_STORAGE
+    # 直接使用get_stock_by_id返回的数据格式
+    stock_dict = updated_stock
+    
+    # 更新内存列表中的对应项
+    for i, s in enumerate(STOCK_LIST_STORAGE):
+        if s["id"] == stock_id:
+            STOCK_LIST_STORAGE[i] = stock_dict
+            break
+    
+    return stock_dict
 
 @app.delete("/api/stocks/{stock_id}")
 async def delete_stock(stock_id: str):
     """删除股票"""
-    global STOCK_LIST_STORAGE
-    stock = next((item for item in STOCK_LIST_STORAGE if item["id"] == stock_id), None)
-    if not stock:
+    # 使用db模块中的函数
+    success = db.delete_stock(stock_id)
+    
+    if not success:
         raise HTTPException(status_code=404, detail="股票不存在")
+    
+    # 更新内存存储
+    global STOCK_LIST_STORAGE
     STOCK_LIST_STORAGE = [item for item in STOCK_LIST_STORAGE if item["id"] != stock_id]
+    
     return {"detail": "股票删除成功"}
 
 

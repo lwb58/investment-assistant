@@ -325,28 +325,45 @@ const watchingStocks = computed(() => stocks.value.filter(s => !s.holding).lengt
 
 // 初始化数据
 onMounted(() => {
-  fetchStocks()
+  console.log('onMounted钩子执行');
+  // 立即调用fetchStocks
+  console.log('调用fetchStocks()');
+  fetchStocks();
+  // 额外添加一个延迟调用，确保组件完全挂载
+  setTimeout(() => {
+    console.log('延迟1000ms后再次调用fetchStocks()');
+    fetchStocks();
+  }, 1000);
 })
 
-// 获取股票列表
+// 获取股票列表数据
 const fetchStocks = async () => {
+  console.log('开始调用fetchStocks函数...')
+  console.log('apiService:', apiService)
+  console.log('searchKeyword.value:', searchKeyword.value)
   loading.value = true
   error.value = null
   try {
-    // 获取原始数据
-    const rawData = await apiService.getStocks()
-    // 增加字段映射逻辑（关键修复）
-    stocks.value = rawData.map(stock => ({
-      code: stock.stockCode,       // 后端stockCode → 前端code
-      name: stock.stockName,       // 后端stockName → 前端name
+    console.log('准备调用apiService.getStocks...')
+    // 调用后端API获取股票列表，直接传入搜索关键词字符串
+    const data = await apiService.getStocks(searchKeyword.value)
+    console.log('API调用成功，返回数据:', data)
+    // 处理API返回的数据，确保字段映射正确
+    stocks.value = data.map(stock => ({
+      ...stock,
+      code: stock.stockCode || stock.code, // 兼容两种命名
+      name: stock.stockName || stock.name, // 兼容两种命名
       industry: stock.industry,
-      holding: stock.isHold,       // 后端isHold → 前端holding
-      price: stock.price || '',
+      holding: stock.isHold !== undefined ? stock.isHold : stock.holding, // 兼容两种命名
+      // 确保行情数据存在
+      price: stock.currentPrice || stock.price || '',
       changeRate: stock.changeRate || 0,
-      id: stock.id                 // 保留后端ID用于编辑删除
+      id: stock.id,
+      updateTime: stock.updateTime
     }))
   } catch (err) {
-    error.value = '加载股票数据失败'
+    console.error('API调用失败:', err)
+    error.value = '加载股票数据失败: ' + (err.message || '未知错误')
     console.error('获取股票列表失败:', err)
   } finally {
     loading.value = false
@@ -422,30 +439,68 @@ const deleteStock = async (id) => {
           isHold: formData.value.holding // 关键修复：添加isHold字段
         };
         await apiService.updateStock(editingStock.value.id, updateData);
-        // 保存成功后刷新清单数据
-        await fetchStocks();
+        
+        // 尝试获取最新行情数据
+        try {
+          const quotes = await apiService.getStockQuotes(formData.value.code);
+          if (quotes && quotes.coreQuotes) {
+            const stockIndex = stocks.value.findIndex(s => s.id === editingStock.value.id);
+            if (stockIndex !== -1) {
+              // 计算涨跌幅
+              const currentPrice = quotes.coreQuotes.currentPrice || 0;
+              const prevClose = quotes.coreQuotes.prevClosePrice || 0;
+              const changeAmount = currentPrice - prevClose;
+              const changeRate = prevClose > 0 ? (changeAmount / prevClose) * 100 : 0;
+              
+              // 更新行情信息
+              stocks.value[stockIndex].price = currentPrice;
+              stocks.value[stockIndex].changeRate = changeRate;
+            }
+          }
+        } catch (quoteErr) {
+          console.warn('获取行情数据失败，使用缓存数据:', quoteErr);
+        }
       } else {
-      // 添加股票：后端返回 newStock（字段是 stockCode/stockName/isHold）
-      const newStock = await apiService.addStock(formData.value)
-      // 新增：字段映射（后端→前端）
-      const mappedNewStock = {
-        code: newStock.stockCode, // 后端stockCode→前端code
-        name: newStock.stockName, // 后端stockName→前端name
-        industry: newStock.industry,
-        holding: newStock.isHold, // 后端isHold→前端holding
-        price: newStock.price || '',
-        changeRate: newStock.changeRate || 0
+        // 添加股票：后端返回 newStock（字段是 stockCode/stockName/isHold）
+        const newStock = await apiService.addStock(formData.value)
+        
+        // 尝试获取最新行情数据
+        let price = '';
+        let changeRate = 0;
+        try {
+          const quotes = await apiService.getStockQuotes(formData.value.code);
+          if (quotes && quotes.coreQuotes) {
+            // 计算涨跌幅
+            const currentPrice = quotes.coreQuotes.currentPrice || 0;
+            const prevClose = quotes.coreQuotes.prevClosePrice || 0;
+            const changeAmount = currentPrice - prevClose;
+            changeRate = prevClose > 0 ? (changeAmount / prevClose) * 100 : 0;
+            price = currentPrice;
+          }
+        } catch (quoteErr) {
+          console.warn('获取行情数据失败，使用默认值:', quoteErr);
+        }
+        
+        // 新增：字段映射（后端→前端）
+        const mappedNewStock = {
+          code: newStock.stockCode, // 后端stockCode→前端code
+          name: newStock.stockName, // 后端stockName→前端name
+          industry: newStock.industry,
+          holding: newStock.isHold, // 后端isHold→前端holding
+          price: price,
+          changeRate: changeRate,
+          id: newStock.id
+        }
+        stocks.value.push(mappedNewStock) // 存映射后的字段
       }
-      stocks.value.push(mappedNewStock) // 存映射后的字段
-    }
 
-    closeModal()
-  } catch (err) {
-    alert(editingStock.value ? '更新股票失败' : '添加股票失败')
-    console.error(editingStock.value ? '更新股票失败:' : '添加股票失败:', err)
-  } finally {
-    saving.value = false
-  }
+      closeModal()
+    } catch (err) {
+      alert(editingStock.value ? '更新股票失败' : '添加股票失败')
+      console.error(editingStock.value ? '更新股票失败:' : '添加股票失败:', err)
+    } finally {
+      saving.value = false
+    }
 }
 
 // 更新持仓状态

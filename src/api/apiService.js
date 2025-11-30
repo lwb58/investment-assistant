@@ -98,18 +98,16 @@ async updateStock(stockId, updateData) {  // 参数名从stockCode改为stockId
     if (!keyword || keyword.trim().length < 1) {
       return [];
     }
-    
-    try {
-      const results = await this.request('GET', `/stocks/search/${encodeURIComponent(keyword)}`);
-      return results.map(stock => ({
-        code: stock.code,
-        name: stock.name,
-        industry: stock.industry
-      }));
-    } catch (error) {
-      console.error('搜索股票失败:', error);
-      return [];
-    }
+    return this.request('GET', `/stocks/search/${encodeURIComponent(keyword)}`);
+  }
+  
+  /**
+   * 获取股票实时行情
+   * @param {string} stockCode - 股票代码
+   * @returns {Promise<Object>} 股票行情数据
+   */
+  async getStockQuotes(stockCode) {
+    return this.request('GET', `/stocks/${stockCode}/quotes`);
   }
 
   // =============== 股票详情相关API ===============
