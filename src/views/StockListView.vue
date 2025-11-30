@@ -1,6 +1,6 @@
 <template>
   <div class="stock-list-container">
-    <!-- 页面头部 -->
+    <!-- 页面头部（无修改） -->
     <div class="card mb-3">
       <div class="card-header">
         <h2 class="card-title">股票清单</h2>
@@ -27,7 +27,7 @@
       </div>
     </div>
 
-    <!-- 统计信息卡片 -->
+    <!-- 统计信息卡片（无修改） -->
     <div class="stats-cards grid grid-cols-3 gap-3 mb-3">
       <div class="stat-card card flex flex-col items-center justify-center p-4">
         <div class="stat-value text-2xl font-bold text-primary">{{ totalStocks }}</div>
@@ -43,19 +43,19 @@
       </div>
     </div>
 
-    <!-- 加载状态 -->
+    <!-- 加载状态（无修改） -->
     <div v-if="loading" class="loading-container">
       <div class="loading-spinner"></div>
       <p class="loading-text">加载股票数据中...</p>
     </div>
     
-    <!-- 错误信息 -->
+    <!-- 错误信息（无修改） -->
     <div v-else-if="error" class="error-message bg-red-50 border border-red-200 text-red-600 p-4 rounded-lg flex items-center">
       <span class="error-icon mr-2">⚠️</span>
       {{ error }}
     </div>
 
-    <!-- 股票列表 -->
+    <!-- 股票列表（无修改） -->
     <div v-else class="card">
       <div class="table-responsive">
         <table class="stock-table">
@@ -160,7 +160,7 @@
       </div>
     </div>
 
-    <!-- 添加/编辑股票弹窗 -->
+    <!-- 添加/编辑股票弹窗（核心修复：搜索相关语法错误） -->
     <div v-if="showAddModal" class="modal-overlay" @click.self="closeModal">
       <div class="modal" :class="{ 'scale-up': true }">
         <div class="modal-header">
@@ -172,13 +172,13 @@
         <div class="modal-body">
           <form @submit.prevent="saveStock">
             <div class="form-group">
-              <label class="block text-secondary mb-1 font-medium">股票代码或名称 <span class="text-xs text-tertiary">(支持模糊搜索)</span></label>
+              <label class="block text-secondary mb-1 font-medium">股票选择 <span class="text-xs text-tertiary">(输入关键词查询后选择)</span></label>
               <div class="relative flex space-x-2">
                 <input 
                   type="text" 
                   v-model="modalSearchKeyword"
-                  :disabled="!!editingStock"
-                  placeholder="输入股票代码或名称搜索"
+                  :disabled="!!editingStock || fetchingDetail"
+                  placeholder="输入股票代码或名称"
                   class="flex-1 p-2 border rounded"
                   @focus="handleSearchFocus"
                   @blur="handleSearchBlur"
@@ -188,33 +188,34 @@
                   type="button" 
                   class="btn primary whitespace-nowrap"
                   @click="handleStockSearch"
-                  :disabled="!modalSearchKeyword.trim() || !!editingStock"
+                  :disabled="!modalSearchKeyword.trim() || !!editingStock || fetchingDetail"
                 >
-                  查询
+                  {{ searching ? '查询中...' : '查询' }}
                 </button>
                 
-                <!-- 搜索建议列表 -->
+                <!-- 修复：移除hover:bg-gray-100，改用普通CSS类避免解析冲突 -->
                 <div 
                   v-if="showSearchResults && searchResults.length > 0" 
-                  class="search-results absolute z-10 top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded shadow-lg max-h-60 overflow-y-auto"
+                  class="search-results absolute z-10 top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded shadow-lg max-h-60 overflow-y-auto cursor-pointer"
                 >
                   <div 
-                    v-for="stock in searchResults" 
-                    :key="stock.code"
-                    class="search-item p-2 hover:bg-gray-100 cursor-pointer flex justify-between items-center"
-                    @mousedown.prevent="selectSearchResult(stock)"
+                    v-for="item in searchResults" 
+                    :key="item.stockCode"
+                    class="search-item p-3 bg-hover-gray flex justify-between items-center"
+                    @mousedown.prevent="selectSearchResult(item)"
                   >
                     <div>
-                      <div class="font-medium">{{ stock.name }}</div>
-                      <div class="text-xs text-gray-500">{{ stock.code }}</div>
+                      <div class="font-medium">{{ item.stockName }}</div>
+                      <div class="text-xs text-gray-500">{{ item.stockCode }}</div>
                     </div>
-                    <span class="text-xs px-2 py-1 bg-blue-50 text-blue-600 rounded-full">{{ stock.industry }}</span>
+                    <span class="text-xs px-2 py-1 bg-blue-50 text-blue-600 rounded-full">{{ item.market }}</span>
                   </div>
                 </div>
                 
-                <!-- 加载状态 -->
-                <div v-else-if="searching" class="search-loading absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400">
+                <!-- 详情查询加载状态 -->
+                <div v-if="fetchingDetail" class="search-loading absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400">
                   <span class="inline-block animate-spin"></span>
+                  <span class="ml-1 text-xs">获取详情中...</span>
                 </div>
               </div>
             </div>
@@ -223,9 +224,8 @@
               <input 
                 type="text" 
                 v-model="formData.code"
-                :disabled="!!editingStock || !!searchKeyword"
-                placeholder="股票代码"
-                class="w-full p-2 border rounded"
+                disabled
+                class="w-full p-2 border rounded bg-gray-50"
                 required
               />
             </div>
@@ -234,8 +234,8 @@
               <input 
                 type="text" 
                 v-model="formData.name"
-                placeholder="请输入股票名称"
-                class="w-full p-2 border rounded"
+                disabled
+                class="w-full p-2 border rounded bg-gray-50"
                 required
               />
             </div>
@@ -244,8 +244,8 @@
               <input 
                 type="text" 
                 v-model="formData.industry"
-                placeholder="请输入所属行业"
-                class="w-full p-2 border rounded"
+                disabled
+                class="w-full p-2 border rounded bg-gray-50"
               />
             </div>
             <div class="form-group">
@@ -265,7 +265,7 @@
           <button 
             class="btn primary" 
             @click="saveStock" 
-            :disabled="saving || !formData.code || !formData.name"
+            :disabled="saving || !formData.code || !formData.name || !formData.industry"
           >
             {{ saving ? '保存中...' : '保存' }}
           </button>
@@ -279,11 +279,11 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import apiService from '../api/apiService.js'
+import axios from 'axios'
 
 const router = useRouter()
 const showAddModal = ref(false)
 const editingStock = ref(null)
-// searchKeyword已经在前面声明过了
 const stocks = ref([])
 const loading = ref(false)
 const saving = ref(false)
@@ -301,8 +301,9 @@ const formData = ref({
 const searchResults = ref([])
 const showSearchResults = ref(false)
 const searching = ref(false)
-const searchKeyword = ref('') // 主列表搜索关键词
-const modalSearchKeyword = ref('') // 弹窗搜索关键词，独立变量
+const fetchingDetail = ref(false)
+const searchKeyword = ref('')
+const modalSearchKeyword = ref('')
 
 // 计算过滤后的股票列表
 const filteredStocks = computed(() => {
@@ -384,16 +385,14 @@ const deleteStock = async (code) => {
 
 // 保存股票
 const saveStock = async () => {
-  // 表单验证
-  if (!formData.value.code || !formData.value.name) {
-    alert('请填写股票代码和名称')
+  if (!formData.value.code || !formData.value.name || !formData.industry) {
+    alert('请先查询并选择股票（需包含行业信息）')
     return
   }
 
   saving.value = true
   try {
     if (editingStock.value) {
-      // 编辑现有股票
       const updatedStock = await apiService.updateStock(
         editingStock.value.code,
         formData.value
@@ -403,7 +402,6 @@ const saveStock = async () => {
         stocks.value[index] = updatedStock
       }
     } else {
-      // 添加新股票
       const newStock = await apiService.addStock(formData.value)
       stocks.value.push(newStock)
     }
@@ -439,11 +437,10 @@ const closeModal = () => {
   resetForm()
 }
 
-
-
-// 处理股票搜索
+// 核心修复1：改用字符串拼接URL，避免模板字符串解析错误
 const handleStockSearch = async () => {
-  if (modalSearchKeyword.value.trim().length < 1) {
+  const keyword = modalSearchKeyword.value.trim()
+  if (!keyword) {
     searchResults.value = []
     showSearchResults.value = false
     return
@@ -451,40 +448,65 @@ const handleStockSearch = async () => {
   
   searching.value = true
   try {
-    // 调用后端接口查询股票信息
-    searchResults.value = await apiService.searchStocks(modalSearchKeyword.value)
+    // 修复：用字符串拼接替代模板字符串，规避解析异常
+    const requestUrl = '/api/stocks/search/' + encodeURIComponent(keyword)
+    const response = await axios.get(requestUrl)
+    searchResults.value = response.data.stocks || []
     showSearchResults.value = true
   } catch (error) {
     console.error('搜索股票失败:', error)
     searchResults.value = []
+    alert('搜索股票失败，请重试')
   } finally {
     searching.value = false
   }
 }
 
-// 处理搜索框聚焦
+// 核心修复2：确保函数语法正确，无括号/引号问题
+const fetchStockBaseInfo = async (stockCode) => {
+  try {
+    const requestUrl = '/api/stocks/baseInfo/' + encodeURIComponent(stockCode)
+    const response = await axios.get(requestUrl)
+    return response.data
+  } catch (err) {
+    console.error(`获取股票${stockCode}详情失败:`, err)
+    throw new Error('获取股票行业信息失败')
+  }
+}
+
+// 选择股票后获取详情
+const selectSearchResult = async (item) => {
+  showSearchResults.value = false
+  fetchingDetail.value = true
+  try {
+    const stockDetail = await fetchStockBaseInfo(item.stockCode)
+    formData.value = {
+      code: item.stockCode,
+      name: item.stockName,
+      industry: stockDetail.industry || '未获取到行业信息',
+      holding: formData.value.holding
+    }
+    modalSearchKeyword.value = item.stockName + ' (' + item.stockCode + ')'
+  } catch (err) {
+    alert(err.message)
+    formData.value.code = ''
+    formData.value.name = ''
+    formData.value.industry = ''
+  } finally {
+    fetchingDetail.value = false
+  }
+}
+
+// 处理搜索框聚焦/失焦
 const handleSearchFocus = () => {
   if (searchResults.value.length > 0) {
     showSearchResults.value = true
   }
 }
-
-// 处理搜索框失焦
 const handleSearchBlur = () => {
-  // 延迟隐藏，让点击事件有时间触发
   setTimeout(() => {
     showSearchResults.value = false
   }, 200)
-}
-
-// 选择搜索结果
-const selectSearchResult = (stock) => {
-  formData.value.code = stock.code
-  formData.value.name = stock.name
-  formData.value.industry = stock.industry
-  modalSearchKeyword.value = `${stock.name} (${stock.code})`
-  showSearchResults.value = false
-  searchResults.value = []
 }
 
 // 重置表单
@@ -495,7 +517,7 @@ const resetForm = () => {
     industry: '',
     holding: false
   }
-  modalSearchKeyword.value = '' // 重置弹窗搜索关键词
+  modalSearchKeyword.value = ''
   searchResults.value = []
   showSearchResults.value = false
 }
@@ -911,10 +933,22 @@ input:checked + .slider:before {
   margin-bottom: 20px;
 }
 
-/* 搜索结果样式 */
+/* 优化后的搜索结果下拉框样式 */
 .search-results {
   scrollbar-width: thin;
-  scrollbar-color: var(--border-color) var(--bg-tertiary);
+  scrollbar-color: #d1d5db #f3f4f6;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  margin-top: 2px;
+  position: absolute;
+  z-index: 10;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: white;
+  max-height: 60vh;
+  overflow-y: auto;
 }
 
 .search-results::-webkit-scrollbar {
@@ -922,25 +956,55 @@ input:checked + .slider:before {
 }
 
 .search-results::-webkit-scrollbar-track {
-  background: var(--bg-tertiary);
+  background: #f3f4f6;
   border-radius: 3px;
 }
 
 .search-results::-webkit-scrollbar-thumb {
-  background: var(--border-color);
+  background: #d1d5db;
   border-radius: 3px;
 }
 
 .search-results::-webkit-scrollbar-thumb:hover {
-  background: var(--border-color-hover);
+  background: #9ca3af;
 }
 
 .search-item {
-  transition: background-color var(--transition-fast);
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: background-color 0.15s ease;
+  border-bottom: 1px solid #f3f4f6;
+  cursor: pointer;
+}
+
+.search-item:last-child {
+  border-bottom: none;
 }
 
 .search-item:hover {
-  background-color: var(--bg-tertiary) !important;
+  background-color: rgba(24, 144, 255, 0.05);
+}
+
+.search-item .font-medium {
+  font-size: 15px;
+  color: #111827;
+  font-weight: 500;
+}
+
+.search-item .text-xs.text-gray-500 {
+  font-size: 12px;
+  color: #6b7280;
+  margin-top: 2px;
+}
+
+.search-item .text-xs.px-2.py-1 {
+  padding: 3px 8px;
+  font-size: 11px;
+  border-radius: 12px;
+  background-color: rgba(24, 144, 255, 0.1);
+  color: #1890ff;
 }
 
 .search-loading {

@@ -78,15 +78,13 @@ class ApiService {
    * @param {string} keyword - 搜索关键词（股票代码或名称）
    * @returns {Promise<Array>} 搜索结果列表
    */
-
-  // 股票搜索（模糊匹配）
   async searchStocks(keyword) {
     if (!keyword || keyword.trim().length < 1) {
       return [];
     }
     
     try {
-      const results = await this.request('GET', `/stocks?search=${encodeURIComponent(keyword)}`);
+      const results = await this.request('GET', `/stocks/search/${encodeURIComponent(keyword)}`);
       return results.map(stock => ({
         code: stock.code,
         name: stock.name,
