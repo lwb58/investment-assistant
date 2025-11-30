@@ -47,8 +47,15 @@ class ApiService {
    * @returns {Promise<Object>} 创建的股票
    */
   async addStock(stockData) {
+      const requestData = {
+      stockCode: stockData.code,    // 前端code → 后端stockCode
+      stockName: stockData.name,    // 前端name → 后端stockName
+      isHold: stockData.holding,    // 前端holding → 后端isHold
+      industry: stockData.industry, // 前端industry → 后端industry（新增字段）
+      remark: stockData.remark || ''// 可选字段，空值兜底
+    };
     return this.request('POST', `/stocks/add`, {
-      body: JSON.stringify(stockData)
+      body: JSON.stringify(requestData)
     });
   }
 
@@ -59,8 +66,22 @@ class ApiService {
    * @returns {Promise<Object>} 更新后的股票
    */
   async updateStock(stockCode, updateData) {
+    // 字段映射：前端→后端（和addStock保持一致，避免字段名不匹配）
+    const requestData = {
+      // 保留需要更新的核心字段，过滤无效字段
+      stockCode: updateData.code || stockCode, // 股票代码（兜底用传入的stockCode）
+      stockName: updateData.name,             // 前端name → 后端stockName
+      industry: updateData.industry,          // 前端industry → 后端industry
+      isHold: updateData.holding,             // 前端holding → 后端isHold（关键映射）
+      remark: updateData.remark || '',        // 可选字段，空值兜底
+      // 移除前端特有的字段，避免后端校验报错
+      holding: undefined,
+      code: undefined
+    };
+
+    // 发送PUT请求，路径和后端保持一致（复数stocks）
     return this.request('PUT', `/stocks/${stockCode}`, {
-      body: JSON.stringify(updateData)
+      body: JSON.stringify(requestData)
     });
   }
 

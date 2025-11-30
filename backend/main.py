@@ -620,7 +620,7 @@ async def get_stock(stock_id: str):
         raise HTTPException(status_code=404, detail="股票不存在")
     return stock
 
-@app.post("/api/stock/add", response_model=StockItem)
+@app.post("/api/stocks/add", response_model=StockItem)
 async def add_stock(stock: StockCreate):
     """添加股票到清单"""
     # 检查股票代码是否已存在

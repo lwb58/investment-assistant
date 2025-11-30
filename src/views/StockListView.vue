@@ -385,7 +385,7 @@ const deleteStock = async (code) => {
 
 // 保存股票
 const saveStock = async () => {
-if (!formData.value.code?.trim() || !formData.value.name?.trim() || !formData.value.industry?.trim()) {
+  if (!formData.value.code?.trim() || !formData.value.name?.trim() || !formData.value.industry?.trim()) {
     alert('请先查询并选择股票（需包含行业信息）')
     return
   }
@@ -393,17 +393,37 @@ if (!formData.value.code?.trim() || !formData.value.name?.trim() || !formData.va
   saving.value = true
   try {
     if (editingStock.value) {
+      // 编辑股票：后端返回 updatedStock（字段是 stockCode/stockName/isHold）
       const updatedStock = await apiService.updateStock(
         editingStock.value.code,
         formData.value
       )
-      const index = stocks.value.findIndex(stock => stock.code === updatedStock.code)
+      // 新增：字段映射（后端→前端）
+      const mappedUpdatedStock = {
+        code: updatedStock.stockCode,
+        name: updatedStock.stockName,
+        industry: updatedStock.industry,
+        holding: updatedStock.isHold, // 后端isHold→前端holding
+        price: updatedStock.price || '', // 兼容价格字段（如果有）
+        changeRate: updatedStock.changeRate || 0 // 兼容涨跌幅字段
+      }
+      const index = stocks.value.findIndex(stock => stock.code === mappedUpdatedStock.code)
       if (index > -1) {
-        stocks.value[index] = updatedStock
+        stocks.value[index] = mappedUpdatedStock // 存映射后的字段
       }
     } else {
+      // 添加股票：后端返回 newStock（字段是 stockCode/stockName/isHold）
       const newStock = await apiService.addStock(formData.value)
-      stocks.value.push(newStock)
+      // 新增：字段映射（后端→前端）
+      const mappedNewStock = {
+        code: newStock.stockCode, // 后端stockCode→前端code
+        name: newStock.stockName, // 后端stockName→前端name
+        industry: newStock.industry,
+        holding: newStock.isHold, // 后端isHold→前端holding
+        price: newStock.price || '',
+        changeRate: newStock.changeRate || 0
+      }
+      stocks.value.push(mappedNewStock) // 存映射后的字段
     }
 
     closeModal()
