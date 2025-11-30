@@ -249,6 +249,11 @@ class StockItem(BaseModel):
     addTime: str
     remark: str
     isHold: bool
+    # 补充行情相关字段（与接口返回一致，设默认值确保兼容性）
+    currentPrice: Optional[float] = 0.0  # 当前价
+    changeAmount: Optional[float] = 0.0  # 涨跌额
+    changeRate: Optional[float] = 0.0    # 涨跌幅（%）
+    updateTime: Optional[str] = ""       # 行情更新时间
 
 # -------------- 核心数据源（仅新浪财经）--------------
 class DataSource:
@@ -545,6 +550,11 @@ class DataSource:
                 continue
         
         return index_data
+@cache_with_timeout(300)  # 300秒缓存，与市场概览缓存逻辑一致
+def _get_cached_stock_quotes(stock_code: str) -> Dict[str, Any]:
+    """带缓存的行情获取（复用装饰器，内部调用原路由逻辑）"""
+    # 直接调用之前抽离的核心行情逻辑（无HTTP上下文依赖）
+    return get_stock_quotes(stock_code)
 
 # -------------- 核心数据整合（市场概览）--------------
 @cache_with_timeout(300)
@@ -842,25 +852,18 @@ async def get_all_stocks(search: Optional[str] = None):
     
     # 为每个股票添加行情数据
     result_stocks = []
+    logger.info(f"获取股票清单，搜索条件：{search}")
     for stock in stocks_to_process:
         # 创建股票的副本，避免修改原始数据
         stock_with_quotes = stock.copy()
         stock_code = stock["stockCode"]
         
         try:
-            # 先从缓存中获取行情数据
-            quote_data = stock_quote_cache.get(stock_code)
+            # 关键优化：直接调用带缓存的函数，装饰器自动处理缓存逻辑
+            logger.info(f"获取股票{stock_code}行情数据")
+            quote_data = await _get_cached_stock_quotes(stock_code)  # 无需手动判断缓存
             
-            if not quote_data:
-                # 缓存未命中，调用get_stock_quotes获取数据
-                logger.info(f"缓存未命中，获取股票{stock_code}行情数据")
-                quote_data = await get_stock_quotes(stock_code)
-                # 存入缓存
-                stock_quote_cache.set(stock_code, quote_data)
-            else:
-                logger.info(f"缓存命中，使用股票{stock_code}的缓存数据")
-            
-            # 提取价格和涨跌幅信息
+            # 提取价格和涨跌幅信息（原逻辑不变）
             if quote_data and "coreQuotes" in quote_data:
                 core_quotes = quote_data["coreQuotes"]
                 # 计算涨跌幅
@@ -874,10 +877,10 @@ async def get_all_stocks(search: Optional[str] = None):
                     change_amount = 0
                     change_rate = 0
                 
-                # 添加行情信息到股票对象
+                # 添加行情信息到股票对象（原逻辑不变）
                 stock_with_quotes["currentPrice"] = current_price
                 stock_with_quotes["changeAmount"] = change_amount
-                stock_with_quotes["changeRate"] = change_rate
+                stock_with_quotes["changeRate"] = round(change_rate, 2)
                 stock_with_quotes["updateTime"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 
         except Exception as e:
@@ -889,7 +892,7 @@ async def get_all_stocks(search: Optional[str] = None):
             stock_with_quotes["changeRate"] = 0
         
         result_stocks.append(stock_with_quotes)
-    
+    logger.info(f"获取股票清单完成，共{result_stocks}条数据")
     return result_stocks
 
 @app.get("/api/stock/baseInfo/{stockCode}")
