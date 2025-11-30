@@ -358,7 +358,18 @@ const handleSearch = async () => {
   loading.value = true
   error.value = null
   try {
-    stocks.value = await apiService.getStocks(searchKeyword.value)
+    // 调用支持搜索参数的API
+    const rawData = await apiService.getStocks(searchKeyword.value)
+    // 应用字段映射逻辑（与fetchStocks函数保持一致）
+    stocks.value = rawData.map(stock => ({
+      code: stock.stockCode,
+      name: stock.stockName,
+      industry: stock.industry,
+      holding: stock.isHold,
+      price: stock.price || '',
+      changeRate: stock.changeRate || 0,
+      id: stock.id
+    }))
   } catch (err) {
     error.value = '搜索失败'
     console.error('搜索股票失败:', err)

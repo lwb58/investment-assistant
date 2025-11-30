@@ -165,7 +165,11 @@ class NoteCreate(BaseModel):
 class NoteUpdate(BaseModel):
     title: Optional[str] = None
     content: Optional[str] = None
-
+class StockQuoteResponse(BaseModel):
+    baseInfo: Dict[str, str]
+    coreQuotes: Dict[str, Union[str, float, int]]
+    supplementInfo: Dict[str, Union[str, float, bool]]
+    dataValidity: Dict[str, str]
 class NoteItem(BaseModel):
     id: str
     title: str
@@ -640,12 +644,103 @@ async def add_stock(stock: StockCreate):
     }
     STOCK_LIST_STORAGE.append(new_stock)
     return new_stock
-
-
+@app.get("/stocks/{stock_code}/quotes", response_model=StockQuoteResponse, summary="获取股票实时行情")
+async def get_stock_quotes(stock_code: str):
+    """
+    获取指定股票的实时行情数据（复用用新浪财经接口）
+    - stock_code: 6位股票代码（如600036）
+    """
+    logger.info(f"请求股票行情: {stock_code}")
+    
+    # 校验股票代码
+    if len(stock_code) != 6 or not stock_code.isdigit():
+        raise HTTPException(status_code=400, detail="股票代码必须是6位数字")
+    
+    # 获取市场代码（sh/sz）
+    market = get_stock_market(stock_code)
+    if not market:
+        raise HTTPException(status_code=400, detail="仅支持沪深A（60/00/30开头）")
+    
+    # 构造新浪行情接口URL（复用现有工具）
+    sina_list = f"{market}{stock_code},{market}{stock_code}_i"
+    sina_url = f"https://hq.sinajs.cn/rn={int(time.time()*1000)}&list={sina_list}"
+    
+    try:
+        # 复用现有请求工具
+        hq_data = fetch_url(sina_url, is_sina_var=True)
+        if not hq_data:
+            raise Exception("新浪接口返回空数据")
+        
+        # 复用用解析函数
+        parsed_data = parse_sina_hq(hq_data)
+        stock_key = f"{market}{stock_code}"
+        supplement_key = f"{market}{stock_code}_i"
+        
+        # 解析核心行情字段（复用字段映射）
+        core_data = parsed_data.get(stock_key, [])
+        core_quotes = {}
+        for field, (idx, _, _, formatter) in CORE_QUOTES_FIELDS.items():
+            value = core_data[idx] if len(core_data) > idx else ""
+            core_quotes[field] = format_field(value, formatter)
+        
+        # 解析补充信息（复用字段映射）
+        supplement_data = parsed_data.get(supplement_key, [])
+        supplement_info = {}
+        for field, (idx, _, _, formatter) in SUPPLEMENT_FIELDS.items():
+            value = supplement_data[idx] if len(supplement_data) > idx else ""
+            supplement_info[field] = format_field(value, formatter)
+        
+        # 构造响应
+        return {
+            "baseInfo": {
+                "stockCode": stock_code,
+                "market": "沪A" if market == "sh" else "深A",
+                "stockName": core_quotes["stockName"],
+                "industry": supplement_info["industry"]
+            },
+            "coreQuotes": core_quotes,
+            "supplementInfo": supplement_info,
+            "dataValidity": {
+                "isValid": core_quotes["currentPrice"] > 0 and core_quotes["stockName"] != "未知名称",
+                "reason": "" if (core_quotes["currentPrice"] > 0 and core_quotes["stockName"] != "未知名称") 
+                          else "股票数据无效（可能停牌、退市或代码错误）"
+            }
+        }
+    
+    except requestsHTTPException as e:
+        logger.error(f"行情接口请求失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="获取行情失败（接口访问受限）")
+    except Exception as e:
+        logger.error(f"行情数据解析失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="行情数据解析失败")
+@app.get("/stocks/quotes")
+async def get_stock_quotes(codes: str):
+    """
+    获取股票行情接口
+    :param codes: 股票代码逗号分隔（如sh600000,sz000001,hk00700,gbBABA）
+    :return: 行情数据
+    """
+    stock_codes = codes.split(',')
+    quotes = DataSource.get_stock_quotes(stock_codes)
+    return {"data": quotes}
 @app.get("/api/stocks", response_model=List[StockItem])
-async def get_all_stocks():
-    """获取所有股票清单"""
-    return STOCK_LIST_STORAGE
+async def get_all_stocks(search: Optional[str] = None):
+    """获取股票清单（支持搜索功能）"""
+    if not search or not search.strip():
+        return STOCK_LIST_STORAGE
+    
+    # 转换关键词为小写以支持大小写不敏感的搜索
+    keyword = search.strip().lower()
+    
+    # 过滤股票清单：匹配股票代码、名称或行业
+    filtered_stocks = [
+        stock for stock in STOCK_LIST_STORAGE
+        if keyword in stock["stockCode"].lower() or
+           keyword in stock["stockName"].lower() or
+           ("industry" in stock and keyword in stock["industry"].lower())
+    ]
+    
+    return filtered_stocks
 
 @app.get("/api/stock/baseInfo/{stockCode}")
 async def get_stock_base_info(stockCode: str):
