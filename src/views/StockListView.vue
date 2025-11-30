@@ -439,61 +439,14 @@ const deleteStock = async (id) => {
           isHold: formData.value.holding // 关键修复：添加isHold字段
         };
         await apiService.updateStock(editingStock.value.id, updateData);
-        
-        // 尝试获取最新行情数据
-        try {
-          const quotes = await apiService.getStockQuotes(formData.value.code);
-          if (quotes && quotes.coreQuotes) {
-            const stockIndex = stocks.value.findIndex(s => s.id === editingStock.value.id);
-            if (stockIndex !== -1) {
-              // 计算涨跌幅
-              const currentPrice = quotes.coreQuotes.currentPrice || 0;
-              const prevClose = quotes.coreQuotes.prevClosePrice || 0;
-              const changeAmount = currentPrice - prevClose;
-              const changeRate = prevClose > 0 ? (changeAmount / prevClose) * 100 : 0;
-              
-              // 更新行情信息
-              stocks.value[stockIndex].price = currentPrice;
-              stocks.value[stockIndex].changeRate = changeRate;
-            }
-          }
-        } catch (quoteErr) {
-          console.warn('获取行情数据失败，使用缓存数据:', quoteErr);
-        }
       } else {
         // 添加股票：后端返回 newStock（字段是 stockCode/stockName/isHold）
-        const newStock = await apiService.addStock(formData.value)
-        
-        // 尝试获取最新行情数据
-        let price = '';
-        let changeRate = 0;
-        try {
-          const quotes = await apiService.getStockQuotes(formData.value.code);
-          if (quotes && quotes.coreQuotes) {
-            // 计算涨跌幅
-            const currentPrice = quotes.coreQuotes.currentPrice || 0;
-            const prevClose = quotes.coreQuotes.prevClosePrice || 0;
-            const changeAmount = currentPrice - prevClose;
-            changeRate = prevClose > 0 ? (changeAmount / prevClose) * 100 : 0;
-            price = currentPrice;
-          }
-        } catch (quoteErr) {
-          console.warn('获取行情数据失败，使用默认值:', quoteErr);
-        }
-        
-        // 新增：字段映射（后端→前端）
-        const mappedNewStock = {
-          code: newStock.stockCode, // 后端stockCode→前端code
-          name: newStock.stockName, // 后端stockName→前端name
-          industry: newStock.industry,
-          holding: newStock.isHold, // 后端isHold→前端holding
-          price: price,
-          changeRate: changeRate,
-          id: newStock.id
-        }
-        stocks.value.push(mappedNewStock) // 存映射后的字段
+        await apiService.addStock(formData.value)
       }
-
+      
+      // 关键更新：保存成功后调用fetchStocks()刷新整个股票列表
+      await fetchStocks();
+      
       closeModal()
     } catch (err) {
       alert(editingStock.value ? '更新股票失败' : '添加股票失败')
@@ -501,7 +454,7 @@ const deleteStock = async (id) => {
     } finally {
       saving.value = false
     }
-}
+  }
 
 // 更新持仓状态
 const updateHoldingStatus = async (id, isHold) => {
