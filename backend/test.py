@@ -16,6 +16,160 @@ import logging  # 新增：用于日志排查
 # 新增：配置简单日志（方便看排查信息）
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# 1. 新增：字段含义映射（新浪财经标准字段，确保不理解错）
+CORE_QUOTES_FIELDS = {
+    "stockName": (0, "股票名称", str, lambda x: x.strip() if x else "未知名称"),
+    "prevClosePrice": (2, "昨收盘价", float, lambda x: float(x) if x and x.replace(".", "").isdigit() else 0.0),
+    "openPrice": (1, "开盘价", float, lambda x: float(x) if x and x.replace(".", "").isdigit() else 0.0),
+    "currentPrice": (3, "最新价", float, lambda x: float(x) if x and x.replace(".", "").isdigit() else 0.0),
+    "highestPrice": (4, "最高价", float, lambda x: float(x) if x and x.replace(".", "").isdigit() else 0.0),
+    "lowestPrice": (5, "最低价", float, lambda x: float(x) if x and x.replace(".", "").isdigit() else 0.0),
+    "buy1Price": (11, "买一价", float, lambda x: float(x) if x and x.replace(".", "").isdigit() else 0.0),
+    "sell1Price": (21, "卖一价", float, lambda x: float(x) if x and x.replace(".", "").isdigit() else 0.0),
+    "volume": (8, "成交量（股）", int, lambda x: int(x) if x and x.isdigit() else 0),
+    "turnover": (9, "成交额（元）", float, lambda x: float(x) if x and x.replace(".", "").isdigit() else 0.0),
+    "tradeDate": (30, "交易日期", str, lambda x: x.strip() if x else ""),
+    "tradeTime": (31, "交易时间", str, lambda x: x.strip() if x else "")
+}
+
+SUPPLEMENT_FIELDS = {
+    "indexCode": (0, "关联指数代码", str, lambda x: x.strip() if x else ""),
+    "indexName": (1, "关联指数名称", str, lambda x: x.strip() if x else "无关联指数"),
+    "indexWeight": (2, "指数权重（‰）", float, lambda x: float(x) if x and x.replace(".", "").isdigit() else 0.0),
+    "isComponent": (3, "是否成分股", bool, lambda x: x == "1" if x else False),
+    "industry": (34, "股票真实行业", str, lambda x: x.strip() if x and x != "," else "未知行业")  # 新增：从xxx_i提取行业
+}
+
+INDUSTRY_PLATE_FIELDS = {
+    "plateName": (0, "板块名称", str, lambda x: x.strip() if x else "未知板块"),
+    "plateIndex": (1, "板块指数", float, lambda x: float(x) if x and x.replace(".", "").isdigit() else 0.0),
+    "plateChangePoint": (2, "板块涨跌点", float, lambda x: float(x) if x and x.replace("-", "").replace(".", "").isdigit() else 0.0),
+    "plateChangeRate": (3, "板块涨跌幅（%）", str, lambda x: x.strip() if x and "%" in x else "0.00%"),
+    "componentCount": (4, "成分股数量", int, lambda x: int(x) if x and x.isdigit() else 0),
+    "plateTurnover": (7, "板块成交额（万元）", float, lambda x: float(x) if x and x.replace(".", "").isdigit() else 0.0),
+    "plateAvgPE": (8, "板块平均PE", float, lambda x: float(x) if x and x.replace(".", "").isdigit() else 0.0)
+}
+
+# 2. 复用原有辅助函数（仅修改解析逻辑，不新增）
+def get_stock_market(stock_code: str) -> Optional[str]:  # 仅改这一行
+    if len(stock_code) != 6 or not stock_code.isdigit():
+        return None
+    return "sh" if stock_code.startswith("60") else "sz" if stock_code.startswith(("00", "30")) else None
+
+def parse_sina_hq(data: str) -> Dict[str, List[str]]:
+    result = {}
+    for match in re.findall(r'var hq_str_([^=]+)="([^"]+)"', data):
+        result[match[0]] = match[1].split(",")
+    return result
+def get_stock_real_industry(stock_code: str, market: str) -> str:
+    """从新浪搜索接口提取个股真实行业（复用已有逻辑）"""
+    try:
+        # 调用新浪搜索接口，获取股票详情（含行业）
+        search_url = f"https://biz.finance.sina.com.cn/suggest/lookup_n.php?country=stock&q={stock_code}"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36",
+            "Referer": "https://finance.sina.com.cn/"
+        }
+        response = requests.get(search_url, headers=headers, timeout=15)
+        response.encoding = "gb2312"
+        soup = BeautifulSoup(response.text, "html.parser")
+        
+        # 找到股票对应的链接（含行业信息）
+        stock_link = soup.find("a", href=re.compile(f"{market}{stock_code}"), text=re.compile(stock_code))
+        if not stock_link:
+            return "未知行业"
+        
+        # 解析链接周边的行业信息（新浪搜索结果格式：股票名 行业）
+        link_text = stock_link.get_text(strip=True)
+        # 匹配格式：sz003009 中天火箭 国防军工 或 中天火箭(003009) 国防军工
+        industry_match = re.search(r"(国防军工|信息技术|医药生物|新能源|电子制造|机械设备|化工|食品饮料|银行|证券|家电)", link_text)
+        if industry_match:
+            return industry_match.group(1)
+        
+        # 若未直接匹配，从父节点提取
+        parent_div = stock_link.find_parent("div", class_="list")
+        if parent_div:
+            parent_text = parent_div.get_text(strip=True)
+            for industry in ["国防军工", "信息技术", "医药生物", "新能源", "电子制造", "机械设备", "化工", "食品饮料", "银行", "证券", "家电"]:
+                if industry in parent_text:
+                    return industry
+        return "未知行业"
+    except Exception as e:
+        logger.error(f"获取股票{stock_code}行业失败：{str(e)}")
+        return "未知行业"
+# 3. 新增：数据校验与格式化函数（最小新增）
+def format_field(value: str, func: callable) -> any:
+    """统一校验并格式化字段"""
+    try:
+        return func(value)
+    except Exception:
+        return func("")
+
+def get_stock_base_info(stockCode: str):
+    logger.info(f"收到股票基础信息请求：{stockCode}")
+    
+    if len(stockCode) != 6 or not stockCode.isdigit():
+        raise HTTPException(status_code=400, detail="股票代码必须是6位数字")
+    
+    market = get_stock_market(stockCode)
+    if not market:
+        raise HTTPException(status_code=400, detail="仅支持沪深A（60/00/30开头）")
+    
+    # 关键修改1：去掉bk_new_jdhy，不查询无用板块数据
+    sina_list = f"{market}{stockCode},{market}{stockCode}_i"
+    sina_url = f"https://hq.sinajs.cn/rn={int(time.time()*1000)}&list={sina_list}"
+    
+    try:
+        hq_data = fetch_url(sina_url, is_sina_var=True)
+        if not hq_data:
+            raise Exception("新浪接口返回空数据")
+        
+        parsed_data = parse_sina_hq(hq_data)
+        stock_key = f"{market}{stockCode}"
+        supplement_key = f"{market}{stockCode}_i"
+        
+        # 解析核心行情（不变）
+        core_data = parsed_data.get(stock_key, [])
+        core_quotes = {}
+        for field, (idx, desc, _, formatter) in CORE_QUOTES_FIELDS.items():
+            value = core_data[idx] if len(core_data) > idx else ""
+            core_quotes[field] = format_field(value, formatter)
+        
+        # 解析补充信息（不变，自动包含新增的industry字段）
+        supplement_data = parsed_data.get(supplement_key, [])
+        supplement_info = {}
+        for field, (idx, desc, _, formatter) in SUPPLEMENT_FIELDS.items():
+            value = supplement_data[idx] if len(supplement_data) > idx else ""
+            supplement_info[field] = format_field(value, formatter)
+        
+        # 关键修改2：baseInfo中直接用补充信息里的真实行业（替换之前的plateName）
+        final_result = {
+            "baseInfo": {
+                "stockCode": stockCode,
+                "market": "沪A" if market == "sh" else "深A",
+                "stockName": core_quotes["stockName"],
+                "industry": supplement_info["industry"]  # 从xxx_i提取的真实行业（如通信设备）
+            },
+            "coreQuotes": core_quotes,
+            "supplementInfo": supplement_info,
+            # 关键修改3：去掉无用的industryPlate字段
+            "dataValidity": {
+                "isValid": core_quotes["currentPrice"] > 0 and core_quotes["stockName"] != "未知名称",
+                "reason": "" if (core_quotes["currentPrice"] > 0 and core_quotes["stockName"] != "未知名称") 
+                          else "股票数据无效（可能停牌、退市或代码错误）"
+            }
+        }
+        
+        logger.info(f"股票{stockCode}信息查询成功，行业：{supplement_info['industry']}")
+        return final_result
+    
+    except requests.exceptions.RequestException as e:
+        logger.error(f"新浪行情接口请求失败：{str(e)}")
+        raise HTTPException(status_code=500, detail="获取股票行情失败（接口访问受限）")
+    except Exception as e:
+        logger.error(f"股票数据解析失败：{str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="行情数据解析失败")
 def fetch_url(url: str, timeout: int = 10, is_sina_var: bool = False) -> Optional[Union[dict, str]]:
     """
     新浪财经接口请求工具（is_sina_var默认False，兼容旧调用）
@@ -41,7 +195,6 @@ def fetch_url(url: str, timeout: int = 10, is_sina_var: bool = False) -> Optiona
     except Exception as e:
         print(f"接口请求失败: {url} | 错误: {str(e)}")
         return None
-
 def search_stocks(keyword: str):
     """搜索股票（精准适配页面：解析默认+隐藏容器，提取全部50条个股数据）"""
     if not keyword.strip():
@@ -148,8 +301,11 @@ def search_stocks(keyword: str):
     except Exception as e:
         logger.error(f"股票搜索解析失败：{str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="股票搜索失败，请重试")
-
+def test():
+    sina_url = f"https://hq.sinajs.cn/rn=list"
+    hq_data = fetch_url(sina_url)
+    print(f"新浪行情原始数据：{hq_data}")
 # 执行（创业板成交额接近4600亿元）
 if __name__ == "__main__":
-    market_details= search_stocks('300')
+    market_details= get_stock_base_info('300308')
     print(market_details)

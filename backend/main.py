@@ -32,6 +32,61 @@ NOTES_STORAGE: List[Dict[str, str]] = []
 # 股票清单存储（id: str, stockCode: str, stockName: str, addTime: str, remark: str, isHold: bool）
 STOCK_LIST_STORAGE: List[Dict[str, Any]] = []
 
+# 1. 新增：字段含义映射（新浪财经标准字段，确保不理解错）
+CORE_QUOTES_FIELDS = {
+    "stockName": (0, "股票名称", str, lambda x: x.strip() if x else "未知名称"),
+    "prevClosePrice": (2, "昨收盘价", float, lambda x: float(x) if x and x.replace(".", "").isdigit() else 0.0),
+    "openPrice": (1, "开盘价", float, lambda x: float(x) if x and x.replace(".", "").isdigit() else 0.0),
+    "currentPrice": (3, "最新价", float, lambda x: float(x) if x and x.replace(".", "").isdigit() else 0.0),
+    "highestPrice": (4, "最高价", float, lambda x: float(x) if x and x.replace(".", "").isdigit() else 0.0),
+    "lowestPrice": (5, "最低价", float, lambda x: float(x) if x and x.replace(".", "").isdigit() else 0.0),
+    "buy1Price": (11, "买一价", float, lambda x: float(x) if x and x.replace(".", "").isdigit() else 0.0),
+    "sell1Price": (21, "卖一价", float, lambda x: float(x) if x and x.replace(".", "").isdigit() else 0.0),
+    "volume": (8, "成交量（股）", int, lambda x: int(x) if x and x.isdigit() else 0),
+    "turnover": (9, "成交额（元）", float, lambda x: float(x) if x and x.replace(".", "").isdigit() else 0.0),
+    "tradeDate": (30, "交易日期", str, lambda x: x.strip() if x else ""),
+    "tradeTime": (31, "交易时间", str, lambda x: x.strip() if x else "")
+}
+
+SUPPLEMENT_FIELDS = {
+    "indexCode": (0, "关联指数代码", str, lambda x: x.strip() if x else ""),
+    "indexName": (1, "关联指数名称", str, lambda x: x.strip() if x else "无关联指数"),
+    "indexWeight": (2, "指数权重（‰）", float, lambda x: float(x) if x and x.replace(".", "").isdigit() else 0.0),
+    "isComponent": (3, "是否成分股", bool, lambda x: x == "1" if x else False),
+    "industry": (34, "股票真实行业", str, lambda x: x.strip() if x and x != "," else "未知行业")  # 新增：从xxx_i提取行业
+}
+
+INDUSTRY_PLATE_FIELDS = {
+    "plateName": (0, "板块名称", str, lambda x: x.strip() if x else "未知板块"),
+    "plateIndex": (1, "板块指数", float, lambda x: float(x) if x and x.replace(".", "").isdigit() else 0.0),
+    "plateChangePoint": (2, "板块涨跌点", float, lambda x: float(x) if x and x.replace("-", "").replace(".", "").isdigit() else 0.0),
+    "plateChangeRate": (3, "板块涨跌幅（%）", str, lambda x: x.strip() if x and "%" in x else "0.00%"),
+    "componentCount": (4, "成分股数量", int, lambda x: int(x) if x and x.isdigit() else 0),
+    "plateTurnover": (7, "板块成交额（万元）", float, lambda x: float(x) if x and x.replace(".", "").isdigit() else 0.0),
+    "plateAvgPE": (8, "板块平均PE", float, lambda x: float(x) if x and x.replace(".", "").isdigit() else 0.0)
+}
+
+# 2. 复用原有辅助函数（仅修改解析逻辑，不新增）
+def get_stock_market(stock_code: str) -> Optional[str]:  # 仅改这一行
+    if len(stock_code) != 6 or not stock_code.isdigit():
+        return None
+    return "sh" if stock_code.startswith("60") else "sz" if stock_code.startswith(("00", "30")) else None
+
+def parse_sina_hq(data: str) -> Dict[str, List[str]]:
+    result = {}
+    for match in re.findall(r'var hq_str_([^=]+)="([^"]+)"', data):
+        result[match[0]] = match[1].split(",")
+    return result
+
+# 3. 新增：数据校验与格式化函数（最小新增）
+def format_field(value: str, func: callable) -> any:
+    """统一校验并格式化字段"""
+    try:
+        return func(value)
+    except Exception:
+        return func("")
+
+
 # -------------- 工具函数（仅保留必要）--------------
 def fetch_url(url: str, timeout: int = 10, is_sina_var: bool = False) -> Optional[Union[dict, str]]:
     """
@@ -565,7 +620,7 @@ async def get_stock(stock_id: str):
         raise HTTPException(status_code=404, detail="股票不存在")
     return stock
 
-@app.post("/api/stocks", response_model=StockItem)
+@app.post("/api/stock/add", response_model=StockItem)
 async def add_stock(stock: StockCreate):
     """添加股票到清单"""
     # 检查股票代码是否已存在
@@ -580,7 +635,8 @@ async def add_stock(stock: StockCreate):
         "stockName": stock.stockName,
         "addTime": now,
         "remark": stock.remark,
-        "isHold": stock.isHold
+        "isHold": stock.isHold,
+        "industry": stock.industry,
     }
     STOCK_LIST_STORAGE.append(new_stock)
     return new_stock
@@ -590,6 +646,72 @@ async def add_stock(stock: StockCreate):
 async def get_all_stocks():
     """获取所有股票清单"""
     return STOCK_LIST_STORAGE
+
+@app.get("/api/stock/baseInfo/{stockCode}")
+async def get_stock_base_info(stockCode: str):
+    logger.info(f"收到股票基础信息请求：{stockCode}")
+    
+    if len(stockCode) != 6 or not stockCode.isdigit():
+        raise HTTPException(status_code=400, detail="股票代码必须是6位数字")
+    
+    market = get_stock_market(stockCode)
+    if not market:
+        raise HTTPException(status_code=400, detail="仅支持沪深A（60/00/30开头）")
+    
+    # 关键修改1：去掉bk_new_jdhy，不查询无用板块数据
+    sina_list = f"{market}{stockCode},{market}{stockCode}_i"
+    sina_url = f"https://hq.sinajs.cn/rn={int(time.time()*1000)}&list={sina_list}"
+    
+    try:
+        hq_data = fetch_url(sina_url, is_sina_var=True)
+        if not hq_data:
+            raise Exception("新浪接口返回空数据")
+        
+        parsed_data = parse_sina_hq(hq_data)
+        stock_key = f"{market}{stockCode}"
+        supplement_key = f"{market}{stockCode}_i"
+        
+        # 解析核心行情（不变）
+        core_data = parsed_data.get(stock_key, [])
+        core_quotes = {}
+        for field, (idx, desc, _, formatter) in CORE_QUOTES_FIELDS.items():
+            value = core_data[idx] if len(core_data) > idx else ""
+            core_quotes[field] = format_field(value, formatter)
+        
+        # 解析补充信息（不变，自动包含新增的industry字段）
+        supplement_data = parsed_data.get(supplement_key, [])
+        supplement_info = {}
+        for field, (idx, desc, _, formatter) in SUPPLEMENT_FIELDS.items():
+            value = supplement_data[idx] if len(supplement_data) > idx else ""
+            supplement_info[field] = format_field(value, formatter)
+        
+        # 关键修改2：baseInfo中直接用补充信息里的真实行业（替换之前的plateName）
+        final_result = {
+            "baseInfo": {
+                "stockCode": stockCode,
+                "market": "沪A" if market == "sh" else "深A",
+                "stockName": core_quotes["stockName"],
+                "industry": supplement_info["industry"]  # 从xxx_i提取的真实行业（如通信设备）
+            },
+            "coreQuotes": core_quotes,
+            "supplementInfo": supplement_info,
+            # 关键修改3：去掉无用的industryPlate字段
+            "dataValidity": {
+                "isValid": core_quotes["currentPrice"] > 0 and core_quotes["stockName"] != "未知名称",
+                "reason": "" if (core_quotes["currentPrice"] > 0 and core_quotes["stockName"] != "未知名称") 
+                          else "股票数据无效（可能停牌、退市或代码错误）"
+            }
+        }
+        
+        logger.info(f"股票{stockCode}信息查询成功，行业：{supplement_info['industry']}")
+        return final_result
+    
+    except requests.exceptions.RequestException as e:
+        logger.error(f"新浪行情接口请求失败：{str(e)}")
+        raise HTTPException(status_code=500, detail="获取股票行情失败（接口访问受限）")
+    except Exception as e:
+        logger.error(f"股票数据解析失败：{str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="行情数据解析失败")
 
 @app.get("/api/stocks/search/{keyword}")
 async def search_stocks(keyword: str):

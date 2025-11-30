@@ -385,7 +385,7 @@ const deleteStock = async (code) => {
 
 // 保存股票
 const saveStock = async () => {
-  if (!formData.value.code || !formData.value.name || !formData.industry) {
+if (!formData.value.code?.trim() || !formData.value.name?.trim() || !formData.value.industry?.trim()) {
     alert('请先查询并选择股票（需包含行业信息）')
     return
   }
@@ -465,7 +465,7 @@ const handleStockSearch = async () => {
 // 核心修复2：确保函数语法正确，无括号/引号问题
 const fetchStockBaseInfo = async (stockCode) => {
   try {
-    const requestUrl = '/api/stocks/baseInfo/' + encodeURIComponent(stockCode)
+    const requestUrl = '/api/stock/baseInfo/' + stockCode
     const response = await axios.get(requestUrl)
     return response.data
   } catch (err) {
@@ -483,7 +483,7 @@ const selectSearchResult = async (item) => {
     formData.value = {
       code: item.stockCode,
       name: item.stockName,
-      industry: stockDetail.industry || '未获取到行业信息',
+      industry: stockDetail.supplementInfo.industry || '未获取到行业信息',
       holding: formData.value.holding
     }
     modalSearchKeyword.value = item.stockName + ' (' + item.stockCode + ')'

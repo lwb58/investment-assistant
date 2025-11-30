@@ -47,7 +47,7 @@ class ApiService {
    * @returns {Promise<Object>} 创建的股票
    */
   async addStock(stockData) {
-    return this.request('POST', `/stocks`, {
+    return this.request('POST', `/stocks/add`, {
       body: JSON.stringify(stockData)
     });
   }
