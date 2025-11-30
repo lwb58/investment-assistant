@@ -1,1041 +1,1195 @@
 <template>
-  <div class="stock-list-container">
-    <!-- 页面头部 -->
-    <div class="card mb-3">
-      <div class="card-header">
-        <h2 class="card-title">股票清单</h2>
-        <div class="header-actions flex items-center gap-2">
-          <div class="search-box relative">
-            <span class="search-icon absolute left-3 top-1/2 transform -translate-y-1/2 text-tertiary">🔍</span>
-            <input 
-              type="text" 
-              placeholder="搜索股票代码、名称或行业"
-              v-model="searchKeyword"
-              class="pl-10 pr-4 py-2 w-64 focus:outline-none"  <!-- 保留原始Tailwind类名 -->
-            />
-          </div>
-          <button 
-            class="btn primary"
-            @click="showAddModal = true"
-            :class="{ 'loading': saving }"
-          >
-            <span class="btn-icon">➕</span>
-            添加股票
-          </button>
+  <div class="notes-container">
+    <div class="page-header">
+      <h1>投资笔记</h1>
+      <div class="header-actions">
+        <div class="view-switcher">
+          <el-radio-group v-model="viewMode" size="small">
+            <el-radio-button label="card">
+              <i class="el-icon-s-grid"></i>
+              卡片视图
+            </el-radio-button>
+            <el-radio-button label="list">
+              <i class="el-icon-menu"></i>
+              列表视图
+            </el-radio-button>
+          </el-radio-group>
         </div>
-      </div>
-    </div>
-
-    <!-- 统计信息卡片 -->
-    <div class="stats-cards grid grid-cols-3 gap-3 mb-3">
-      <div class="stat-card card flex flex-col items-center justify-center p-4">
-        <div class="stat-value text-2xl font-bold text-primary">{{ totalStocks }}</div>
-        <div class="stat-label text-secondary">总股票数</div>
-      </div>
-      <div class="stat-card card flex flex-col items-center justify-center p-4">
-        <div class="stat-value text-2xl font-bold text-success">{{ holdingStocks }}</div>
-        <div class="stat-label text-secondary">持仓数量</div>
-      </div>
-      <div class="stat-card card flex flex-col items-center justify-center p-4">
-        <div class="stat-value text-2xl font-bold text-warning">{{ watchingStocks }}</div>
-        <div class="stat-label text-secondary">关注数量</div>
-      </div>
-    </div>
-
-    <!-- 加载状态 -->
-    <div v-if="loading" class="loading-container">
-      <div class="loading-spinner"></div>
-      <p class="loading-text">加载股票数据中...</p>
-    </div>
-    
-    <!-- 错误信息 -->
-    <div v-else-if="error" class="error-message bg-red-50 border border-red-200 text-red-600 p-4 rounded-lg flex items-center">
-      <span class="error-icon mr-2">⚠️</span>
-      {{ error }}
-    </div>
-
-    <!-- 股票列表 -->
-    <div v-else class="card">
-      <div class="table-responsive">
-        <table class="stock-table">
-          <thead>
-            <tr>
-              <th>股票代码</th>
-              <th>股票名称</th>
-              <th>最新价格</th>
-              <th>涨跌幅</th>
-              <th>所属行业</th>
-              <th>持仓状态</th>
-              <th class="text-right">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr 
-              v-for="stock in filteredStocks" 
-              :key="stock.id"  <!-- 仅修改：key改为后端id -->
-              class="table-row"
-            >
-              <td>
-                <router-link 
-                  :to="'/stock-detail/' + stock.stockCode"  <!-- 仅修改：code→stockCode（后端字段） -->
-                  class="stock-code hover:text-primary transition-colors font-medium"
-                >
-                  {{ stock.stockCode }}  <!-- 仅修改：code→stockCode -->
-                </router-link>
-              </td>
-              <td class="font-medium">{{ stock.stockName }}</td>  <!-- 仅修改：name→stockName -->
-              <!-- 仅修改：后端无实时价格，显示--避免报错 -->
-              <td class="price font-semibold">--</td>
-              <td>
-                <span 
-                  :class="[
-                    'change-rate', 
-                    'inline-flex items-center px-2 py-1 rounded-full text-sm font-medium',
-                    // 仅修改：无涨跌幅数据，显示灰色占位
-                    'bg-gray-50 text-gray-600'
-                  ]"
-                >
-                  <span class="change-icon">--</span>
-                  --%
-                </span>
-              </td>
-              <td>
-                <span class="industry-badge px-2 py-1 bg-blue-50 text-blue-600 rounded-full text-xs">
-                  {{ stock.industry || '未填写' }}  <!-- 仅修改：保留industry字段，无则提示 -->
-                </span>
-              </td>
-              <td>
-                <div class="status-container flex items-center">
-                  <label class="switch">
-                    <input 
-                      type="checkbox" 
-                      :checked="stock.isHold ?? false"  <!-- 同步补充空值判断，更稳妥 -->
-                      @change="updateHoldingStatus(stock.id, !((stock.isHold ?? false)))"
-                    />
-                    <span class="slider"></span>
-                  </label>
-                  <span 
-                    :class="[
-                      'status-text ml-2 text-sm',
-                      (stock.isHold ?? false) ? 'text-primary font-medium' : 'text-secondary'
-                    ]"
-                  >
-                    {{ (stock.isHold ?? false) ? '持有' : '关注' }}
-                  </span>
-                </div>
-              </td>
-              <td class="actions text-right">
-                <div class="inline-flex gap-1">
-                  <button 
-                    class="action-btn edit-btn" 
-                    @click="editStock(stock)"
-                    title="编辑"
-                  >
-                    ✏️
-                  </button>
-                  <button 
-                    class="action-btn delete-btn" 
-                    @click="deleteStock(stock.id)"  <!-- 仅修改：传id（后端唯一标识） -->
-                    title="删除"
-                  >
-                    🗑️
-                  </button>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <div v-if="filteredStocks.length === 0" class="empty-state py-16">
-        <div class="empty-icon text-6xl mb-4">📊</div>
-        <h3 class="text-lg font-medium text-secondary mb-2">暂无股票数据</h3>
-        <p class="text-tertiary mb-6">点击"添加股票"按钮开始管理您的投资组合</p>
-        <button 
-          class="btn primary"
-          @click="showAddModal = true"
-        >
-          添加第一支股票
+        <button class="add-note-btn" @click="showNoteModal = true">
+          <i class="el-icon-plus"></i>
+          新建笔记
         </button>
       </div>
     </div>
 
-    <!-- 添加/编辑股票弹窗 -->
-    <div v-if="showAddModal" class="modal-overlay" @click.self="closeModal">
-      <div class="modal" :class="{ 'scale-up': true }">
-        <div class="modal-header">
-          <h3 class="text-xl font-semibold">{{ editingStock ? '编辑股票' : '添加股票' }}</h3>
-          <button class="close-btn" @click="closeModal" aria-label="关闭">
-            ✕
-          </button>
-        </div>
-        <div class="modal-body">
-          <form @submit.prevent="saveStock">
-            <div class="form-group">
-              <label class="block text-secondary mb-1 font-medium">股票代码或名称 <span class="text-xs text-tertiary">(支持模糊搜索)</span></label>
-              <div class="relative flex space-x-2">
-                <input 
-                  type="text" 
-                  v-model="modalSearchKeyword"
-                  :disabled="!!editingStock"
-                  placeholder="输入股票代码或名称搜索"
-                  class="flex-1 p-2 border rounded focus:outline-none"  <!-- 保留原始类名 -->
-                  @focus="handleSearchFocus"
-                  @blur="handleSearchBlur"
-                  required
-                />
-                <button 
-                  type="button" 
-                  class="btn primary whitespace-nowrap"
-                  @click="handleStockSearch"
-                  :disabled="!modalSearchKeyword.trim() || !!editingStock"
-                >
-                  查询
-                </button>
-                
-                <!-- 搜索建议列表 -->
-                <div 
-                  v-if="showSearchResults && searchResults.length > 0" 
-                  class="search-results absolute z-10 top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded shadow-lg max-h-60 overflow-y-auto"
-                >
-                  <div 
-                    v-for="item in searchResults" 
-                    :key="item.stockCode"  <!-- 仅修改：code→stockCode（后端字段） -->
-                    class="search-item p-2 hover:bg-gray-100 cursor-pointer flex justify-between items-center"  <!-- 保留原始类名 -->
-                    @mousedown.prevent="selectSearchResult(item)"
-                  >
-                    <div>
-                      <div class="font-medium">{{ item.stockName }}</div>  <!-- 仅修改：name→stockName -->
-                      <div class="text-xs text-gray-500">{{ item.stockCode }}</div>  <!-- 仅修改：code→stockCode -->
-                    </div>
-                    <!-- 仅修改：后端返回market字段，替换原industry显示 -->
-                    <span class="text-xs px-2 py-1 bg-blue-50 text-blue-600 rounded-full">{{ item.market }}</span>
-                  </div>
-                </div>
-                
-                <!-- 加载状态 -->
-                <div v-else-if="searching" class="search-loading absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400">
-                  <span class="inline-block animate-spin"></span>
-                </div>
-              </div>
-            </div>
-            <div class="form-group">
-              <label class="block text-secondary mb-1 font-medium">股票代码</label>
-              <input 
-                type="text" 
-                v-model="formData.stockCode"  <!-- 仅修改：code→stockCode -->
-                :disabled="!!editingStock || !!searchKeyword"
-                placeholder="股票代码"
-                class="w-full p-2 border rounded focus:outline-none"  <!-- 保留原始类名 -->
-                required
-              />
-            </div>
-            <div class="form-group">
-              <label class="block text-secondary mb-1 font-medium">股票名称</label>
-              <input 
-                type="text" 
-                v-model="formData.stockName"  <!-- 仅修改：name→stockName -->
-                placeholder="请输入股票名称"
-                class="w-full p-2 border rounded focus:outline-none"  <!-- 保留原始类名 -->
-                required
-              />
-            </div>
-            <div class="form-group">
-              <label class="block text-secondary mb-1 font-medium">所属行业</label>
-              <input 
-                type="text" 
-                v-model="formData.industry"
-                placeholder="请输入所属行业"
-                class="w-full p-2 border rounded focus:outline-none"  <!-- 保留原始类名 -->
-              />
-            </div>
-            <div class="form-group">
-              <label class="block text-secondary mb-1 font-medium">持仓状态</label>
-              <select 
-                v-model="formData.isHold"  <!-- 仅修改：holding→isHold（后端字段） -->
-                class="w-full p-2 border rounded focus:outline-none"  <!-- 保留原始类名 -->
-              >
-                <option :value="false">关注</option>
-                <option :value="true">持有</option>
-              </select>
-            </div>
-          </form>
-        </div>
-        <div class="modal-footer">
-          <button class="btn" @click="closeModal">取消</button>
-          <button 
-            class="btn primary" 
-            @click="saveStock" 
-            :disabled="saving || !formData.stockCode || !formData.stockName"  <!-- 仅修改：code→stockCode -->
+    <!-- 搜索和筛选区域 -->
+    <div class="search-filter-section">
+      <el-form :inline="true" size="small">
+        <el-form-item label="搜索内容">
+          <el-input
+            v-model="searchKeyword"
+            placeholder="输入关键词搜索笔记"
+            clearable
+            @input="handleSearch"
+            style="width: 300px;"
           >
-            {{ saving ? '保存中...' : '保存' }}
-          </button>
+            <template #prefix>
+              <i class="el-icon-search"></i>
+            </template>
+          </el-input>
+        </el-form-item>
+        <el-form-item label="关联股票">
+          <el-select
+            v-model="selectedStock"
+            placeholder="选择关联股票"
+            filterable
+            clearable
+            allow-create
+            @change="handleSearch"
+            style="width: 200px;"
+          >
+            <el-option
+              v-for="stock in availableStocks"
+              :key="stock.value"
+              :label="stock.label"
+              :value="stock.value"
+            />
+          </el-select>
+        </el-form-item>
+      </el-form>
+    </div>
+
+    <!-- 笔记列表 - 卡片视图 -->
+    <div class="notes-grid" v-if="viewMode === 'card'" v-loading="loading">
+      <div
+          v-for="note in filteredNotes"
+          :key="note.id"
+          class="note-card"
+          @click="viewNote(note)"
+        >
+        <div class="note-header">
+          <h3 class="note-title">{{ truncateText(note.title, 20) }}</h3>
+          <div class="note-actions">
+            <el-button
+              type="text"
+              size="small"
+              @click.stop="editNote(note)"
+            >
+              编辑
+            </el-button>
+            <el-button
+              type="text"
+              size="small"
+              @click.stop="confirmDelete(note)"
+              class="delete-btn"
+            >
+              删除
+            </el-button>
+          </div>
+        </div>
+        <p class="note-content">{{ truncateText(note.content, 100) }}</p>
+        <div class="note-footer">
+          <span v-if="note.relatedStock" class="stock-tag">
+            <i class="el-icon-finished"></i>
+            {{ getStockLabel(note.relatedStock) }}
+          </span>
+          <span class="update-time">{{ formatDate(note.update_time) }}</span>
         </div>
       </div>
+      
+      <div v-if="!loading && filteredNotes.length === 0" class="empty-notes">
+        <i class="el-icon-document"></i>
+        <p>暂无笔记，点击上方按钮新建</p>
+      </div>
     </div>
+
+    <!-- 笔记列表 - 表格视图 -->
+    <div class="notes-table-container" v-else-if="viewMode === 'list'" v-loading="loading">
+      <el-table
+        :data="notes"
+        style="width: 100%"
+        @row-click="handleTableRowClick"
+      >
+        <el-table-column
+          prop="title"
+          label="标题"
+          min-width="200"
+          show-overflow-tooltip
+        >
+          <template #default="scope">
+            <span class="note-title-text">{{ scope.row.title }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column
+          prop="content"
+          label="内容"
+          min-width="300"
+        >
+          <template #default="scope">
+            <span class="note-content-text">{{ truncateText(scope.row.content, 100) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column
+          prop="relatedStock"
+          label="关联股票"
+          width="120"
+        >
+          <template #default="scope">
+            <el-tag v-if="scope.row.relatedStock" size="small" type="primary" effect="plain">
+              {{ getStockLabel(scope.row.relatedStock) }}
+            </el-tag>
+            <span v-else class="text-gray-400">无</span>
+          </template>
+        </el-table-column>
+        <el-table-column
+          prop="update_time"
+          label="更新时间"
+          width="160"
+          sortable
+        >
+          <template #default="scope">
+            <span>{{ formatDate(scope.row.update_time) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column
+          label="操作"
+          width="180"
+          fixed="right"
+        >
+          <template #default="scope">
+            <el-button
+              type="text"
+              size="small"
+              @click.stop="viewNote(scope.row)"
+            >
+              查看
+            </el-button>
+            <el-button
+              type="text"
+              size="small"
+              @click.stop="editNote(scope.row)"
+            >
+              编辑
+            </el-button>
+            <el-button
+              type="text"
+              size="small"
+              @click.stop="confirmDelete(scope.row)"
+              class="delete-btn"
+            >
+              删除
+            </el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      
+      <div v-if="!loading && notes.length === 0" class="empty-notes">
+        <i class="el-icon-document"></i>
+        <p>暂无笔记，点击上方按钮新建</p>
+      </div>
+    </div>
+
+    <!-- 笔记详情弹窗 -->
+    <el-dialog
+      v-model="showNoteDetail"
+      :title="selectedNote?.title || '笔记详情'"
+      width="700px"
+      :before-close="closeNoteDetail"
+    >
+      <div class="note-detail">
+        <div class="note-meta">
+          <span>创建时间: {{ formatDate(selectedNote?.create_time) }}</span>
+          <span>更新时间: {{ formatDate(selectedNote?.update_time) }}</span>
+        </div>
+        <div class="note-content-detail">
+          <div v-if="selectedNote?.relatedStock" class="related-stock-info">
+            <el-tag size="small" effect="plain" type="primary">
+              <i class="el-icon-finished"></i>
+              关联股票: {{ getStockLabel(selectedNote.relatedStock) }}
+            </el-tag>
+          </div>
+          <div class="note-content-rendered" v-html="renderNoteContent(selectedNote?.content || '')"></div>
+        </div>
+      </div>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="closeNoteDetail">关闭</el-button>
+          <el-button type="primary" @click="editCurrentNote">编辑</el-button>
+        </span>
+      </template>
+    </el-dialog>
+
+    <!-- 添加/编辑笔记弹窗 -->
+    <el-dialog
+      v-model="showNoteModal"
+      :title="editingNote ? '编辑笔记' : '新建笔记'"
+      width="85%"  <!-- 增加宽度百分比，更好适应不同屏幕 -->
+      :fullscreen="false"
+      append-to-body
+    >
+      <el-form
+        ref="noteForm"
+        :model="noteForm"
+        :rules="noteFormRules"
+        label-width="80px"
+      >
+        <el-form-item label="标题" prop="title">
+          <el-input v-model="noteForm.title" placeholder="请输入笔记标题" maxlength="50" show-word-limit />
+        </el-form-item>
+        <el-form-item label="关联股票">
+          <el-select
+            v-model="noteForm.relatedStock"
+            placeholder="选择关联股票"
+            filterable
+            clearable
+            allow-create
+          >
+            <el-option
+              v-for="stock in availableStocks"
+              :key="stock.value"
+              :label="stock.label"
+              :value="stock.value"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="内容" prop="content">
+          <div class="rich-text-editor">
+            <el-input
+              ref="contentInput"
+              v-model="noteForm.content"
+              type="textarea"
+              :rows="15"
+              placeholder="请输入笔记内容，可直接粘贴图片（粘贴后图片将直接显示在文本中）"
+              maxlength="5000"
+              show-word-limit
+              @paste="handlePaste"
+            />
+            <!-- 图片将直接在文本中展示，不再需要单独的预览区域 -->
+          </div>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="cancelAddEdit">取消</el-button>
+          <el-button type="primary" @click="saveNote">保存</el-button>
+        </span>
+      </template>
+    </el-dialog>
+
+    <!-- 删除确认弹窗 -->
+    <el-dialog
+      v-model="showDeleteConfirm"
+      title="确认删除"
+      width="30%"
+      center
+    >
+      <span>确定要删除笔记 "{{ selectedNoteForDelete?.title }}" 吗？</span>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="showDeleteConfirm = false">取消</el-button>
+          <el-button type="danger" @click="deleteNote">删除</el-button>
+        </span>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
-<script setup>
-import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
-import axios from 'axios'  // 仅修改：替换apiService为axios（适配后端接口）
+<script>
+import axios from 'axios';
+import { ElMessage } from 'element-plus';
 
-const router = useRouter()
-const showAddModal = ref(false)
-const editingStock = ref(null)
-const stocks = ref([])
-const loading = ref(false)
-const saving = ref(false)
-const error = ref(null)
-
-// 表单数据（仅修改：适配后端字段名）
-const formData = ref({
-  id: '',  // 新增：后端唯一标识id
-  stockCode: '',  // 原code→stockCode
-  stockName: '',  // 原name→stockName
-  industry: '',
-  isHold: false,  // 原holding→isHold
-  remark: ''  // 新增：后端需要的remark字段
-})
-
-// 搜索相关状态
-const searchResults = ref([])
-const showSearchResults = ref(false)
-const searching = ref(false)
-const searchKeyword = ref('')  // 主列表搜索关键词（本地过滤）
-const modalSearchKeyword = ref('')  // 弹窗搜索关键词，独立变量
-
-// 计算过滤后的股票列表（仅修改：适配后端字段名）
-const filteredStocks = computed(() => {
-  if (!searchKeyword.value) {
-    return stocks.value
-  }
-  const keyword = searchKeyword.value.toLowerCase()
-  return stocks.value.filter(stock => 
-    stock.stockCode.toLowerCase().includes(keyword) ||  // 原code→stockCode
-    stock.stockName.toLowerCase().includes(keyword) ||  // 原name→stockName
-    (stock.industry && stock.industry.toLowerCase().includes(keyword))
-  )
-})
-
-// 统计信息（仅修改：适配后端isHold字段）
-const totalStocks = computed(() => stocks.value.length)
-const holdingStocks = computed(() => stocks.value.filter(s => s.isHold).length)  // 原holding→isHold
-const watchingStocks = computed(() => stocks.value.filter(s => !s.isHold).length)  // 原holding→isHold
-
-// 初始化数据（仅修改：接口路径适配后端/api/stocks）
-onMounted(() => {
-  fetchStocks()
-})
-
-// 获取股票列表（仅修改：调用后端GET /api/stocks）
-const fetchStocks = async () => {
-  loading.value = true
-  error.value = null
-  try {
-    const response = await axios.get('/api/stocks')
-    stocks.value = response.data  // 后端返回[{id, stockCode, stockName, ...}]
-  } catch (err) {
-    error.value = '加载股票数据失败'
-    console.error('获取股票列表失败:', err)
-  } finally {
-    loading.value = false
-  }
-}
-
-// 格式化价格（占位符，无实际数据）
-const formatPrice = (price) => {
-  return price ? price.toFixed(2) : '--'
-}
-
-// 编辑股票（仅修改：适配后端字段名）
-const editStock = (stock) => {
-  editingStock.value = stock
-  formData.value = {
-    id: stock.id,
-    stockCode: stock.stockCode,
-    stockName: stock.stockName,
-    industry: stock.industry || '',
-    isHold: stock.isHold,
-    remark: stock.remark || ''
-  }
-  modalSearchKeyword.value = `${stock.stockName} (${stock.stockCode})`
-  showAddModal.value = true
-}
-
-// 删除股票（仅修改：调用后端DELETE /api/stocks/{id}）
-const deleteStock = async (id) => {
-  if (confirm('确定要删除这支股票吗？')) {
-    try {
-      await axios.delete(`/api/stocks/${id}`)
-      stocks.value = stocks.value.filter(stock => stock.id !== id)
-    } catch (err) {
-      alert('删除股票失败')
-      console.error('删除股票失败:', err)
-      await fetchStocks()
-    }
-  }
-}
-
-// 保存股票（仅修改：调用后端POST/PUT /api/stocks）
-const saveStock = async () => {
-  // 表单验证（仅修改：字段名适配）
-  if (!formData.value.stockCode || !formData.value.stockName) {
-    alert('请填写股票代码和名称')
-    return
-  }
-
-  saving.value = true
-  try {
-    if (editingStock.value) {
-      // 编辑：PUT /api/stocks/{id}
-      await axios.put(`/api/stocks/${formData.value.id}`, {
-        stockName: formData.value.stockName,
-        industry: formData.value.industry,
-        remark: formData.value.remark,
-        isHold: formData.value.isHold
-      })
-      const index = stocks.value.findIndex(stock => stock.id === formData.value.id)
-      if (index > -1) {
-        stocks.value[index] = { ...stocks.value[index], ...formData.value }
+export default {
+  name: 'ReviewNotesView',
+  data() {
+    return {
+      notes: [],
+      filteredNotes: [],
+      loading: false,
+      viewMode: 'card', // 默认使用卡片视图
+      searchKeyword: '',
+      selectedStock: '',
+      availableStocks: [
+        { value: '600000', label: '浦发银行' },
+        { value: '600036', label: '招商银行' },
+        { value: '601318', label: '中国平安' },
+        { value: '600519', label: '贵州茅台' },
+        { value: '000001', label: '平安银行' },
+        { value: '300750', label: '宁德时代' }
+      ],
+      showNoteDetail: false,
+      showNoteModal: false,
+      showDeleteConfirm: false,
+      editingNote: null,
+      selectedNote: null,
+      selectedNoteForDelete: null,
+      noteForm: {
+        title: '',
+        content: '',
+        relatedStock: ''
+      },
+      noteFormRules: {
+        title: [
+          { required: true, message: '请输入笔记标题', trigger: 'blur' },
+          { min: 1, max: 50, message: '标题长度在 1 到 50 个字符', trigger: 'blur' }
+        ],
+        content: [
+          { required: true, message: '请输入笔记内容', trigger: 'blur' },
+          { min: 1, max: 5000, message: '内容长度在 1 到 5000 个字符', trigger: 'blur' }
+        ]
       }
-    } else {
-      // 新增：POST /api/stocks
-      const newStock = await axios.post('/api/stocks', {
-        stockCode: formData.value.stockCode,
-        stockName: formData.value.stockName,
-        industry: formData.value.industry,
-        remark: formData.value.remark,
-        isHold: formData.value.isHold
-      })
-      stocks.value.push(newStock.data)
-    }
-
-    closeModal()
-  } catch (err) {
-    alert(editingStock.value ? '更新股票失败' : '添加股票失败')
-    console.error(editingStock.value ? '更新股票失败:' : '添加股票失败:', err)
-  } finally {
-    saving.value = false
+    };
+  },
+  mounted() {
+    this.fetchNotes();
+  },
+  methods: {
+    async fetchNotes() {
+      this.loading = true;
+      try {
+        const response = await axios.get('/api/notes');
+        this.notes = response.data;
+        // 初始化筛选列表
+        this.filteredNotes = [...this.notes];
+        // 应用搜索条件
+        if (this.searchKeyword || this.selectedStock) {
+          this.handleSearch();
+        }
+      } catch (error) {
+        console.error('获取笔记列表失败:', error);
+        ElMessage.error('获取笔记列表失败');
+      } finally {
+        this.loading = false;
+      }
+    },
+    formatDate(dateString) {
+      if (!dateString) return '';
+      const date = new Date(dateString);
+      return date.toLocaleString('zh-CN', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    },
+    truncateText(text, maxLength) {
+      if (!text) return '';
+      return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
+    },
+    resetForm() {
+      this.noteForm = {
+        title: '',
+        content: ''
+      };
+      if (this.$refs.noteForm) {
+        this.$refs.noteForm.resetFields();
+      }
+    },
+    viewNote(note) {
+      this.selectedNote = { ...note };
+      this.showNoteDetail = true;
+    },
+    closeNoteDetail() {
+      this.showNoteDetail = false;
+      this.selectedNote = null;
+    },
+    editNote(note) {
+      this.editingNote = note;
+      this.noteForm = {
+        title: note.title,
+        content: note.content
+      };
+      this.showNoteModal = true;
+      // 如果打开了详情弹窗，先关闭
+      this.closeNoteDetail();
+    },
+    editCurrentNote() {
+      if (this.selectedNote) {
+        this.editNote(this.selectedNote);
+      }
+    },
+    cancelAddEdit() {
+      this.showNoteModal = false;
+      this.editingNote = null;
+      this.resetForm();
+    },
+    async saveNote() {
+      try {
+        if (this.$refs.noteForm) {
+          await this.$refs.noteForm.validate();
+        }
+        
+        const noteData = {
+          ...this.noteForm,
+          update_time: new Date().toLocaleString('zh-CN')
+        };
+        
+        if (this.editingNote) {
+          // 更新笔记
+          await axios.put(`/api/notes/${this.editingNote.id}`, noteData);
+          ElMessage.success('更新成功');
+        } else {
+          // 添加新笔记
+          const newNote = {
+            ...noteData,
+            id: Date.now().toString(),
+            create_time: new Date().toLocaleString('zh-CN')
+          };
+          await axios.post('/api/notes', newNote);
+          ElMessage.success('创建成功');
+        }
+        
+        this.showNoteModal = false;
+        this.editingNote = null;
+        this.resetForm();
+        
+        // 重新获取笔记列表
+        this.fetchNotes();
+      } catch (error) {
+        console.error('保存失败:', error);
+        if (error.response && error.response.status === 400) {
+          ElMessage.error(error.response.data.detail || '保存失败');
+        } else {
+          ElMessage.error('保存失败，请重试');
+        }
+      }
+    },
+    confirmDelete(note) {
+      this.selectedNoteForDelete = note;
+      this.showDeleteConfirm = true;
+    },
+    async deleteNote() {
+      try {
+        await axios.delete(`/api/notes/${this.selectedNoteForDelete.id}`);
+        ElMessage.success('删除成功');
+        this.showDeleteConfirm = false;
+        this.selectedNoteForDelete = null;
+        
+        // 重新获取笔记列表
+        this.fetchNotes();
+      } catch (error) {
+        console.error('删除失败:', error);
+        ElMessage.error('删除失败，请重试');
+      }
+    },
+    handleTableRowClick(row) {
+      // 表格行点击时查看详情
+      this.viewNote(row);
+    },
+    handlePaste(event) {
+      const items = (event.clipboardData || event.originalEvent.clipboardData).items;
+      for (let index = 0; index < items.length; index++) {
+        if (items[index].kind === 'file') {
+          const file = items[index].getAsFile();
+          if (file && file.type.indexOf('image/') !== -1) {
+            // 阻止默认粘贴行为
+            event.preventDefault();
+            this.processImageFile(file);
+          }
+        }
+      }
+    },
+    processImageFile(file) {
+      // 检查图片大小（限制5MB）
+      if (file.size > 5 * 1024 * 1024) {
+        ElMessage.warning('图片大小不能超过5MB');
+        return;
+      }
+      
+      // 创建一个图片对象
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const dataUrl = e.target.result;
+        
+        // 在文本中直接插入换行和图片的Base64数据（使用特殊标记以便在渲染时处理）
+        // 插入换行+图片+换行，确保图片在单独行显示
+        const imgData = `\n[图片:${dataUrl}]\n`;
+        this.insertAtCursor(this.$refs.contentInput.$refs.textarea, imgData);
+        
+        ElMessage.success('图片粘贴成功，已直接插入到文本中');
+      };
+      reader.readAsDataURL(file);
+    },
+    insertAtCursor(textarea, text) {
+      // 获取当前光标位置
+      const startPos = textarea.selectionStart;
+      const endPos = textarea.selectionEnd;
+      const scrollTop = textarea.scrollTop;
+      
+      // 插入文本
+      textarea.value = textarea.value.substring(0, startPos) +
+        text +
+        textarea.value.substring(endPos, textarea.value.length);
+      
+      // 更新v-model绑定的值
+      this.noteForm.content = textarea.value;
+      
+      // 恢复光标位置
+      textarea.focus();
+      textarea.selectionStart = textarea.selectionEnd = startPos + text.length;
+      textarea.scrollTop = scrollTop;
+    },
+    // 移除图片预览相关功能，因为图片现在直接显示在文本中
+    // 用户可以通过直接编辑文本内容来删除图片
+  getStockLabel(stockCode) {
+      const stock = this.availableStocks.find(s => s.value === stockCode);
+      return stock ? stock.label : stockCode;
+    },
+    renderNoteContent(content) {
+      if (!content) return '';
+      
+      // 将换行符转换为<br>
+      let rendered = content.replace(/\n/g, '<br>');
+      
+      // 替换图片标记为图片标签 - 现在直接使用Base64数据
+      rendered = rendered.replace(/\[图片:([^\]]+)\]/g, (match, imgData) => {
+        // 直接使用Base64数据作为图片源
+        return `<img src="${imgData}" class="content-image" alt="笔记图片" />`;
+      });
+      
+      return rendered;
+    },
+    handleSearch() {
+      this.filteredNotes = this.notes.filter(note => {
+        // 关键词搜索
+        const keywordMatch = !this.searchKeyword || 
+          note.title.toLowerCase().includes(this.searchKeyword.toLowerCase()) || 
+          note.content.toLowerCase().includes(this.searchKeyword.toLowerCase());
+          
+        // 股票筛选
+        const stockMatch = !this.selectedStock || 
+          (note.relatedStock && note.relatedStock.includes(this.selectedStock));
+          
+        return keywordMatch && stockMatch;
+      });
+    },
+    editNote(note) {
+      this.editingNote = note;
+      this.noteForm = {
+        title: note.title,
+        content: note.content,
+        relatedStock: note.relatedStock || ''
+      };
+      
+      // 解析内容中的图片标记并恢复图片
+      this.uploadedImages = [];
+      // 移除hasImages相关逻辑，因为图片直接存储在content中
+      
+      this.showNoteModal = true;
+      // 如果打开了详情弹窗，先关闭
+      this.closeNoteDetail();
+    },
+    resetForm() {
+      this.noteForm = {
+        title: '',
+        content: '',
+        relatedStock: ''
+      };
+      if (this.$refs.noteForm) {
+        this.$refs.noteForm.resetFields();
+      }
+      // 不再需要维护单独的图片列表
+    },
   }
-}
-
-// 更新持仓状态（仅修改：调用后端PUT /api/stocks/{id}）
-const updateHoldingStatus = async (id, isHold) => {
-  try {
-    await axios.put(`/api/stocks/${id}`, { isHold })
-    const stock = stocks.value.find(s => s.id === id)
-    if (stock) {
-      stock.isHold = isHold
-    }
-  } catch (err) {
-    alert('更新持仓状态失败')
-    console.error('更新持仓状态失败:', err)
-    await fetchStocks()
-  }
-}
-
-// 关闭弹窗（无修改）
-const closeModal = () => {
-  showAddModal.value = false
-  editingStock.value = null
-  resetForm()
-}
-
-// 搜索股票（仅修改：调用后端GET /api/stocks/search）
-const handleStockSearch = async () => {
-  if (modalSearchKeyword.value.trim().length < 1) {
-    searchResults.value = []
-    showSearchResults.value = false
-    return
-  }
-  
-  searching.value = true
-  try {
-    // 调用后端搜索接口
-    const response = await axios.get(`/api/stocks/search?keyword=${modalSearchKeyword.value.trim()}`)
-    searchResults.value = response.data.stocks  // 后端返回{stocks: [...]}
-    showSearchResults.value = true
-  } catch (err) {
-    console.error('搜索股票失败:', err)
-    searchResults.value = []
-  } finally {
-    searching.value = false
-  }
-}
-
-// 处理搜索框聚焦（无修改）
-const handleSearchFocus = () => {
-  if (searchResults.value.length > 0) {
-    showSearchResults.value = true
-  }
-}
-
-// 处理搜索框失焦（无修改）
-const handleSearchBlur = () => {
-  setTimeout(() => {
-    showSearchResults.value = false
-  }, 200)
-}
-
-// 选择搜索结果（仅修改：适配后端字段名）
-const selectSearchResult = (item) => {
-  formData.value.stockCode = item.stockCode
-  formData.value.stockName = item.stockName
-  modalSearchKeyword.value = `${item.stockName} (${item.stockCode})`
-  showSearchResults.value = false
-  searchResults.value = []
-}
-
-// 重置表单（仅修改：适配后端字段名）
-const resetForm = () => {
-  formData.value = {
-    id: '',
-    stockCode: '',
-    stockName: '',
-    industry: '',
-    isHold: false,
-    remark: ''
-  }
-  modalSearchKeyword.value = ''
-  searchResults.value = []
-  showSearchResults.value = false
-}
+};
 </script>
 
 <style scoped>
-/* 完全保留原始样式，无任何修改 */
-.stock-list-container {
-  height: 100%;
-  overflow-y: auto;
+.notes-container {
+  padding: 24px;
+  background-color: #f8f9fa;
+  min-height: 100vh;
+  background-image: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
 }
 
-/* 网格布局 */
-.grid {
-  display: grid;
-}
-
-.grid-cols-3 {
-  grid-template-columns: repeat(3, 1fr);
-}
-
-/* 头部样式 */
-.card-header {
-  flex-direction: row;
+.page-header {
+  display: flex;
   justify-content: space-between;
   align-items: center;
-  flex-wrap: wrap;
-  gap: var(--spacing-md);
+  margin-bottom: 32px;
+  background: rgba(255, 255, 255, 0.95);
+  padding: 20px 30px;
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
 }
 
-.card-title {
-  font-size: 24px;
-  color: var(--text-primary);
-}
-
-/* 搜索框 */
-.search-box {
-  position: relative;
-}
-
-.search-icon {
-  position: absolute;
-  left: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--text-tertiary);
-  pointer-events: none;
-}
-
-.search-box input {
-  width: 300px;
-  padding: 8px 16px 8px 36px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--border-radius-base);
-  font-size: 14px;
-  transition: var(--transition-base);
-  background-color: var(--bg-secondary);
-}
-
-.search-box input:focus {
-  border-color: var(--primary-color);
-  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.1);
-  background-color: var(--bg-primary);
-}
-
-/* 统计卡片 */
-.stats-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: var(--spacing-md);
-  margin-bottom: var(--spacing-lg);
-}
-
-.stat-card {
-  text-align: center;
-  transition: var(--transition-base);
-}
-
-.stat-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-medium);
-}
-
-.stat-value {
-  font-size: 28px;
-  font-weight: 700;
-  margin-bottom: var(--spacing-xs);
-}
-
-.stat-label {
-  font-size: 14px;
-  color: var(--text-secondary);
-}
-
-/* 按钮样式 */
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 8px 16px;
-  border-radius: var(--border-radius-base);
-  font-size: 14px;
-  font-weight: 500;
-  transition: var(--transition-base);
-  border: 1px solid transparent;
-  cursor: pointer;
-  outline: none;
-  min-width: 80px;
-}
-
-.btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-  transform: none;
-}
-
-.btn.primary {
-  background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-hover) 100%);
-  color: white;
-  box-shadow: 0 2px 4px rgba(24, 144, 255, 0.2);
-}
-
-.btn.primary:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(24, 144, 255, 0.3);
-}
-
-.btn-icon {
-  font-size: 16px;
-}
-
-/* 加载状态 */
-.loading-container {
+.header-actions {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding: 60px 20px;
-  color: var(--text-secondary);
+  gap: 20px;
 }
 
-.loading-spinner {
-  width: 40px;
-  height: 40px;
-  border: 3px solid rgba(24, 144, 255, 0.2);
-  border-top-color: var(--primary-color);
-  border-radius: 50%;
-  animation: spin 1s ease-in-out infinite;
+.search-filter-section {
+  background-color: #fff;
+  border-radius: 12px;
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.08);
+  padding: 24px;
+  margin-bottom: 24px;
+  border: 1px solid #f0f0f0;
+  transition: box-shadow 0.3s ease, transform 0.2s ease;
+}
+
+.search-filter-section:hover {
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
+  transform: translateY(-1px);
+}
+
+.view-switcher {
+  background: linear-gradient(135deg, #f5f7fa 0%, #e6eaf0 100%);
+  border-radius: 20px;
+  padding: 4px;
+  display: inline-flex;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
+  transition: box-shadow 0.3s ease;
+}
+
+.view-switcher:hover {
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+.page-header h1 {
+  font-size: 28px;
+  margin: 0;
+  color: #1a1a1a;
+  font-weight: 700;
+  background: linear-gradient(135deg, #409eff 0%, #67c23a 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.add-note-btn {
+  background: linear-gradient(135deg, #409eff, #67c23a);
+  border: none;
+  color: white;
+  padding: 12px 24px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.3);
+  transition: all 0.3s ease;
+}
+
+.add-note-btn:hover {
+  background: linear-gradient(135deg, #66b1ff, #85ce61);
+  box-shadow: 0 6px 20px rgba(64, 158, 255, 0.4);
+  transform: translateY(-2px);
+}
+
+.notes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 24px;
+}
+
+.note-card {
+  background: linear-gradient(135deg, #ffffff 0%, #f9f9f9 100%);
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+  min-height: 200px;
+  border: 1px solid #f0f0f0;
+  overflow: hidden;
+}
+
+.note-card:hover {
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
+  transform: translateY(-6px);
+  border-color: #e6f7ff;
+}
+
+.note-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 100%;
+  background: linear-gradient(180deg, #409eff 0%, #67c23a 100%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.note-card:hover::before {
+  opacity: 1;
+}
+
+.note-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
   margin-bottom: 16px;
 }
 
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-.loading-text {
-  font-size: 16px;
-}
-
-/* 表格样式 */
-.table-responsive {
-  overflow-x: auto;
-}
-
-.stock-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 14px;
-}
-
-.stock-table th {
-  background-color: var(--bg-tertiary);
+.note-title {
+  font-size: 20px;
   font-weight: 600;
-  color: var(--text-primary);
-  text-align: left;
-  padding: 12px 16px;
-  border-bottom: 2px solid var(--border-color);
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  white-space: nowrap;
+  color: #1a1a1a;
+  margin: 0;
+  flex: 1;
+  word-break: break-word;
+  line-height: 1.4;
+  transition: color 0.3s ease;
 }
 
-.stock-table td {
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border-color);
-  vertical-align: middle;
+.note-card:hover .note-title {
+  color: #409eff;
 }
 
-.table-row {
-  transition: var(--transition-base);
-}
-
-.table-row:hover {
-  background-color: var(--bg-tertiary);
-}
-
-/* 价格和涨跌幅 */
-.price {
-  font-weight: 600;
-  font-size: 15px;
-}
-
-.change-rate {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
-  border-radius: var(--border-radius-small);
-  font-size: 12px;
-  font-weight: 500;
-}
-
-/* 行业标签 */
-.industry-badge {
-  display: inline-block;
-  padding: 4px 8px;
-  background-color: rgba(24, 144, 255, 0.1);
-  color: var(--primary-color);
-  border-radius: 16px;
-  font-size: 12px;
-  font-weight: 500;
-}
-
-/* 开关样式 */
-.switch {
-  position: relative;
-  display: inline-block;
-  width: 44px;
-  height: 24px;
-}
-
-.switch input {
+.note-actions {
   opacity: 0;
-  width: 0;
-  height: 0;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  transform: translateX(10px);
 }
 
-.slider {
-  position: absolute;
-  cursor: pointer;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: #ccc;
-  transition: var(--transition-fast);
-  border-radius: 24px;
+.note-card:hover .note-actions {
+  opacity: 1;
+  transform: translateX(0);
 }
 
-.slider:before {
-  position: absolute;
-  content: "";
-  height: 18px;
-  width: 18px;
-  left: 3px;
-  bottom: 3px;
-  background-color: white;
-  transition: var(--transition-fast);
-  border-radius: 50%;
-}
-
-input:checked + .slider {
-  background-color: var(--primary-color);
-}
-
-input:checked + .slider:before {
-  transform: translateX(20px);
-}
-
-/* 状态容器 */
-.status-container {
-  display: flex;
-  align-items: center;
-}
-
-.status-text {
-  margin-left: 8px;
-}
-
-/* 操作按钮 */
-.actions {
-  text-align: right;
-}
-
-.action-btn {
-  width: 32px;
-  height: 32px;
-  border: none;
-  background: transparent;
-  border-radius: var(--border-radius-base);
-  cursor: pointer;
-  font-size: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: var(--transition-base);
-}
-
-.edit-btn:hover {
-  background-color: rgba(24, 144, 255, 0.1);
-  color: var(--primary-color);
+.delete-btn {
+  color: #f56c6c;
+  transition: color 0.3s ease, transform 0.2s ease;
 }
 
 .delete-btn:hover {
-  background-color: rgba(245, 34, 45, 0.1);
-  color: var(--error-color);
+  color: #f78989;
+  transform: scale(1.1);
 }
 
-/* 空状态 */
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 60px 20px;
-  text-align: center;
-  color: var(--text-secondary);
-}
-
-.empty-icon {
-  font-size: 64px;
-  margin-bottom: 16px;
-  opacity: 0.5;
-}
-
-/* 弹窗样式 */
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  backdrop-filter: blur(4px);
-  animation: fadeIn 0.2s ease;
-}
-
-.modal {
-  background: var(--bg-primary);
-  border-radius: var(--border-radius-large);
-  width: 520px;
-  max-width: 90vw;
-  max-height: 90vh;
+.note-content {
+  color: #595959;
+  line-height: 1.7;
+  margin: 0 0 16px 0;
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-  animation: scaleIn 0.3s ease;
+  font-size: 15px;
 }
 
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes scaleIn {
-  from {
-    opacity: 0;
-    transform: scale(0.95);
+.note-footer {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    right: 20px;
+    text-align: right;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
   }
-  to {
-    opacity: 1;
-    transform: scale(1);
+
+  .stock-tag {
+    background-color: #ecf5ff;
+    color: #409eff;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
   }
+
+  .related-stock-info {
+    margin-bottom: 16px;
+  }
+
+.update-time {
+  font-size: 12px;
+  color: #8c8c8c;
+  transition: color 0.3s ease;
 }
 
-.modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 20px 24px;
-  border-bottom: 1px solid var(--border-color);
-  background-color: var(--bg-tertiary);
+.note-card:hover .update-time {
+  color: #409eff;
 }
 
-.modal-header h3 {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text-primary);
+.empty-notes {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 100px 20px;
+  color: #8c8c8c;
+  background: linear-gradient(180deg, #ffffff 0%, #f5f7fa 100%);
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  border: 2px dashed #dcdfe6;
+  transition: all 0.3s ease;
 }
 
-.close-btn {
-  width: 36px;
-  height: 36px;
-  border: none;
-  background: transparent;
-  font-size: 20px;
-  cursor: pointer;
-  color: var(--text-tertiary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  transition: var(--transition-base);
+.empty-notes:hover {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
+  border-color: #c0c4cc;
 }
 
-.close-btn:hover {
-  background-color: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.modal-body {
+.notes-table-container {
+  background-color: #fff;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
   padding: 24px;
-  max-height: calc(90vh - 150px);
-  overflow-y: auto;
+  border: 1px solid #f0f0f0;
+  overflow: hidden;
 }
 
-.form-group {
-  margin-bottom: 20px;
-}
-
-/* 搜索结果样式 */
-.search-results {
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-color) var(--bg-tertiary);
-}
-
-.search-results::-webkit-scrollbar {
-  width: 6px;
-}
-
-.search-results::-webkit-scrollbar-track {
-  background: var(--bg-tertiary);
-  border-radius: 3px;
-}
-
-.search-results::-webkit-scrollbar-thumb {
-  background: var(--border-color);
-  border-radius: 3px;
-}
-
-.search-results::-webkit-scrollbar-thumb:hover {
-  background: var(--border-color-hover);
-}
-
-.search-item {
-  transition: background-color var(--transition-fast);
-}
-
-.search-item:hover {
-  background-color: var(--bg-tertiary) !important;
-}
-
-.search-loading {
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  from { transform: translateY(-50%) rotate(0deg); }
-  to { transform: translateY(-50%) rotate(360deg); }
-}
-
-.form-group label {
+.note-title-text {
+  font-weight: 600;
+  color: #1a1a1a;
+  font-size: 16px;
+  margin-bottom: 4px;
   display: block;
-  margin-bottom: 8px;
-  color: var(--text-secondary);
-  font-weight: 500;
+  transition: color 0.3s ease;
+}
+
+.note-title-text:hover {
+  color: #409eff;
+}
+
+.note-content-text {
+  color: #595959;
+  line-height: 1.6;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
   font-size: 14px;
 }
 
-.form-group input,
-.form-group select {
-  width: 100%;
-  padding: 10px 12px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--border-radius-base);
-  font-size: 14px;
-  transition: var(--transition-base);
-  background-color: var(--bg-primary);
+.empty-notes i {
+  font-size: 80px;
+  margin-bottom: 24px;
+  display: block;
+  color: #d9d9d9;
+  animation: pulse 2s infinite;
 }
 
-.form-group input:focus,
-.form-group select:focus {
-  border-color: var(--primary-color);
-  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.1);
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
 }
 
-.modal-footer {
+.empty-notes p {
+  font-size: 16px;
+  margin: 0;
+  color: #8c8c8c;
+}
+
+.note-detail {
+  padding: 10px 0;
+}
+
+.note-meta {
   display: flex;
-  justify-content: flex-end;
-  padding: 16px 24px;
-  border-top: 1px solid var(--border-color);
+  justify-content: space-between;
+  margin-bottom: 20px;
+  color: #909399;
+  font-size: 14px;
+  border-bottom: 1px solid #ebeef5;
+  padding-bottom: 10px;
+}
+
+.note-content-detail {
+  color: #303133;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.image-preview-container {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid #e4e7ed;
+  border-radius: 4px;
+  background-color: #f9f9f9;
+}
+
+.image-preview-list {
+  display: flex;
+  flex-wrap: wrap;
   gap: 12px;
-  background-color: var(--bg-tertiary);
+  margin-top: 12px;
+}
+
+.image-preview-item {
+  position: relative;
+  width: 100px;
+  height: 100px;
+  border: 1px solid #e4e7ed;
+  border-radius: 4px;
+  overflow: hidden;
+  background-color: #fff;
+}
+
+.preview-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.image-preview-item .el-button {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+.content-image {
+  max-width: 100%;
+  max-height: 400px; /* 增加最大高度 */
+  margin: 16px auto; /* 居中显示 */
+  display: block; /* 块级元素，确保换行 */
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+  border: 1px solid #f0f0f0;
+  cursor: pointer;
+}
+
+.content-image:hover {
+  transform: scale(1.01);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+}
+
+.content-image:hover {
+  transform: scale(1.01);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+}
+
+.image-placeholder {
+  display: inline-block;
+  padding: 8px 16px;
+  background: linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 100%);
+  border-radius: 6px;
+  color: #8c8c8c;
+  margin: 8px 0;
+  font-size: 14px;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.note-content-rendered {
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.8;
+  font-size: 16px;
+  color: #595959;
+}
+
+/* 模态窗口样式优化 */
+.el-dialog {
+  border-radius: 16px !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15) !important;
+  overflow: hidden;
+  max-width: 900px; /* 设置最大宽度 */
+  margin-top: 20px !important; /* 顶部边距，避免贴顶 */
+}
+
+/* 自定义大尺寸模态窗口 */
+.el-dialog__wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  min-height: 100vh;
+}
+
+.el-dialog__header {
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  padding: 24px 32px !important;
+  border-bottom: 1px solid #ebeef5;
+}
+
+.el-dialog__title {
+  font-size: 22px !important;
+  font-weight: 600 !important;
+  color: #1a1a1a !important;
+  background: linear-gradient(135deg, #409eff 0%, #67c23a 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.el-dialog__body {
+  padding: 32px !important;
+}
+
+.el-dialog__footer {
+  padding: 20px 32px !important;
+  border-top: 1px solid #ebeef5;
+  background-color: #f8f9fa;
+}
+
+/* 表单样式优化 */
+.el-input__wrapper {
+  border-radius: 8px !important;
+  transition: all 0.3s ease;
+}
+
+.el-input__wrapper:hover:not(.is-focus) {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+}
+
+.el-input__wrapper.is-focus {
+  box-shadow: 0 0 0 3px rgba(64, 158, 255, 0.1) !important;
+}
+
+.el-textarea__inner {
+  min-height: 320px !important; /* 增加文本框高度 */
+  border-radius: 8px !important;
+  font-size: 15px;
+  line-height: 1.6;
+  border: 2px solid #dcdfe6;
+  transition: all 0.3s ease;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+.rich-text-editor {
+  position: relative;
+}
+
+.el-textarea__inner:focus {
+  border-color: #409eff !important;
+  box-shadow: 0 0 0 3px rgba(64, 158, 255, 0.1) !important;
+}
+
+/* 按钮样式优化 */
+.el-button {
+  border-radius: 8px !important;
+  padding: 12px 24px !important;
+  font-size: 15px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+
+.el-button--primary {
+  background: linear-gradient(135deg, #409eff, #67c23a) !important;
+  border: none !important;
+  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.3);
+}
+
+.el-button--primary:hover {
+  background: linear-gradient(135deg, #66b1ff, #85ce61) !important;
+  box-shadow: 0 6px 20px rgba(64, 158, 255, 0.4) !important;
+  transform: translateY(-2px);
+}
+
+.el-button--default {
+  background: linear-gradient(135deg, #f5f7fa 0%, #e6eaf0 100%) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.el-button--default:hover {
+  background: linear-gradient(135deg, #ecf5ff 0%, #e6f4ff 100%) !important;
+  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.15) !important;
+  transform: translateY(-1px);
+}
+
+/* 表格样式优化 */
+.el-table {
+  border-radius: 12px !important;
+  overflow: hidden;
+}
+
+.el-table th {
+  background: linear-gradient(135deg, #f5f7fa 0%, #e6eaf0 100%) !important;
+  font-weight: 600 !important;
+  color: #1a1a1a !important;
+  border-bottom: 2px solid #ebeef5 !important;
+}
+
+.el-table td {
+  border-bottom: 1px solid #f0f0f0 !important;
+  transition: background-color 0.3s ease;
+}
+
+.el-table__row:hover > td {
+  background-color: #f5f7fa !important;
+}
+
+/* 移除旧的图片预览样式，因为图片现在直接在文本中展示 */
+
+/* 股票标签样式 */
+.stock-tag {
+  display: inline-block;
+  padding: 4px 12px;
+  background: linear-gradient(135deg, #67c23a 0%, #409eff 100%);
+  color: white;
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 500;
+  margin-right: 8px;
+  margin-bottom: 8px;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 6px rgba(103, 194, 58, 0.3);
+}
+
+.stock-tag:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(103, 194, 58, 0.4);
+}
+
+/* 过渡动画 */
+.fade-enter-active, .fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.fade-enter-from, .fade-leave-to {
+  opacity: 0;
+}
+
+.slide-enter-active, .slide-leave-active {
+  transition: transform 0.3s ease;
+}
+
+.slide-enter-from {
+  transform: translateX(-100%);
+}
+
+.slide-leave-to {
+  transform: translateX(100%);
+}
+
+/* 加载动画 */
+.loading-container {
+  text-align: center;
+  padding: 60px 20px;
 }
 
 /* 响应式设计 */
-@media (max-width: 1024px) {
-  .stats-cards {
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  }
-}
-
 @media (max-width: 768px) {
-  .card-header {
+  .notes-container {
+    padding: 16px;
+  }
+  
+  .page-header {
     flex-direction: column;
-    align-items: stretch;
+    gap: 16px;
+    text-align: center;
   }
   
-  .header-actions {
-    flex-direction: column;
-  }
-  
-  .search-box input {
-    width: 100%;
-  }
-  
-  .stats-cards {
+  .notes-grid {
     grid-template-columns: 1fr;
   }
   
-  .stock-table {
-    font-size: 12px;
+  .el-dialog {
+    margin: 20px !important;
+    width: auto !important;
   }
   
-  .stock-table th,
-  .stock-table td {
-    padding: 8px 12px;
-  }
-  
-  .modal {
-    width: 95vw;
-    margin: 20px;
-  }
-}
-
-@media (max-width: 480px) {
-  .empty-icon {
-    font-size: 48px;
-  }
-  
-  .modal-body {
-    padding: 16px;
+  .el-dialog__header, .el-dialog__body, .el-dialog__footer {
+    padding: 16px !important;
   }
 }
 </style>

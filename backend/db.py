@@ -26,31 +26,74 @@ def init_database(notes_storage: List[Dict[str, Any]] = None, stock_storage: Lis
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    # 创建笔记表
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS notes (
-            id TEXT PRIMARY KEY,
-            title TEXT NOT NULL,
-            content TEXT NOT NULL,
-            create_time TEXT NOT NULL,
-            update_time TEXT NOT NULL
-        )
-    ''')
+    try:
+        # 检查notes表是否已存在
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='notes'")
+        table_exists = cursor.fetchone() is not None
+        
+        if table_exists:
+            # 检查表结构
+            cursor.execute("PRAGMA table_info(notes)")
+            columns = [column[1] for column in cursor.fetchall()]
+            logger.info(f"当前notes表结构: {columns}")
+            
+            # 如果缺少关键字段，删除旧表并重新创建
+            if 'create_time' not in columns or 'update_time' not in columns:
+                logger.warning("notes表结构不完整，删除旧表并重新创建")
+                cursor.execute("DROP TABLE notes")
+                table_exists = False
+        
+        # 创建笔记表，包含关联股票字段
+        if not table_exists:
+            logger.info("创建新的notes表")
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS notes (
+                    id TEXT PRIMARY KEY,
+                    title TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    stock_code TEXT DEFAULT '',
+                    stock_name TEXT DEFAULT '',
+                    create_time TEXT NOT NULL,
+                    update_time TEXT NOT NULL
+                )
+            ''')
+        else:
+            # 如果表已存在但缺少股票相关字段，添加这些字段
+            cursor.execute("PRAGMA table_info(notes)")
+            columns = [column[1] for column in cursor.fetchall()]
+            
+            if 'stock_code' not in columns:
+                logger.info("添加stock_code字段到notes表")
+                cursor.execute("ALTER TABLE notes ADD COLUMN stock_code TEXT DEFAULT ''")
+            if 'stock_name' not in columns:
+                logger.info("添加stock_name字段到notes表")
+                cursor.execute("ALTER TABLE notes ADD COLUMN stock_name TEXT DEFAULT ''")
+        
+        conn.commit()
+        logger.info("notes表结构初始化成功")
+    except Exception as e:
+        logger.error(f"初始化notes表失败: {str(e)}")
+        conn.rollback()
+    # 注意：不要在这里关闭连接，因为后续还有其他数据库操作
     
     # 创建股票清单表
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS stocks (
-            id TEXT PRIMARY KEY,
-            stock_code TEXT NOT NULL UNIQUE,
-            stock_name TEXT NOT NULL,
-            add_time TEXT NOT NULL,
-            remark TEXT DEFAULT '',
-            is_hold BOOLEAN DEFAULT 0,
-            industry TEXT DEFAULT ''
-        )
-    ''')
-    
-    conn.commit()
+    try:
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS stocks (
+                id TEXT PRIMARY KEY,
+                stock_code TEXT NOT NULL UNIQUE,
+                stock_name TEXT NOT NULL,
+                add_time TEXT NOT NULL,
+                remark TEXT DEFAULT '',
+                is_hold BOOLEAN DEFAULT 0,
+                industry TEXT DEFAULT ''
+            )
+        ''')
+        conn.commit()
+        logger.info("stocks表结构初始化成功")
+    except Exception as e:
+        logger.error(f"初始化stocks表失败: {str(e)}")
+        conn.rollback()
     
     # 实现数据迁移逻辑
     try:
@@ -102,7 +145,21 @@ def get_all_notes() -> List[Dict[str, Any]]:
     rows = cursor.fetchall()
     conn.close()
     
-    return [dict(row) for row in rows]
+    # 将数据库字段转换为API需要的格式（驼峰命名法）
+    result = []
+    for row in rows:
+        row_dict = dict(row)
+        result.append({
+            "id": row_dict["id"],
+            "title": row_dict["title"],
+            "content": row_dict["content"],
+            "stockCode": row_dict["stock_code"],
+            "stockName": row_dict["stock_name"],
+            "createTime": row_dict["create_time"],
+            "updateTime": row_dict["update_time"]
+        })
+    
+    return result
 
 def get_note_by_id(note_id: str) -> Optional[Dict[str, Any]]:
     """根据ID获取笔记"""
@@ -112,18 +169,36 @@ def get_note_by_id(note_id: str) -> Optional[Dict[str, Any]]:
     row = cursor.fetchone()
     conn.close()
     
-    return dict(row) if row else None
+    if not row:
+        return None
+    
+    # 将数据库字段转换为API需要的格式（驼峰命名法）
+    row_dict = dict(row)
+    return {
+        "id": row_dict["id"],
+        "title": row_dict["title"],
+        "content": row_dict["content"],
+        "stockCode": row_dict["stock_code"],
+        "stockName": row_dict["stock_name"],
+        "createTime": row_dict["create_time"],
+        "updateTime": row_dict["update_time"]
+    }
 
 def create_note(note_data: Dict[str, Any]) -> Dict[str, Any]:
     """创建新笔记"""
     conn = get_db_connection()
     cursor = conn.cursor()
     
+    # 支持驼峰命名法和下划线命名法的字段
+    stock_code = note_data.get("stock_code", note_data.get("stockCode", ""))
+    stock_name = note_data.get("stock_name", note_data.get("stockName", ""))
+    create_time = note_data.get("create_time", note_data.get("createTime", datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+    update_time = note_data.get("update_time", note_data.get("updateTime", datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+    
     cursor.execute(
-        "INSERT INTO notes (id, title, content, create_time, update_time) VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO notes (id, title, content, stock_code, stock_name, create_time, update_time) VALUES (?, ?, ?, ?, ?, ?, ?)",
         (note_data["id"], note_data["title"], note_data["content"], 
-         note_data.get("create_time", datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
-         note_data.get("update_time", datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+         stock_code, stock_name, create_time, update_time)
     )
     conn.commit()
     conn.close()
@@ -150,6 +225,15 @@ def update_note(note_id: str, update_data: Dict[str, Any]) -> Optional[Dict[str,
     if "content" in update_data:
         update_fields.append("content = ?")
         update_values.append(update_data["content"])
+    # 支持股票相关字段的更新
+    if "stock_code" in update_data or "stockCode" in update_data:
+        stock_code = update_data.get("stock_code", update_data.get("stockCode", ""))
+        update_fields.append("stock_code = ?")
+        update_values.append(stock_code)
+    if "stock_name" in update_data or "stockName" in update_data:
+        stock_name = update_data.get("stock_name", update_data.get("stockName", ""))
+        update_fields.append("stock_name = ?")
+        update_values.append(stock_name)
     
     # 总是更新update_time
     update_fields.append("update_time = ?")

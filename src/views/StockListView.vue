@@ -507,7 +507,7 @@ const handleStockSearch = async () => {
 // 核心修复2：确保函数语法正确，无括号/引号问题
 const fetchStockBaseInfo = async (stockCode) => {
   try {
-    const requestUrl = '/api/stock/baseInfo/' + stockCode
+    const requestUrl = '/api/stocks/baseInfo/' + stockCode
     const response = await axios.get(requestUrl)
     return response.data
   } catch (err) {
