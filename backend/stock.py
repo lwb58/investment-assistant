@@ -1,3 +1,4 @@
+import chardet
 from urllib.parse import quote
 import requests
 from fastapi import APIRouter, HTTPException, Query
@@ -374,7 +375,7 @@ def get_stock_base_info(stockCode: str):
     
     market = get_stock_market(stockCode)
     if not market:
-        raise HTTPException(status_code=400, detail="仅支持沪深A（60/00/30开头）")
+        raise HTTPException(status_code=400, detail="仅支持沪深A（60/00/30/68开头）")
     
     sina_list = f"{market}{stockCode},{market}{stockCode}_i"
     sina_url = f"https://hq.sinajs.cn/rn={int(time.time()*1000)}&list={sina_list}"

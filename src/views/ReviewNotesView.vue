@@ -223,7 +223,7 @@
     <el-dialog
       v-model="showNoteModal"
       :title="editingNote ? '编辑笔记' : '新建笔记'"
-      width="85%"  <!-- 增加宽度百分比，更好适应不同屏幕 -->
+      width="85%" <!-- 增加宽度百分比, 更好适应不同屏幕 -->
       :fullscreen="false"
       append-to-body
     >
@@ -295,7 +295,7 @@
 </template>
 
 <script>
-import axios from 'axios';
+import apiService from '../api/apiService';
 import { ElMessage } from 'element-plus';
 
 export default {
@@ -346,8 +346,9 @@ export default {
     async fetchNotes() {
       this.loading = true;
       try {
-        const response = await axios.get('/api/notes');
-        this.notes = response.data;
+        // 使用apiService中的getReviewNotes方法获取笔记列表
+        const response = await apiService.getReviewNotes();
+        this.notes = response;
         // 初始化筛选列表
         this.filteredNotes = [...this.notes];
         // 应用搜索条件
@@ -421,21 +422,17 @@ export default {
         
         const noteData = {
           ...this.noteForm,
-          update_time: new Date().toLocaleString('zh-CN')
+          stockCode: this.noteForm.relatedStock || '',
+          stockName: '' // 可以根据需要设置股票名称
         };
         
         if (this.editingNote) {
           // 更新笔记
-          await axios.put(`/api/notes/${this.editingNote.id}`, noteData);
+          await apiService.updateReviewNote(this.editingNote.id, noteData);
           ElMessage.success('更新成功');
         } else {
           // 添加新笔记
-          const newNote = {
-            ...noteData,
-            id: Date.now().toString(),
-            create_time: new Date().toLocaleString('zh-CN')
-          };
-          await axios.post('/api/notes', newNote);
+          await apiService.createReviewNote(noteData);
           ElMessage.success('创建成功');
         }
         
@@ -460,7 +457,7 @@ export default {
     },
     async deleteNote() {
       try {
-        await axios.delete(`/api/notes/${this.selectedNoteForDelete.id}`);
+        await apiService.deleteNote(this.selectedNoteForDelete.id);
         ElMessage.success('删除成功');
         this.showDeleteConfirm = false;
         this.selectedNoteForDelete = null;

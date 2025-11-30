@@ -64,7 +64,14 @@
               <th>股票代码</th>
               <th>股票名称</th>
               <th>最新价格</th>
-              <th>涨跌幅</th>
+              <th @click="toggleSort('changeRate')" class="cursor-pointer hover:bg-gray-50 p-2 transition-colors">
+                <div class="flex items-center justify-between">
+                  <span>涨跌幅</span>
+                  <span v-if="sortField === 'changeRate'" class="sort-icon">
+                    {{ sortDirection === 'desc' ? '↓' : '↑' }}
+                  </span>
+                </div>
+              </th>
               <th>所属行业</th>
               <th>持仓状态</th>
               <th class="text-right">操作</th>
@@ -91,11 +98,11 @@
                   :class="[
                     'change-rate', 
                     'inline-flex items-center px-2 py-1 rounded-full text-sm font-medium',
-                    stock.changeRate > 0 ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'
+                    stock.changeRate > 0 ? 'text-red-600' : 'text-green-600'
                   ]"
                 >
                   <span :class="['change-icon', stock.changeRate > 0 ? 'up' : 'down']">
-                    {{ stock.changeRate > 0 ? '↗️' : '↘️' }}
+                    {{ stock.changeRate > 0 ? '↑' : '↓' }}
                   </span>
                   {{ stock.changeRate > 0 ? '+' : '' }}{{ stock.changeRate }}%
                 </span>
@@ -305,18 +312,55 @@ const fetchingDetail = ref(false)
 const searchKeyword = ref('')
 const modalSearchKeyword = ref('')
 
+// 排序相关状态
+const sortField = ref('changeRate') // 默认按涨跌幅排序
+const sortDirection = ref('desc') // 默认降序排列
+
 // 计算过滤后的股票列表
 const filteredStocks = computed(() => {
-  if (!searchKeyword.value) {
-    return stocks.value
+  let result = stocks.value
+  
+  // 搜索过滤
+  if (searchKeyword.value) {
+    const keyword = searchKeyword.value.toLowerCase()
+    result = result.filter(stock => 
+      stock.code.toLowerCase().includes(keyword) || 
+      stock.name.toLowerCase().includes(keyword) ||
+      stock.industry.toLowerCase().includes(keyword)
+    )
   }
-  const keyword = searchKeyword.value.toLowerCase()
-  return stocks.value.filter(stock => 
-    stock.code.toLowerCase().includes(keyword) || 
-    stock.name.toLowerCase().includes(keyword) ||
-    stock.industry.toLowerCase().includes(keyword)
-  )
+  
+  // 排序
+  if (sortField.value) {
+    result = [...result].sort((a, b) => {
+      let valueA = a[sortField.value] || 0
+      let valueB = b[sortField.value] || 0
+      
+      // 处理数字比较
+      if (typeof valueA === 'number' && typeof valueB === 'number') {
+        return sortDirection.value === 'asc' ? valueA - valueB : valueB - valueA
+      }
+      // 处理字符串比较
+      return sortDirection.value === 'asc' 
+        ? String(valueA).localeCompare(String(valueB))
+        : String(valueB).localeCompare(String(valueA))
+    })
+  }
+  
+  return result
 })
+
+// 切换排序
+const toggleSort = (field) => {
+  if (sortField.value === field) {
+    // 如果点击的是当前排序字段，则切换排序方向
+    sortDirection.value = sortDirection.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    // 如果点击的是新的排序字段，则设置为新字段并默认降序
+    sortField.value = field
+    sortDirection.value = 'desc'
+  }
+}
 
 // 统计信息
 const totalStocks = computed(() => stocks.value.length)
@@ -690,6 +734,40 @@ const resetForm = () => {
 .btn-icon {
   font-size: 16px;
 }
+
+/* 排序图标样式 */
+.sort-icon {
+  font-size: 12px;
+  font-weight: bold;
+}
+
+/* 涨跌幅箭头样式 */
+.change-icon {
+      margin-right: 4px;
+      font-size: 14px;
+      font-weight: bold;
+    }
+
+    .change-icon.up {
+      color: #dc2626; /* 红色 */
+    }
+
+    .change-icon.down {
+      color: #059669; /* 绿色 */
+    }
+
+    /* 确保涨跌幅百分比数字也有颜色并加粗加大显示 */
+    .text-red-600 {
+      color: #dc2626; /* 红色 */
+      font-weight: bold;
+      font-size: 16px;
+    }
+
+    .text-green-600 {
+      color: #059669; /* 绿色 */
+      font-weight: bold;
+      font-size: 16px;
+    }
 
 /* 加载状态 */
 .loading-container {
