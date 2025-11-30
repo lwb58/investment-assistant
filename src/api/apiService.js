@@ -70,7 +70,7 @@ async updateStock(stockId, updateData) {  // 参数名从stockCode改为stockId
     stockCode: updateData.code || updateData.stockCode,  // 兼容原始code
     stockName: updateData.name,
     industry: updateData.industry,
-    isHold: updateData.holding,
+        isHold: updateData.isHold, // 匹配后端字段
     remark: updateData.remark || ''
   };
 
@@ -82,11 +82,11 @@ async updateStock(stockId, updateData) {  // 参数名从stockCode改为stockId
 
   /**
    * 删除股票
-   * @param {string} stockCode - 股票代码
+   * @param {string} stockId - 股票ID
    * @returns {Promise<Object>} 删除结果
    */
-  async deleteStock(stockCode) {
-    return this.request('DELETE', `/stocks/delete/${stockCode}`);
+  async deleteStock(stockId) {
+    return this.request('DELETE', `/stocks/${stockId}`);
   }
   
   /**

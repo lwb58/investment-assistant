@@ -111,7 +111,7 @@
                     <input 
                       type="checkbox" 
                       :checked="stock.holding" 
-                      @change="updateHoldingStatus(stock.code, !stock.holding)"
+                      @change="updateHoldingStatus(stock.id, !stock.holding)"
                     />
                     <span class="slider"></span>
                   </label>
@@ -136,7 +136,7 @@
                   </button>
                   <button 
                     class="action-btn delete-btn" 
-                    @click="deleteStock(stock.code)"
+                    @click="deleteStock(stock.id)"
                     title="删除"
                   >
                     🗑️
@@ -381,48 +381,39 @@ const editStock = (stock) => {
 }
 
 // 删除股票
-const deleteStock = async (code) => {
+const deleteStock = async (id) => {
   if (confirm('确定要删除这支股票吗？')) {
     try {
-       await apiService.deleteStock(id);  // 传入id
-      stocks.value = stocks.value.filter(stock => stock.id !== id);  // 用id过滤
+      await apiService.deleteStock(id);
+      stocks.value = stocks.value.filter(stock => stock.id !== id);
     } catch (err) {
-      alert('删除股票失败')
-      console.error('删除股票失败:', err)
-      await fetchStocks()
+      console.error('删除股票失败:', err);
+      alert('删除股票失败，请重试');
+      // 重新获取数据以保持一致性
+      await fetchStocks();
     }
   }
-}
+};
 
 // 保存股票
-const saveStock = async () => {
-  if (!formData.value.code?.trim() || !formData.value.name?.trim() || !formData.value.industry?.trim()) {
-    alert('请先查询并选择股票（需包含行业信息）')
-    return
-  }
+  const saveStock = async () => {
+    if (!formData.value.code?.trim() || !formData.value.name?.trim() || !formData.value.industry?.trim()) {
+      alert('请先查询并选择股票（需包含行业信息）')
+      return
+    }
 
-  saving.value = true
-  try {
-    if (editingStock.value) {
-      // 编辑股票：后端返回 updatedStock（字段是 stockCode/stockName/isHold）
-      const updatedStock = await apiService.updateStock(
-        editingStock.value.id,  // 改为id
-        formData.value
-      )
-      // 新增：字段映射（后端→前端）
-      const mappedUpdatedStock = {
-        code: updatedStock.stockCode,
-        name: updatedStock.stockName,
-        industry: updatedStock.industry,
-        holding: updatedStock.isHold, // 后端isHold→前端holding
-        price: updatedStock.price || '', // 兼容价格字段（如果有）
-        changeRate: updatedStock.changeRate || 0 // 兼容涨跌幅字段
-      }
-      const index = stocks.value.findIndex(stock => stock.code === mappedUpdatedStock.code)
-      if (index > -1) {
-        stocks.value[index] = mappedUpdatedStock // 存映射后的字段
-      }
-    } else {
+    saving.value = true
+    try {
+      if (editingStock.value) {
+        // 修复字段映射：将前端holding字段映射为后端isHold字段
+        const updateData = {
+          ...formData.value,
+          isHold: formData.value.holding // 关键修复：添加isHold字段
+        };
+        await apiService.updateStock(editingStock.value.id, updateData);
+        // 保存成功后刷新清单数据
+        await fetchStocks();
+      } else {
       // 添加股票：后端返回 newStock（字段是 stockCode/stockName/isHold）
       const newStock = await apiService.addStock(formData.value)
       // 新增：字段映射（后端→前端）
@@ -447,19 +438,20 @@ const saveStock = async () => {
 }
 
 // 更新持仓状态
-const updateHoldingStatus = async (code, holding) => {
+const updateHoldingStatus = async (id, isHold) => {
   try {
-    await apiService.updateStock(code, { holding })
-    const stock = stocks.value.find(s => s.code === code)
+    await apiService.updateStock(id, { isHold });
+    // 更新本地状态，确保UI即时响应
+    const stock = stocks.value.find(s => s.id === id);
     if (stock) {
-      stock.holding = holding
+      stock.holding = isHold;
     }
   } catch (err) {
-    alert('更新持仓状态失败')
-    console.error('更新持仓状态失败:', err)
-    await fetchStocks()
+    console.error('更新持仓状态失败:', err);
+    // 重新获取数据以保持一致性
+    await fetchStocks();
   }
-}
+};
 
 // 关闭弹窗
 const closeModal = () => {
