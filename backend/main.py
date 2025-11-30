@@ -836,7 +836,7 @@ async def update_stock(stock_id: str, update_data: StockUpdate):
         stock["isHold"] = update_data.isHold
     return stock
 
-@app.delete("/api/stocks/{stock_id}")
+@app.delete("/api/stocks/delete/{stock_id}")
 async def delete_stock(stock_id: str):
     """删除股票"""
     global STOCK_LIST_STORAGE

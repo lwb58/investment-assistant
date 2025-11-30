@@ -65,25 +65,20 @@ class ApiService {
    * @param {Object} stockData - 更新的股票数据
    * @returns {Promise<Object>} 更新后的股票
    */
-  async updateStock(stockCode, updateData) {
-    // 字段映射：前端→后端（和addStock保持一致，避免字段名不匹配）
-    const requestData = {
-      // 保留需要更新的核心字段，过滤无效字段
-      stockCode: updateData.code || stockCode, // 股票代码（兜底用传入的stockCode）
-      stockName: updateData.name,             // 前端name → 后端stockName
-      industry: updateData.industry,          // 前端industry → 后端industry
-      isHold: updateData.holding,             // 前端holding → 后端isHold（关键映射）
-      remark: updateData.remark || '',        // 可选字段，空值兜底
-      // 移除前端特有的字段，避免后端校验报错
-      holding: undefined,
-      code: undefined
-    };
+async updateStock(stockId, updateData) {  // 参数名从stockCode改为stockId
+  const requestData = {
+    stockCode: updateData.code || updateData.stockCode,  // 兼容原始code
+    stockName: updateData.name,
+    industry: updateData.industry,
+    isHold: updateData.holding,
+    remark: updateData.remark || ''
+  };
 
-    // 发送PUT请求，路径和后端保持一致（复数stocks）
-    return this.request('PUT', `/stocks/${stockCode}`, {
-      body: JSON.stringify(requestData)
-    });
-  }
+  // 路径参数从stockCode改为stockId，匹配后端的{stock_id}
+  return this.request('PUT', `/stocks/${stockId}`, {
+    body: JSON.stringify(requestData)
+  });
+}
 
   /**
    * 删除股票
@@ -91,7 +86,7 @@ class ApiService {
    * @returns {Promise<Object>} 删除结果
    */
   async deleteStock(stockCode) {
-    return this.request('DELETE', `/stocks/${stockCode}`);
+    return this.request('DELETE', `/stocks/delete/${stockCode}`);
   }
   
   /**

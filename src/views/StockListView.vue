@@ -333,7 +333,18 @@ const fetchStocks = async () => {
   loading.value = true
   error.value = null
   try {
-    stocks.value = await apiService.getStocks()
+    // 获取原始数据
+    const rawData = await apiService.getStocks()
+    // 增加字段映射逻辑（关键修复）
+    stocks.value = rawData.map(stock => ({
+      code: stock.stockCode,       // 后端stockCode → 前端code
+      name: stock.stockName,       // 后端stockName → 前端name
+      industry: stock.industry,
+      holding: stock.isHold,       // 后端isHold → 前端holding
+      price: stock.price || '',
+      changeRate: stock.changeRate || 0,
+      id: stock.id                 // 保留后端ID用于编辑删除
+    }))
   } catch (err) {
     error.value = '加载股票数据失败'
     console.error('获取股票列表失败:', err)
@@ -363,7 +374,7 @@ const formatPrice = (price) => {
 
 // 编辑股票
 const editStock = (stock) => {
-  editingStock.value = stock
+  editingStock.value = stock;  // stock包含id
   formData.value = { ...stock }
   modalSearchKeyword.value = `${stock.name} (${stock.code})`
   showAddModal.value = true
@@ -373,8 +384,8 @@ const editStock = (stock) => {
 const deleteStock = async (code) => {
   if (confirm('确定要删除这支股票吗？')) {
     try {
-      await apiService.deleteStock(code)
-      stocks.value = stocks.value.filter(stock => stock.code !== code)
+       await apiService.deleteStock(id);  // 传入id
+      stocks.value = stocks.value.filter(stock => stock.id !== id);  // 用id过滤
     } catch (err) {
       alert('删除股票失败')
       console.error('删除股票失败:', err)
@@ -395,7 +406,7 @@ const saveStock = async () => {
     if (editingStock.value) {
       // 编辑股票：后端返回 updatedStock（字段是 stockCode/stockName/isHold）
       const updatedStock = await apiService.updateStock(
-        editingStock.value.code,
+        editingStock.value.id,  // 改为id
         formData.value
       )
       // 新增：字段映射（后端→前端）
