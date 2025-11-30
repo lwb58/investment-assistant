@@ -66,13 +66,16 @@ class ApiService {
    * @returns {Promise<Object>} 更新后的股票
    */
 async updateStock(stockId, updateData) {  // 参数名从stockCode改为stockId
-  const requestData = {
-    stockCode: updateData.code || updateData.stockCode,  // 兼容原始code
-    stockName: updateData.name,
-    industry: updateData.industry,
-        isHold: updateData.isHold, // 匹配后端字段
-    remark: updateData.remark || ''
-  };
+  // 只构建包含实际提供字段的请求数据，避免传递undefined值
+  const requestData = {};
+  
+  // 只添加有值的字段
+  if (updateData.code !== undefined) requestData.stockCode = updateData.code;
+  if (updateData.stockCode !== undefined) requestData.stockCode = updateData.stockCode;
+  if (updateData.name !== undefined) requestData.stockName = updateData.name;
+  if (updateData.industry !== undefined) requestData.industry = updateData.industry;
+  if (updateData.isHold !== undefined) requestData.isHold = updateData.isHold;
+  if (updateData.remark !== undefined) requestData.remark = updateData.remark;
 
   // 路径参数从stockCode改为stockId，匹配后端的{stock_id}
   return this.request('PUT', `/stocks/${stockId}`, {
