@@ -1,3 +1,4 @@
+import matplotlib.pyplot as plt
 import chardet
 from urllib.parse import quote
 import requests
@@ -711,6 +712,89 @@ def delete_stock(stock_id: str):
     
     logger.info(f"成功删除股票: {stock_id}")
     return {"detail": "股票删除成功"}
+
+
+
+# 新增：杜邦分析图表生成接口
+@stock_router.get("/dupont/chart")
+def generate_dupont_chart(
+    stock_id: str,
+    factor_type: str = "three",  # three/five
+    displaytype: str = "10"
+):
+    # 1. 复用现有函数获取杜邦数据
+    dupont_data = sina_dupont_analysis(
+        stock_id=stock_id,
+        displaytype=displaytype,
+        export_excel=False  # 无需导出Excel
+    )
+    
+    if dupont_data["error"] or not dupont_data["full_data"]:
+        return {"error": dupont_data["error"] or "未获取到有效杜邦数据"}
+    
+    # 2. 转换数据为DataFrame并处理
+    df = pd.DataFrame(dupont_data["full_data"])
+    # 时间排序（升序，确保图表从左到右是时间递增）
+    df["报告期"] = pd.to_datetime(df["报告期"])
+    df = df.sort_values("报告期")
+    
+    # 3. 数据格式转换（字符串转数值，处理百分号）
+    def clean_value(v):
+        if isinstance(v, str):
+            v = v.replace("%", "").strip()
+            return float(v) if v else 0.0
+        return float(v) if pd.notna(v) else 0.0
+    
+    # 三因素指标映射（与现有数据字段匹配）
+    three_factor_mapping = {
+        "净资产收益率": "净资产收益率",
+        "销售净利率": "归属母公司股东的销售净利率",
+        "资产周转率": "资产周转率(次)",
+        "权益乘数": "权益乘数"
+    }
+    
+    # 五因素指标（从现有数据中提取，根据实际字段调整）
+    five_factor_mapping = {
+        "净资产收益率": "净资产收益率",
+        "销售利润率": "归属母公司股东的销售净利率",  # 复用已有字段
+        "资产周转率": "资产周转率(次)",
+        "权益乘数": "权益乘数",
+        "财务费用率": "财务费用率",  # 假设数据中存在该字段
+        "税率影响": "所得税税率"  # 假设数据中存在该字段
+    }
+    
+    # 4. 配置图表
+    plt.rcParams["font.family"] = ["SimHei", "WenQuanYi Micro Hei", "Heiti TC"]
+    plt.rcParams["axes.unicode_minus"] = False
+    fig, ax = plt.subplots(figsize=(10, 6))
+    
+    if factor_type == "three":
+        # 三因素图表
+        for label, col in three_factor_mapping.items():
+            if col in df.columns:
+                df[col] = df[col].apply(clean_value)
+                ax.plot(df["报告期"], df[col], label=label, marker='o', linewidth=2)
+        ax.set_title(f"{stock_id} 杜邦三因素分析趋势", fontsize=14)
+    else:
+        # 五因素图表（仅展示数据中存在的字段）
+        for label, col in five_factor_mapping.items():
+            if col in df.columns:
+                df[col] = df[col].apply(clean_value)
+                ax.plot(df["报告期"], df[col], label=label, marker='s', linewidth=2)
+        ax.set_title(f"{stock_id} 杜邦五因素分析趋势", fontsize=14)
+    
+    # 图表美化
+    ax.set_xlabel("报告期", fontsize=12)
+    ax.set_ylabel("指标值(%)", fontsize=12)
+    ax.legend(loc="best")
+    ax.grid(linestyle="--", alpha=0.7)
+    plt.tight_layout()
+    
+    # 5. 输出图片流
+    buf = io.BytesIO()
+    plt.savefig(buf, format="png", dpi=200, bbox_inches="tight")
+    buf.seek(0)
+    return StreamingResponse(buf, media_type="image/png")
 
 @stock_router.get("/dubang/{stock_id}")
 def sina_dupont_analysis(
