@@ -1,14 +1,18 @@
-import matplotlib.pyplot as plt
 import chardet
 from urllib.parse import quote
 import requests
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
+from fastapi.responses import StreamingResponse
 from datetime import datetime
 from typing import Optional, List, Dict, Union, Any
 import random
 import logging
 import db
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+from io import BytesIO
 from util import (
     get_stock_market, parse_sina_hq, format_field, fetch_url,
     cache_with_timeout, get_last_trade_date, sync_cache_with_timeout,
@@ -365,6 +369,108 @@ def get_stock_quotes_api(stock_code: str):
         raise HTTPException(status_code=500, detail="行情数据获取失败")
     return data
 
+
+@stock_router.get("/dupont/chart", response_class=StreamingResponse)
+def generate_dupont_chart(
+    stock_id: str = Query(..., description="股票代码（如600000）"),
+    factor_type: str = Query("all", description="指标类型：all/roe/net_profit_margin/asset_turnover/equity_multiplier")
+):
+    """生成杜邦分析图表（使用Plotly，支持多线程安全）"""
+    try:
+        # 1. 获取杜邦分析数据（调用你的解析函数）
+        dupont_data = sina_dupont_analysis(stock_id, export_excel=False)
+        if dupont_data.get("error") or not dupont_data.get("full_data"):
+            raise HTTPException(status_code=404, detail=dupont_data.get("error") or "未找到杜邦分析数据")
+        
+        # 2. 处理数据（转为DataFrame，按报告期排序）
+        df = pd.DataFrame(dupont_data["full_data"])
+        df["报告期"] = pd.to_datetime(df["报告期"])  # 转为日期格式
+        df = df.sort_values("报告期")  # 按时间升序排列
+
+        # 3. 定义要显示的指标（根据factor_type筛选）
+        indicator_map = {
+            "roe": {"name": "净资产收益率", "color": "#409eff"},
+            "net_profit_margin": {"name": "归属母公司股东的销售净利率", "color": "#67c23a"},
+            "asset_turnover": {"name": "资产周转率(次)", "color": "#faad14"},
+            "equity_multiplier": {"name": "权益乘数", "color": "#f5222d"},
+            "all": None  # 显示全部指标
+        }
+
+        # 4. 生成图表
+        fig = go.Figure()
+
+        # 根据factor_type添加曲线
+        if factor_type == "all":
+            # 显示所有核心指标
+            for key, info in indicator_map.items():
+                if key != "all":
+                    fig.add_trace(go.Scatter(
+                        x=df["报告期"],
+                        y=df[info["name"]],
+                        mode="lines+markers",
+                        name=info["name"],
+                        line=dict(color=info["color"], width=2),
+                        marker=dict(size=6)
+                    ))
+            title = f"{stock_id} 杜邦分析核心指标趋势"
+        else:
+            # 显示单个指标
+            if factor_type not in indicator_map:
+                raise HTTPException(status_code=400, detail="无效的指标类型")
+            info = indicator_map[factor_type]
+            fig.add_trace(go.Scatter(
+                x=df["报告期"],
+                y=df[info["name"]],
+                mode="lines+markers",
+                name=info["name"],
+                line=dict(color=info["color"], width=2),
+                marker=dict(size=6)
+            ))
+            title = f"{stock_id} {info['name']}趋势"
+
+        # 5. 美化图表布局
+        fig.update_layout(
+            title=dict(
+                text=title,
+                font=dict(size=16, color="#333"),
+                x=0.5,  # 标题居中
+                xanchor="center"
+            ),
+            xaxis=dict(
+                title="报告期",
+                showgrid=True,
+                gridcolor="#f0f0f0",
+                tickangle=45  # x轴标签旋转45度，避免重叠
+            ),
+            yaxis=dict(
+                title="指标值",
+                showgrid=True,
+                gridcolor="#f0f0f0"
+            ),
+            legend=dict(
+                orientation="h",  # 水平显示图例
+                yanchor="bottom",
+                y=1.02,
+                xanchor="right",
+                x=1
+            ),
+            margin=dict(l=40, r=40, t=60, b=80),  # 调整边距
+            hovermode="x unified",  # 鼠标悬停时显示同一x值的所有指标
+            plot_bgcolor="white"  # 白色背景
+        )
+
+        # 6. 将图表保存到BytesIO缓冲区
+        buf = BytesIO()
+        fig.write_image(buf, format="png", width=1000, height=600, scale=2)  # scale=2提升清晰度
+        buf.seek(0)  # 重置缓冲区指针
+
+        # 7. 返回图片流
+        return StreamingResponse(buf, media_type="image/png")
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"生成图表失败：{str(e)}")
+
+
 # -------------- 股票基础信息接口 --------------
 @stock_router.get("/baseInfo/{stockCode}")
 def get_stock_base_info(stockCode: str):
@@ -712,89 +818,6 @@ def delete_stock(stock_id: str):
     
     logger.info(f"成功删除股票: {stock_id}")
     return {"detail": "股票删除成功"}
-
-
-
-# 新增：杜邦分析图表生成接口
-@stock_router.get("/dupont/chart")
-def generate_dupont_chart(
-    stock_id: str,
-    factor_type: str = "three",  # three/five
-    displaytype: str = "10"
-):
-    # 1. 复用现有函数获取杜邦数据
-    dupont_data = sina_dupont_analysis(
-        stock_id=stock_id,
-        displaytype=displaytype,
-        export_excel=False  # 无需导出Excel
-    )
-    
-    if dupont_data["error"] or not dupont_data["full_data"]:
-        return {"error": dupont_data["error"] or "未获取到有效杜邦数据"}
-    
-    # 2. 转换数据为DataFrame并处理
-    df = pd.DataFrame(dupont_data["full_data"])
-    # 时间排序（升序，确保图表从左到右是时间递增）
-    df["报告期"] = pd.to_datetime(df["报告期"])
-    df = df.sort_values("报告期")
-    
-    # 3. 数据格式转换（字符串转数值，处理百分号）
-    def clean_value(v):
-        if isinstance(v, str):
-            v = v.replace("%", "").strip()
-            return float(v) if v else 0.0
-        return float(v) if pd.notna(v) else 0.0
-    
-    # 三因素指标映射（与现有数据字段匹配）
-    three_factor_mapping = {
-        "净资产收益率": "净资产收益率",
-        "销售净利率": "归属母公司股东的销售净利率",
-        "资产周转率": "资产周转率(次)",
-        "权益乘数": "权益乘数"
-    }
-    
-    # 五因素指标（从现有数据中提取，根据实际字段调整）
-    five_factor_mapping = {
-        "净资产收益率": "净资产收益率",
-        "销售利润率": "归属母公司股东的销售净利率",  # 复用已有字段
-        "资产周转率": "资产周转率(次)",
-        "权益乘数": "权益乘数",
-        "财务费用率": "财务费用率",  # 假设数据中存在该字段
-        "税率影响": "所得税税率"  # 假设数据中存在该字段
-    }
-    
-    # 4. 配置图表
-    plt.rcParams["font.family"] = ["SimHei", "WenQuanYi Micro Hei", "Heiti TC"]
-    plt.rcParams["axes.unicode_minus"] = False
-    fig, ax = plt.subplots(figsize=(10, 6))
-    
-    if factor_type == "three":
-        # 三因素图表
-        for label, col in three_factor_mapping.items():
-            if col in df.columns:
-                df[col] = df[col].apply(clean_value)
-                ax.plot(df["报告期"], df[col], label=label, marker='o', linewidth=2)
-        ax.set_title(f"{stock_id} 杜邦三因素分析趋势", fontsize=14)
-    else:
-        # 五因素图表（仅展示数据中存在的字段）
-        for label, col in five_factor_mapping.items():
-            if col in df.columns:
-                df[col] = df[col].apply(clean_value)
-                ax.plot(df["报告期"], df[col], label=label, marker='s', linewidth=2)
-        ax.set_title(f"{stock_id} 杜邦五因素分析趋势", fontsize=14)
-    
-    # 图表美化
-    ax.set_xlabel("报告期", fontsize=12)
-    ax.set_ylabel("指标值(%)", fontsize=12)
-    ax.legend(loc="best")
-    ax.grid(linestyle="--", alpha=0.7)
-    plt.tight_layout()
-    
-    # 5. 输出图片流
-    buf = io.BytesIO()
-    plt.savefig(buf, format="png", dpi=200, bbox_inches="tight")
-    buf.seek(0)
-    return StreamingResponse(buf, media_type="image/png")
 
 @stock_router.get("/dubang/{stock_id}")
 def sina_dupont_analysis(

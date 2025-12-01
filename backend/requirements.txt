@@ -6,3 +6,5 @@ sqlalchemy==2.0.30         # 最新2.x版本，无警告
 pydantic==2.8.2           # 最新2.x版本，功能更强
 tushare
 baostock
+plotly==5.22.0
+kaleido==0.2.1  # Plotly生成静态图片的必需依赖

@@ -131,7 +131,7 @@
           <div class="mb-6">
             <h4 class="text-sm text-gray-600 mb-2">三因素分析（ROE = 销售净利率 × 资产周转率 × 权益乘数）</h4>
             <div class="h-64 bg-gray-50 rounded flex items-center justify-center">
-              <img :src="`/api/stock/dupont/chart?stock_id=${stockCode}&factor_type=three`" alt="杜邦三因素分析"
+              <img :src="`/api/stocks/dupont/chart?stock_id=${stockCode}&factor_type=three`" alt="杜邦三因素分析"
                 class="h-full w-full object-contain" @error="handleChartError('three')">
               <div v-if="threeFactorError" class="text-red-500 text-sm">
                 {{ threeFactorError }}
@@ -143,7 +143,7 @@
           <div>
             <h4 class="text-sm text-gray-600 mb-2">五因素分析（ROE = 销售利润率 × 资产周转率 × 权益乘数 × 财务费用率 × 税率影响）</h4>
             <div class="h-64 bg-gray-50 rounded flex items-center justify-center">
-              <img :src="`/api/stock/dupont/chart?stock_id=${stockCode}&factor_type=five`" alt="杜邦五因素分析"
+              <img :src="`/api/stocks/dupont/chart?stock_id=${stockCode}&factor_type=five`" alt="杜邦五因素分析"
                 class="h-full w-full object-contain" @error="handleChartError('five')">
               <div v-if="fiveFactorError" class="text-red-500 text-sm">
                 {{ fiveFactorError }}
