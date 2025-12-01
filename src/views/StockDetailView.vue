@@ -17,7 +17,7 @@
     <template v-else>
       <!-- 股票核心信息栏（固定顶部，紧凑布局） -->
       <div class="stock-header sticky top-0 z-10 bg-white/95 backdrop-blur-sm shadow-sm border-b border-gray-200">
-        <div class="container mx-auto px-3 py-2 flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
+        <div class="container mx-auto px-2 py-2 flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
           <div class="flex items-center gap-2">
             <button class="btn-icon-round" @click="goBack" title="返回">
               ←
@@ -52,7 +52,7 @@
             
             <!-- 新增笔记按钮（紧凑样式） -->
             <button 
-              class="btn primary btn-xs md:btn-sm flex items-center gap-1"
+              class="btn primary flex items-center gap-1"
               @click="openNoteModal('create')"
             >
               <i class="icon">✏️</i>
@@ -62,70 +62,75 @@
         </div>
       </div>
 
-      <div class="container mx-auto px-3 py-4">
+      <div class="container mx-auto px-2 py-4 max-w-7xl">
         <!-- 快速指标卡片（紧凑网格） -->
-        <div class="quick-metrics card mb-3 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5 p-2.5 border border-gray-200 rounded-lg shadow-sm bg-white">
-          <div class="metric-item bg-gray-50 p-1.5 rounded-lg border border-gray-200 hover:bg-gray-100 transition-all duration-200">
+        <div class="quick-metrics card mb-3 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 p-3 border border-gray-100 rounded-lg shadow-sm bg-white">
+          <div class="metric-item bg-gray-50 p-2 rounded-lg border border-gray-100 hover:bg-gray-100 transition-all duration-200">
             <div class="metric-label text-xs text-gray-600 mb-0.5">总市值</div>
             <div class="metric-value font-semibold text-gray-800 text-sm">{{ formatNumber(stockInfo.marketCap) }}亿</div>
           </div>
-          <div class="metric-item bg-gray-50 p-1.5 rounded-lg border border-gray-200 hover:bg-gray-100 transition-all duration-200">
+          <div class="metric-item bg-gray-50 p-2 rounded-lg border border-gray-100 hover:bg-gray-100 transition-all duration-200">
             <div class="metric-label text-xs text-gray-600 mb-0.5">市盈率(TTM)</div>
             <div class="metric-value font-semibold text-gray-800 text-sm">{{ currentFinancialData.pe || '--' }}</div>
           </div>
-          <div class="metric-item bg-gray-50 p-1.5 rounded-lg border border-gray-200 hover:bg-gray-100 transition-all duration-200">
+          <div class="metric-item bg-gray-50 p-2 rounded-lg border border-gray-100 hover:bg-gray-100 transition-all duration-200">
             <div class="metric-label text-xs text-gray-600 mb-0.5">净资产收益率</div>
             <div class="metric-value font-semibold text-gray-800 text-sm">{{ currentFinancialData.roe || '--' }}%</div>
           </div>
-          <div class="metric-item bg-gray-50 p-1.5 rounded-lg border border-gray-200 hover:bg-gray-100 transition-all duration-200">
-            <div class="metric-label text-xs text-gray-600 mb-0.5">上市日期</div>
-            <div class="metric-value font-semibold text-gray-800 text-sm">{{ stockInfo.listDate || '--' }}</div>
+          <div class="metric-item bg-gray-50 p-2 rounded-lg border border-gray-100 hover:bg-gray-100 transition-all duration-200">
+            <div class="metric-label text-xs text-gray-600 mb-0.5">所属行业</div>
+            <div class="metric-value font-semibold text-gray-800 text-sm">{{ stockInfo.industry || '--' }}</div>
+          </div>
+          <div class="metric-item bg-gray-50 p-2 rounded-lg border border-gray-100 hover:bg-gray-100 transition-all duration-200">
+            <div class="metric-label text-xs text-gray-600 mb-0.5">总股本</div>
+            <div class="metric-value font-semibold text-gray-800 text-sm">{{ formatNumber(stockInfo.totalShares) }}亿股</div>
+          </div>
+          <div class="metric-item bg-gray-50 p-2 rounded-lg border border-gray-100 hover:bg-gray-100 transition-all duration-200">
+            <div class="metric-label text-xs text-gray-600 mb-0.5">流通股本</div>
+            <div class="metric-value font-semibold text-gray-800 text-sm">{{ formatNumber(stockInfo.floatShares) }}亿股</div>
           </div>
         </div>
 
-        <!-- 主内容区域：紧凑分栏布局 -->
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-3">
-          <!-- 左侧：占4列，紧凑排列 -->
-          <div class="lg:col-span-4 space-y-3">
-            <!-- 基本信息卡片 -->
-            <div class="card p-2.5 border border-gray-200 rounded-lg shadow-sm bg-white">
-              <div class="card-header mb-1.5">
-                <h3 class="card-title text-sm font-semibold flex items-center gap-1.5 text-gray-800">
-                  <i class="icon text-primary">📋</i> 基本信息
-                </h3>
-              </div>
-              <div class="info-grid space-y-1.5">
-                <div class="info-item flex justify-between">
-                  <span class="info-label text-xs text-gray-600">公司全称</span>
-                  <span class="info-value text-xs font-medium text-gray-800 truncate">{{ stockInfo.companyName || '--' }}</span>
-                </div>
-                <div class="info-item flex justify-between">
-                  <span class="info-label text-xs text-gray-600">所属行业</span>
-                  <span class="info-value text-xs font-medium text-gray-800">{{ stockInfo.industry || '--' }}</span>
-                </div>
-                <div class="info-item flex justify-between">
-                  <span class="info-label text-xs text-gray-600">总股本</span>
-                  <span class="info-value text-xs font-medium text-gray-800">{{ formatNumber(stockInfo.totalShares) }}亿股</span>
-                </div>
-                <div class="info-item flex justify-between">
-                  <span class="info-label text-xs text-gray-600">流通股本</span>
-                  <span class="info-value text-xs font-medium text-gray-800">{{ formatNumber(stockInfo.floatShares) }}亿股</span>
-                </div>
-                <div class="info-item flex justify-between">
-                  <span class="info-label text-xs text-gray-600">总市值</span>
-                  <span class="info-value text-xs font-medium text-gray-800">{{ formatNumber(stockInfo.marketCap) }}亿元</span>
+        <!-- 财务数据与趋势图表（顶部区域） -->
+        <div class="grid grid-cols-1 gap-2 mb-2">
+          <!-- 财务趋势图表组 -->
+          <div class="card p-2 border border-gray-100 rounded-lg shadow-sm bg-white">
+            <div class="card-header mb-1">
+              <h3 class="card-title text-sm font-semibold flex items-center gap-1.5 text-gray-800">
+                <i class="icon text-primary">📊</i> 财务趋势（{{ financialYears.length }}年）
+              </h3>
+            </div>
+            
+            <!-- 图表容器：上下紧凑布局 -->
+            <div class="chart-group space-y-3">
+              <!-- 扣非净利润趋势图 -->
+              <div>
+                <h4 class="chart-subtitle text-sm font-medium mb-1.5">扣非净利润趋势（单位：亿元）</h4>
+                <div class="chart-container h-48">
+                  <canvas id="nonProfitTrendChart"></canvas>
                 </div>
               </div>
             </div>
+            
+            <!-- 图表说明 -->
+            <div class="chart-desc text-xs text-gray-500 mt-2">
+              <p>数据来源：公司年度财务报告 | 自动适配{{ financialYears.length }}年数据</p>
+            </div>
+          </div>
+        </div>
 
+        <!-- 主内容区域：左右并列布局 -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-2">
+          <!-- 左侧：占6列 -->
+          <div class="space-y-2">
             <!-- 关联笔记卡片 -->
-            <div class="card p-2.5 border border-gray-200 rounded-lg shadow-sm bg-white">
-              <div class="card-header mb-1.5 flex justify-between items-center">
+            <div class="card p-2 border border-gray-100 rounded-lg shadow-sm bg-white">
+              <div class="card-header mb-1 flex justify-between items-center">
                 <h3 class="card-title text-sm font-semibold flex items-center gap-1.5 text-gray-800">
                   <i class="icon text-primary">📝</i> 关联笔记
                 </h3>
                 <button 
-                  class="btn btn-xs bg-primary/10 text-primary hover:bg-primary/20"
+                  class="btn bg-primary/10 text-primary hover:bg-primary/20 py-1.5 px-3"
                   @click="openNoteModal('create')"
                 >
                   新增
@@ -133,10 +138,10 @@
               </div>
               
               <!-- 笔记列表（紧凑间距） -->
-              <div v-if="stockNotes.length > 0" class="notes-list space-y-1.5 max-h-64 overflow-y-auto pr-1">
+              <div v-if="stockNotes.length > 0" class="notes-list space-y-2 max-h-48 overflow-y-auto pr-1">
                 <div 
-                  class="note-item p-2 bg-gray-50 rounded-lg border border-gray-200 cursor-pointer hover:bg-gray-100 transition-colors"
-                  v-for="note in stockNotes" 
+                  class="note-item p-2 bg-gray-50 rounded-lg border border-gray-100 cursor-pointer hover:bg-gray-100 transition-colors"
+                  v-for="(note, index) in stockNotes" 
                   :key="note.id"
                   @click="openNoteModal('view', note)"
                 >
@@ -151,11 +156,11 @@
                 </div>
               </div>
               
-              <div v-else class="empty-state py-3 text-center">
+              <div v-else class="empty-state py-4 text-center">
                 <div class="empty-icon text-2xl mb-1">📝</div>
                 <p class="empty-text text-xs text-gray-500">暂无关联笔记</p>
                 <button 
-                  class="btn primary btn-xs mt-2"
+                  class="btn primary mt-2 py-1.5 px-3"
                   @click="openNoteModal('create')"
                 >
                   <i class="icon">✏️</i> 创建第一条
@@ -163,9 +168,55 @@
               </div>
             </div>
 
+
+
+            <!-- 利好利空点和总结卡片 -->
+            <div class="card p-2 border border-gray-100 rounded-lg shadow-sm bg-white">
+              <div class="card-header mb-1">
+                <h3 class="card-title text-sm font-semibold flex items-center gap-1.5 text-gray-800">
+                  <i class="icon text-primary">📊</i> 利好利空与总结
+                </h3>
+              </div>
+              <div class="pros-cons-container space-y-2">
+                <div>
+                  <label class="form-label block text-xs font-medium text-gray-600 mb-0.5">利好点</label>
+                  <textarea
+                    v-model="prosPoints"
+                    class="form-textarea w-full px-2 py-2 border border-gray-100 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent mb-2 text-sm"
+                    rows="2"
+                    placeholder="记录利好因素"
+                  ></textarea>
+                </div>
+                <div>
+                  <label class="form-label block text-xs font-medium text-gray-600 mb-0.5">利空点</label>
+                  <textarea
+                    v-model="consPoints"
+                    class="form-textarea w-full px-2 py-2 border border-gray-100 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent mb-2 text-sm"
+                    rows="2"
+                    placeholder="记录利空因素"
+                  ></textarea>
+                </div>
+                <div>
+                  <label class="form-label block text-xs font-medium text-gray-600 mb-0.5">投资总结</label>
+                  <textarea
+                    v-model="investmentSummary"
+                    class="form-textarea w-full px-2 py-2 border border-gray-100 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent mb-2 text-sm"
+                    rows="2"
+                    placeholder="记录投资总结"
+                  ></textarea>
+                </div>
+                <button 
+                  class="btn primary w-full py-2"
+                  @click="saveProsConsSummary"
+                >
+                  保存利好利空与总结
+                </button>
+              </div>
+            </div>
+
             <!-- 估值逻辑记录卡片 -->
-            <div class="card p-2.5 border border-gray-200 rounded-lg shadow-sm bg-white">
-              <div class="card-header mb-1.5">
+            <div class="card p-2 border border-gray-100 rounded-lg shadow-sm bg-white">
+              <div class="card-header mb-1">
                 <h3 class="card-title text-sm font-semibold flex items-center gap-1.5 text-gray-800">
                   <i class="icon text-primary">💡</i> 估值逻辑
                 </h3>
@@ -173,273 +224,197 @@
               <div class="valuation-container">
                 <textarea
                   v-model="valuationLogic"
-                  class="form-textarea w-full px-2 py-1.5 border border-gray-200 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent mb-2 text-sm"
+                  class="form-textarea w-full px-2 py-2 border border-gray-100 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent mb-2 text-sm"
                   rows="3"
                   placeholder="记录估值逻辑（行业中枢、增长预期等）"
                 ></textarea>
                 <button 
-                  class="btn primary btn-xs w-full py-1.5"
+                  class="btn primary w-full py-2"
                   @click="saveValuationLogic"
                 >
                   保存估值逻辑
                 </button>
               </div>
             </div>
+          </div>
 
-            <!-- 买卖点与盈亏预期卡片 -->
-            <div class="card p-2.5 border border-gray-200 rounded-lg shadow-sm bg-white">
-              <div class="card-header mb-1.5">
+          <!-- 右侧：占6列 -->
+          <div class="space-y-2">
+            <!-- 投资预测与交易计划卡片 -->
+            <div class="card p-2 border border-gray-100 rounded-lg shadow-sm bg-white">
+              <div class="card-header mb-1">
                 <h3 class="card-title text-sm font-semibold flex items-center gap-1.5 text-gray-800">
-                  <i class="icon text-primary">📊</i> 买卖点与盈亏预期
+                  <i class="icon text-primary">📈</i> 投资预测与交易计划
                 </h3>
               </div>
-              <div class="trading-form grid grid-cols-1 gap-1.5 mb-2">
-                <div class="form-group">
-                  <label class="form-label block text-xs font-medium text-gray-600 mb-0.5">目标买入点（元）</label>
-                  <input
-                    v-model="buyPoint"
-                    type="number"
-                    step="0.01"
-                    class="form-input w-full px-2 py-1.5 border border-gray-200 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent text-sm"
-                    placeholder="输入买入价"
-                  >
-                </div>
-                <div class="grid grid-cols-2 gap-1.5">
+              <div class="trading-form grid grid-cols-1 gap-2 mb-2">
+                <div class="grid grid-cols-2 gap-2">
                   <div class="form-group">
-                    <label class="form-label block text-xs font-medium text-gray-600 mb-0.5">最大亏损点位（元）</label>
+                    <label class="form-label block text-xs font-medium text-gray-600 mb-0.5">目标买入点（元）</label>
                     <input
-                      v-model="maxLossPoint"
+                      v-model="buyPoint"
                       type="number"
                       step="0.01"
-                      class="form-input w-full px-2 py-1.5 border border-gray-200 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent text-sm"
-                      placeholder="止损价"
+                      class="form-input w-full px-2 py-2 border border-gray-100 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent text-sm"
+                      placeholder="输入买入价"
                     >
                   </div>
-                  <div class="form-group">
-                    <label class="form-label block text-xs font-medium text-gray-600 mb-0.5">最大亏损跌幅（%）</label>
-                    <input
-                      v-model="maxLossRate"
-                      type="number"
-                      step="0.1"
-                      class="form-input w-full px-2 py-1.5 border border-gray-200 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent text-sm"
-                      placeholder="可接受跌幅"
-                    >
-                  </div>
-                </div>
-                <div class="grid grid-cols-2 gap-1.5">
                   <div class="form-group">
                     <label class="form-label block text-xs font-medium text-gray-600 mb-0.5">预期涨幅（%）</label>
                     <input
                       v-model="expectedGrowthRate"
                       type="number"
                       step="0.1"
-                      class="form-input w-full px-2 py-1.5 border border-gray-200 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent text-sm"
+                      class="form-input w-full px-2 py-2 border border-gray-100 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent text-sm"
                       placeholder="预期涨幅"
                     >
                   </div>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
                   <div class="form-group">
                     <label class="form-label block text-xs font-medium text-gray-600 mb-0.5">预期目标点位（元）</label>
                     <input
                       v-model="expectedPoint"
                       type="number"
                       step="0.01"
-                      class="form-input w-full px-2 py-1.5 border border-gray-200 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent text-sm"
-                      placeholder="目标卖出价"
+                      class="form-input w-full px-2 py-2 border border-gray-100 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent text-sm bg-gray-50"
+                      placeholder="自动计算"
+                      readonly
+                    >
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label block text-xs font-medium text-gray-600 mb-0.5">预期市值（亿元）</label>
+                    <input
+                      v-model="expectedMarketCap"
+                      type="number"
+                      step="0.1"
+                      class="form-input w-full px-2 py-2 border border-gray-100 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent text-sm bg-gray-50"
+                      placeholder="自动计算"
+                      readonly
                     >
                   </div>
                 </div>
-              </div>
-              <button 
-                class="btn primary btn-xs w-full py-1.5"
-                @click="saveTradingPlan"
-              >
-                保存交易计划
-              </button>
-            </div>
-
-            <!-- 竞争对手卡片 -->
-            <div class="card p-2.5 border border-gray-200 rounded-lg shadow-sm bg-white">
-              <div class="card-header mb-1.5">
-                <h3 class="card-title text-sm font-semibold flex items-center gap-1.5 text-gray-800">
-                  <i class="icon text-primary">🤝</i> 竞争对手
-                </h3>
-              </div>
-              <div v-if="competitors.length > 0" class="competitor-list space-y-1.5">
-                <div 
-                  class="competitor-item p-2 bg-gray-50 rounded-lg border border-gray-200 flex items-center justify-between cursor-pointer hover:bg-gray-100 transition-colors"
-                  v-for="(competitor, index) in competitors" 
-                  :key="index"
-                  @click="goToCompetitorDetail(competitor.code)"
+                <div class="grid grid-cols-2 gap-2">
+                  <div class="form-group">
+                    <label class="form-label block text-xs font-medium text-gray-600 mb-0.5">最大跌幅（%）</label>
+                    <input
+                      v-model="maxLossRate"
+                      type="number"
+                      step="0.1"
+                      class="form-input w-full px-2 py-2 border border-gray-100 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent text-sm"
+                      placeholder="可接受跌幅"
+                    >
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label block text-xs font-medium text-gray-600 mb-0.5">最大亏损点位（元）</label>
+                    <input
+                      v-model="maxLossPoint"
+                      type="number"
+                      step="0.01"
+                      class="form-input w-full px-2 py-2 border border-gray-100 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent text-sm bg-gray-50"
+                      placeholder="自动计算"
+                      readonly
+                    >
+                  </div>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                  <div class="form-group">
+                    <label class="form-label block text-xs font-medium text-gray-600 mb-0.5">最大上涨幅度（%）</label>
+                    <input
+                      v-model="maxUpwardRange"
+                      type="number"
+                      step="0.1"
+                      class="form-input w-full px-2 py-2 border border-gray-100 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent text-sm"
+                      placeholder="预期最大涨幅"
+                    >
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label block text-xs font-medium text-gray-600 mb-0.5">最大下跌幅度（%）</label>
+                    <input
+                      v-model="maxDownwardRange"
+                      type="number"
+                      step="0.1"
+                      class="form-input w-full px-2 py-2 border border-gray-100 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent text-sm"
+                      placeholder="预期最大跌幅"
+                    >
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label class="form-label block text-xs font-medium text-gray-600 mb-0.5">投资时长（月）</label>
+                  <input
+                    v-model="investmentDuration"
+                    type="number"
+                    step="1"
+                    class="form-input w-full px-2 py-2 border border-gray-100 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent text-sm"
+                    placeholder="预期投资时长"
+                  >
+                </div>
+                <button 
+                  class="btn primary py-2"
+                  @click="saveInvestmentPlan"
                 >
-                  <div class="competitor-info flex items-center gap-1.5">
-                    <div class="competitor-rank w-5 h-5 flex items-center justify-center bg-primary/10 text-primary rounded-full text-xs">
-                      {{ index + 1 }}
+                  保存投资计划
+                </button>
+              </div>
+            </div>
+
+            <!-- 友商录入卡片 -->
+            <div class="card p-2 border border-gray-100 rounded-lg shadow-sm bg-white">
+              <div class="card-header mb-1">
+                <h3 class="card-title text-sm font-semibold flex items-center gap-1.5 text-gray-800">
+                  <i class="icon text-primary">🤝</i> 友商录入
+                </h3>
+              </div>
+              <div class="competitors-container space-y-2">
+                <div v-if="competitors.length > 0" class="competitor-list space-y-2 max-h-48 overflow-y-auto pr-1">
+                  <div 
+                    class="competitor-item p-2 bg-gray-50 rounded-lg border border-gray-100 flex items-center justify-between cursor-pointer hover:bg-gray-100 transition-colors"
+                    v-for="(competitor, index) in competitors" 
+                    :key="index"
+                    @click="goToCompetitorDetail(competitor.code)"
+                  >
+                    <div class="competitor-info flex items-center gap-1.5">
+                      <div class="competitor-rank w-5 h-5 flex items-center justify-center bg-primary/10 text-primary rounded-full text-xs">
+                        {{ index + 1 }}
+                      </div>
+                      <div class="competitor-details min-w-0">
+                        <div class="competitor-name font-medium text-sm truncate">{{ competitor.name }}</div>
+                        <div class="competitor-code text-xs text-gray-500">{{ competitor.code }}</div>
+                      </div>
                     </div>
-                    <div class="competitor-details min-w-0">
-                      <div class="competitor-name font-medium text-sm truncate">{{ competitor.name }}</div>
-                      <div class="competitor-code text-xs text-gray-500">{{ competitor.code }}</div>
+                    <div class="competitor-action text-primary text-xs">
+                      查看详情 →
                     </div>
                   </div>
-                  <div class="competitor-action text-primary text-xs">
-                    查看详情 →
-                  </div>
                 </div>
-              </div>
-              <div v-else class="empty-state py-3 text-center">
-                <div class="empty-icon text-2xl mb-1">🤝</div>
-                <p class="empty-text text-xs text-gray-500">暂无竞争对手数据</p>
-              </div>
-            </div>
-          </div>
-
-          <!-- 右侧：占8列，紧凑布局 -->
-          <div class="lg:col-span-8 space-y-3">
-            <!-- 财务趋势图表组 -->
-            <div class="card p-2.5 border border-gray-200 rounded-lg shadow-sm bg-white">
-              <div class="card-header mb-1.5">
-                <h3 class="card-title text-sm font-semibold flex items-center gap-1.5 text-gray-800">
-                  <i class="icon text-primary">📈</i> 财务趋势分析（{{ financialYears.length }}年）
-                </h3>
-              </div>
-              
-              <!-- 图表容器：上下紧凑布局 -->
-              <div class="chart-group space-y-2.5">
-                <!-- 扣非净利润趋势图 -->
-                <div>
-                  <h4 class="chart-subtitle text-sm font-medium mb-1">扣非净利润趋势（单位：亿元）</h4>
-                  <div class="chart-container h-56">
-                    <canvas id="nonProfitTrendChart"></canvas>
-                  </div>
+                <div v-else class="empty-state py-3 text-center">
+                  <p class="empty-text text-xs text-gray-500">暂无友商数据</p>
                 </div>
-                
-                <!-- 应收账款趋势图 -->
-                <div>
-                  <h4 class="chart-subtitle text-sm font-medium mb-1">应收账款趋势（单位：亿元）</h4>
-                  <div class="chart-container h-56">
-                    <canvas id="receivablesTrendChart"></canvas>
-                  </div>
+                <div class="add-competitor-form grid grid-cols-2 gap-2">
+                  <input
+                    v-model="newCompetitor.name"
+                    type="text"
+                    class="form-input px-2 py-2 border border-gray-100 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent text-sm"
+                    placeholder="友商名称"
+                  >
+                  <input
+                    v-model="newCompetitor.code"
+                    type="text"
+                    class="form-input px-2 py-2 border border-gray-100 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent text-sm"
+                    placeholder="友商代码"
+                  >
+                  <button 
+                    class="btn primary col-span-2 py-2"
+                    @click="addCompetitor"
+                    :disabled="!newCompetitor.name || !newCompetitor.code"
+                  >
+                    添加友商
+                  </button>
                 </div>
-              </div>
-              
-              <!-- 图表说明 -->
-              <div class="chart-desc text-xs text-gray-500 mt-2">
-                <p>数据来源：公司年度财务报告 | 自动适配{{ financialYears.length }}年数据</p>
               </div>
             </div>
 
-            <!-- 财务核心数据对比 -->
-            <div class="card p-2.5 border border-gray-200 rounded-lg shadow-sm bg-white">
-              <div class="card-header mb-1.5">
-                <h3 class="card-title text-sm font-semibold flex items-center gap-1.5 text-gray-800">
-                  <i class="icon text-primary">💰</i> 财务核心数据对比
-                </h3>
-              </div>
-              
-              <div class="comparison-table overflow-x-auto">
-                <table class="w-full min-w-[500px] text-sm">
-                  <thead>
-                    <tr class="bg-gray-50 border-b border-gray-200">
-                      <th class="py-2 px-3 text-left text-xs font-semibold text-gray-600">指标名称</th>
-                      <th v-for="year in financialYears" :key="year" class="py-2 px-3 text-right text-xs font-semibold text-gray-600">
-                        {{ year }}年
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr class="border-b border-gray-200 hover:bg-gray-50">
-                      <td class="py-2 px-3 text-xs text-gray-700">营业收入（亿元）</td>
-                      <td v-for="year in financialYears" :key="year" class="py-2 px-3 text-right text-xs">
-                        {{ formatNumber(financialData[year].revenue) }}
-                      </td>
-                    </tr>
-                    <tr class="border-b border-gray-200 hover:bg-gray-50">
-                      <td class="py-2 px-3 text-xs text-gray-700">净利润（亿元）</td>
-                      <td v-for="year in financialYears" :key="year" class="py-2 px-3 text-right text-xs">
-                        {{ formatNumber(financialData[year].netProfit) }}
-                      </td>
-                    </tr>
-                    <tr class="border-b border-gray-200 hover:bg-gray-50">
-                      <td class="py-2 px-3 text-xs text-gray-700">扣非净利润（亿元）</td>
-                      <td v-for="year in financialYears" :key="year" class="py-2 px-3 text-right text-xs">
-                        {{ formatNumber(financialData[year].nonNetProfit) }}
-                      </td>
-                    </tr>
-                    <tr class="border-b border-gray-200 hover:bg-gray-50">
-                      <td class="py-2 px-3 text-xs text-gray-700">应收账款（亿元）</td>
-                      <td v-for="year in financialYears" :key="year" class="py-2 px-3 text-right text-xs">
-                        {{ formatNumber(financialData[year].receivables) }}
-                      </td>
-                    </tr>
-                    <tr class="border-b border-gray-200 hover:bg-gray-50">
-                      <td class="py-2 px-3 text-xs text-gray-700">每股收益（元）</td>
-                      <td v-for="year in financialYears" :key="year" class="py-2 px-3 text-right text-xs">
-                        {{ financialData[year].eps || '0.00' }}
-                      </td>
-                    </tr>
-                    <tr class="border-b border-gray-200 hover:bg-gray-50">
-                      <td class="py-2 px-3 text-xs text-gray-700">净资产收益率（%）</td>
-                      <td v-for="year in financialYears" :key="year" class="py-2 px-3 text-right text-xs">
-                        {{ financialData[year].roe || '0.0' }}
-                      </td>
-                    </tr>
-                    <tr class="hover:bg-gray-50">
-                      <td class="py-2 px-3 text-xs text-gray-700">毛利率（%）</td>
-                      <td v-for="year in financialYears" :key="year" class="py-2 px-3 text-right text-xs">
-                        {{ financialData[year].grossMargin || '0.0' }}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
 
-            <!-- 详细财务指标卡片（紧凑网格） -->
-            <div class="card p-2.5 border border-gray-200 rounded-lg shadow-sm bg-white">
-              <div class="card-header mb-1.5">
-                <h3 class="card-title text-sm font-semibold flex items-center gap-1.5 text-gray-800">
-                  <i class="icon text-primary">📋</i> 最新年度详细财务指标
-                </h3>
-              </div>
-              
-              <div class="info-grid grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5">
-                <div class="info-item p-1.5 bg-gray-50 rounded-lg border border-gray-200">
-                  <div class="info-label text-xs text-gray-600 mb-0.5">每股净资产</div>
-                  <div class="info-value font-medium text-sm">{{ currentFinancialData.navps || '0.00' }}元</div>
-                </div>
-                <div class="info-item p-1.5 bg-gray-50 rounded-lg border border-gray-200">
-                  <div class="info-label text-xs text-gray-600 mb-0.5">市盈率（TTM）</div>
-                  <div class="info-value font-medium text-sm">{{ currentFinancialData.pe || '0.0' }}</div>
-                </div>
-                <div class="info-item p-1.5 bg-gray-50 rounded-lg border border-gray-200">
-                  <div class="info-label text-xs text-gray-600 mb-0.5">市净率</div>
-                  <div class="info-value font-medium text-sm">{{ currentFinancialData.pb || '0.0' }}</div>
-                </div>
-                <div class="info-item p-1.5 bg-gray-50 rounded-lg border border-gray-200">
-                  <div class="info-label text-xs text-gray-600 mb-0.5">毛利率</div>
-                  <div class="info-value font-medium text-sm">{{ currentFinancialData.grossMargin || '0.0' }}%</div>
-                </div>
-                <div class="info-item p-1.5 bg-gray-50 rounded-lg border border-gray-200">
-                  <div class="info-label text-xs text-gray-600 mb-0.5">净利率</div>
-                  <div class="info-value font-medium text-sm">{{ currentFinancialData.netMargin || '0.0' }}%</div>
-                </div>
-                <div class="info-item p-1.5 bg-gray-50 rounded-lg border border-gray-200">
-                  <div class="info-label text-xs text-gray-600 mb-0.5">负债率</div>
-                  <div class="info-value font-medium text-sm">{{ currentFinancialData.debtRatio || '0.0' }}%</div>
-                </div>
-                <div class="info-item p-1.5 bg-gray-50 rounded-lg border border-gray-200">
-                  <div class="info-label text-xs text-gray-600 mb-0.5">营收增长率</div>
-                  <div class="info-value font-medium text-sm">{{ currentFinancialData.revenueGrowth || '0.0' }}%</div>
-                </div>
-                <div class="info-item p-1.5 bg-gray-50 rounded-lg border border-gray-200">
-                  <div class="info-label text-xs text-gray-600 mb-0.5">净利润增长率</div>
-                  <div class="info-value font-medium text-sm">{{ currentFinancialData.netProfitGrowth || '0.0' }}%</div>
-                </div>
-                <div class="info-item p-1.5 bg-gray-50 rounded-lg border border-gray-200">
-                  <div class="info-label text-xs text-gray-600 mb-0.5">扣非净利润增长率</div>
-                  <div class="info-value font-medium text-sm">{{ currentFinancialData.nonNetProfitGrowth || '0.0' }}%</div>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       </div>
@@ -541,11 +516,49 @@ const currentFinancialData = computed(() => {
 // 新增：估值与交易计划相关状态
 const valuationLogic = ref('') // 估值逻辑
 const buyPoint = ref('') // 买入点
-const maxLossPoint = ref('') // 最大亏损点位
 const maxLossRate = ref('') // 最大亏损跌幅
 const expectedGrowthRate = ref('') // 预期涨幅
-const expectedPoint = ref('') // 预期点位
 const competitors = ref([]) // 竞争对手
+
+// 新增：利好利空与总结
+const prosPoints = ref('') // 利好点
+const consPoints = ref('') // 利空点
+const investmentSummary = ref('') // 投资总结
+
+// 新增：预测数据
+const maxUpwardRange = ref('') // 最大上涨幅度
+const maxDownwardRange = ref('') // 最大下跌幅度
+const investmentDuration = ref('') // 投资时长
+
+// 友商录入
+const newCompetitor = ref({ name: '', code: '' }) // 新友商表单
+
+// 计算属性：自动计算预期目标点位
+const expectedPoint = computed(() => {
+  const buyPrice = parseFloat(buyPoint.value)
+  const growthRate = parseFloat(expectedGrowthRate.value)
+  if (isNaN(buyPrice) || isNaN(growthRate)) return ''
+  const result = buyPrice * (1 + growthRate / 100)
+  return result.toFixed(2)
+})
+
+// 计算属性：自动计算预期市值
+const expectedMarketCap = computed(() => {
+  const targetPoint = parseFloat(expectedPoint.value)
+  const totalShares = parseFloat(stockInfo.value.totalShares)
+  if (isNaN(targetPoint) || isNaN(totalShares)) return ''
+  const result = targetPoint * totalShares
+  return result.toFixed(2)
+})
+
+// 计算属性：自动计算最大亏损点位
+const maxLossPoint = computed(() => {
+  const buyPrice = parseFloat(buyPoint.value)
+  const lossRate = parseFloat(maxLossRate.value)
+  if (isNaN(buyPrice) || isNaN(lossRate)) return ''
+  const result = buyPrice * (1 - lossRate / 100)
+  return result.toFixed(2)
+})
 
 // 图表实例（新增扣非净利润、应收账款图表）
 const nonProfitChartInstance = ref(null)
@@ -591,7 +604,7 @@ const initFinancialCharts = () => {
       type: 'line',
       data: {
         labels,
-        datasets: [{
+        datasets: [{ 
           label: '扣非净利润（亿元）',
           data: nonProfitData,
           borderColor: '#165DFF',
@@ -653,7 +666,7 @@ const initFinancialCharts = () => {
       type: 'line',
       data: {
         labels,
-        datasets: [{
+        datasets: [{ 
           label: '应收账款（亿元）',
           data: receivablesData,
           borderColor: '#FF7D00',
@@ -767,6 +780,16 @@ const fetchStockData = async () => {
     expectedGrowthRate.value = data.tradingPlan?.expectedGrowthRate || ''
     expectedPoint.value = data.tradingPlan?.expectedPoint || ''
 
+    // 利好利空与总结数据
+    prosPoints.value = data.prosCons?.prosPoints || ''
+    consPoints.value = data.prosCons?.consPoints || ''
+    investmentSummary.value = data.prosCons?.investmentSummary || ''
+
+    // 预测数据
+    maxUpwardRange.value = data.prediction?.maxUpwardRange || ''
+    maxDownwardRange.value = data.prediction?.maxDownwardRange || ''
+    investmentDuration.value = data.prediction?.investmentDuration || ''
+
     // 竞争对手数据
     competitors.value = data.competitors || []
 
@@ -808,9 +831,10 @@ const saveValuationLogic = async () => {
   }
 }
 
-// 保存交易计划
-const saveTradingPlan = async () => {
+// 保存投资计划（合并交易计划和预测数据）
+const saveInvestmentPlan = async () => {
   try {
+    // 保存交易计划
     const tradingPlan = {
       buyPoint: buyPoint.value,
       maxLossPoint: maxLossPoint.value,
@@ -822,10 +846,58 @@ const saveTradingPlan = async () => {
       stockCode: stockCode.value,
       tradingPlan
     })
-    alert('交易计划保存成功！')
+    
+    // 保存预测数据
+    await apiService.savePrediction({
+      stockCode: stockCode.value,
+      maxUpwardRange: maxUpwardRange.value,
+      maxDownwardRange: maxDownwardRange.value,
+      investmentDuration: investmentDuration.value
+    })
+    
+    alert('投资计划保存成功！')
   } catch (err) {
-    console.error('保存交易计划失败:', err)
+    console.error('保存投资计划失败:', err)
     alert('保存失败，请稍后重试')
+  }
+}
+
+// 保存利好利空与总结
+const saveProsConsSummary = async () => {
+  try {
+    await apiService.saveProsConsSummary({
+      stockCode: stockCode.value,
+      prosPoints: prosPoints.value,
+      consPoints: consPoints.value,
+      investmentSummary: investmentSummary.value
+    })
+    alert('利好利空与总结保存成功！')
+  } catch (err) {
+    console.error('保存利好利空与总结失败:', err)
+    alert('保存失败，请稍后重试')
+  }
+}
+
+// 添加友商
+const addCompetitor = async () => {
+  try {
+    if (!newCompetitor.value.name || !newCompetitor.value.code) {
+      alert('请填写友商名称和代码')
+      return
+    }
+    
+    await apiService.addCompetitor({
+      stockCode: stockCode.value,
+      competitor: newCompetitor.value
+    })
+    
+    // 更新友商列表
+    competitors.value.push({ ...newCompetitor.value })
+    newCompetitor.value = { name: '', code: '' }
+    alert('友商添加成功！')
+  } catch (err) {
+    console.error('添加友商失败:', err)
+    alert('添加失败，请稍后重试')
   }
 }
 
@@ -911,10 +983,27 @@ onUnmounted(() => {
 <style scoped>
 /* 基础样式：紧凑布局核心配置 */
 .stock-detail-container {
-  background-color: #f8f9fa;
+  background-color: #f5f7fa;
   min-height: 100vh;
   color: #111827;
   font-size: 14px;
+  --primary-color: #165dff;
+  --primary-dark: #0d47a1;
+  --primary-light: #e3f2fd;
+  --bg-card: #ffffff;
+  --bg-secondary: #fafbfc;
+  --gray-100: #f1f3f4;
+  --gray-200: #e5e7eb;
+  --gray-300: #d1d5db;
+  --gray-400: #9ca3af;
+  --text-primary: #1f2937;
+  --text-secondary: #4b5563;
+  --text-tertiary: #6b7280;
+  --border-radius: 8px;
+  --border-radius-sm: 4px;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.03);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.07);
 }
 
 /* 加载和错误状态（紧凑样式） */
@@ -966,58 +1055,83 @@ onUnmounted(() => {
   color: #f59e0b;
 }
 
-/* 按钮样式（现代化） */
+/* 按钮样式（现代化，美观设计） */
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0.5rem 1rem;
-  border-radius: var(--border-radius);
+  padding: 0.625rem 1.25rem;
+  border-radius: 8px;
   font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s ease;
   border: 1px solid transparent;
   gap: 0.5rem;
+  min-height: 40px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+  text-transform: none;
+  letter-spacing: normal;
 }
 
 .btn.primary {
-  background-color: var(--primary-color);
+  background-color: #2563eb;
   color: white;
-  border-color: var(--primary-color);
+  border-color: #2563eb;
 }
 
 .btn.primary:hover {
-  background-color: var(--primary-dark);
-  border-color: var(--primary-dark);
+  background-color: #1d4ed8;
+  border-color: #1d4ed8;
   transform: translateY(-1px);
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 4px 8px rgba(37, 99, 235, 0.2);
+}
+
+.btn.primary:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(37, 99, 235, 0.15);
 }
 
 .btn.secondary {
-  background-color: var(--bg-card);
-  color: var(--text-primary);
-  border-color: var(--gray-300);
+  background-color: white;
+  color: #374151;
+  border-color: #d1d5db;
 }
 
 .btn.secondary:hover {
-  background-color: var(--bg-secondary);
-  border-color: var(--gray-400);
+  background-color: #f9fafb;
+  border-color: #9ca3af;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.btn.bg-primary\/10 {
+  background-color: rgba(37, 99, 235, 0.1);
+  color: #2563eb;
+  border-color: rgba(37, 99, 235, 0.2);
+}
+
+.btn.bg-primary\/10:hover {
+  background-color: rgba(37, 99, 235, 0.15);
+  border-color: rgba(37, 99, 235, 0.3);
 }
 
 .btn-xs {
-  padding: 0.25rem 0.5rem;
-  font-size: 0.7rem;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.75rem;
+  min-height: 32px;
+  border-radius: 6px;
 }
 
 .btn-sm {
-  padding: 0.3rem 0.6rem;
-  font-size: 0.75rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.8125rem;
+  min-height: 36px;
+  border-radius: 7px;
 }
 
 .btn-icon-round {
-  width: 30px;
-  height: 30px;
+  width: 40px;
+  height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1026,12 +1140,15 @@ onUnmounted(() => {
   cursor: pointer;
   transition: all 0.2s ease;
   color: #374151;
-  font-size: 0.875rem;
+  font-size: 1rem;
+  font-weight: 500;
 }
 
 .btn-icon-round:hover {
   background-color: #e5e7eb;
   color: #165dff;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 /* 股票头部样式（现代化） */
@@ -1095,10 +1212,10 @@ onUnmounted(() => {
   background-color: var(--bg-card);
   border: 1px solid var(--gray-200);
   border-radius: var(--border-radius);
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-sm);
   transition: all 0.2s ease;
   overflow: hidden;
-  margin-bottom: 1.5rem;
+  margin-bottom: 1rem;
 }
 
 .card:hover {
@@ -1110,7 +1227,7 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1rem;
+  padding: 0.75rem 1rem;
   background-color: var(--bg-secondary);
   border-bottom: 1px solid var(--gray-200);
   margin-bottom: 0;
@@ -1130,9 +1247,9 @@ onUnmounted(() => {
 /* 快速指标样式（现代化网格） */
 .quick-metrics {
   display: grid;
-  gap: 1rem;
+  gap: 0.75rem;
   grid-template-columns: repeat(2, 1fr);
-  margin-bottom: 1.5rem;
+  margin-bottom: 1rem;
 }
 
 @media (min-width: 640px) {
@@ -1151,9 +1268,9 @@ onUnmounted(() => {
   background-color: var(--bg-card);
   border: 1px solid var(--gray-200);
   border-radius: var(--border-radius);
-  padding: 1.25rem;
+  padding: 0.75rem;
   transition: all 0.2s ease;
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-sm);
 }
 
 .metric-item:hover {
@@ -1164,16 +1281,16 @@ onUnmounted(() => {
 }
 
 .metric-label {
-  font-size: 0.875rem;
+  font-size: 0.75rem;
   color: var(--text-secondary);
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.25rem;
   font-weight: 500;
   text-transform: none;
   letter-spacing: normal;
 }
 
 .metric-value {
-  font-size: 1.25rem;
+  font-size: 1.125rem;
   font-weight: 700;
   color: var(--text-primary);
   line-height: 1.2;
@@ -1183,14 +1300,14 @@ onUnmounted(() => {
 .info-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 1rem;
-  margin-bottom: 1rem;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
 }
 
 .info-item {
   display: flex;
   flex-direction: column;
-  padding: 0.5rem 0;
+  padding: 0.375rem 0;
   border-bottom: 1px solid var(--gray-100);
 }
 
@@ -1202,7 +1319,7 @@ onUnmounted(() => {
   font-size: 0.75rem;
   color: var(--text-tertiary);
   font-weight: 500;
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.125rem;
 }
 
 .info-value {
@@ -1216,49 +1333,21 @@ onUnmounted(() => {
   overflow-x: auto;
 }
 
-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-th, td {
-  padding: 0.5rem 0.75rem;
-  text-align: left;
-  border-bottom: 1px solid #e5e7eb;
-}
-
-th {
-  font-size: 0.7rem;
-  font-weight: 600;
-  color: #6b7280;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-}
-
-td {
-  font-size: 0.75rem;
-  color: #111827;
-}
-
-tr:hover {
-  background-color: #f9fafb;
-}
-
 /* 笔记相关样式（紧凑） */
 .notes-list {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  max-height: 256px;
+  gap: 0.5rem;
+  max-height: 220px;
   overflow-y: auto;
   padding-right: 0.5rem;
 }
 
 .note-item {
-  padding: 0.75rem;
+  padding: 0.625rem;
   background-color: #f9fafb;
   border: 1px solid #e5e7eb;
-  border-radius: 4px;
+  border-radius: 6px;
   cursor: pointer;
   transition: all 0.2s ease;
 }
@@ -1271,7 +1360,7 @@ tr:hover {
 }
 
 .note-title {
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   font-weight: 600;
   color: #111827;
   white-space: nowrap;
@@ -1280,15 +1369,17 @@ tr:hover {
 }
 
 .note-meta {
-  font-size: 0.7rem;
+  font-size: 0.6875rem;
   color: #6b7280;
-  margin-top: 0.25rem;
+  margin-top: 0.125rem;
+  display: flex;
+  justify-content: space-between;
 }
 
 .note-content {
   font-size: 0.75rem;
   color: #4b5563;
-  margin-top: 0.5rem;
+  margin-top: 0.375rem;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -1369,7 +1460,7 @@ tr:hover {
 .form-textarea,
 .form-control {
   width: 100%;
-  padding: 0.5rem 0.75rem;
+  padding: 0.625rem 0.75rem;
   border: 1px solid #d1d5db;
   border-radius: 4px;
   font-size: 0.875rem;
@@ -1384,7 +1475,7 @@ tr:hover {
 }
 
 .form-textarea {
-  min-height: 120px;
+  min-height: 80px;
   resize: vertical;
 }
 
@@ -1419,442 +1510,96 @@ tr:hover {
 .competitor-list {
   display: flex;
   flex-direction: column;
-  gap: 0.875rem;
+  gap: 0.5rem;
 }
 
 .competitor-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 1rem;
+  padding: 0.5rem 0.75rem;
   background-color: var(--bg-card);
   border: 1px solid var(--gray-200);
   border-radius: var(--border-radius);
   transition: all 0.2s ease;
   cursor: pointer;
-  box-shadow: var(--shadow-sm);
 }
 
 .competitor-item:hover {
   background-color: var(--bg-secondary);
   border-color: var(--primary-color);
-  box-shadow: var(--shadow-md);
   transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.competitor-info {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
 }
 
 .competitor-rank {
-  width: 28px;
-  height: 28px;
+  width: 20px;
+  height: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
   background-color: var(--primary-light);
   color: var(--primary-color);
   border-radius: 50%;
-  font-size: 0.875rem;
-  font-weight: 700;
-  margin-right: 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.competitor-details {
+  min-width: 0;
 }
 
 .competitor-name {
-  font-size: 0.9375rem;
+  font-size: 0.875rem;
   font-weight: 600;
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  flex: 1;
 }
 
 .competitor-code {
   font-size: 0.75rem;
   color: var(--text-tertiary);
-  margin-left: 0.5rem;
+  margin-top: 0.125rem;
 }
 
 .competitor-action {
-  font-size: 0.875rem;
+  font-size: 0.75rem;
   color: var(--primary-color);
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
+  font-weight: 500;
 }
 
-/* 图表样式（现代化） */
+/* 财务趋势图表样式（紧凑） */
 .chart-group {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 1rem;
 }
 
 .chart-subtitle {
-  font-size: 1rem;
+  font-size: 0.875rem;
   font-weight: 600;
   color: var(--text-primary);
-  margin-bottom: 0.75rem;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.chart-subtitle::before {
-  content: '';
-  width: 3px;
-  height: 1.25rem;
-  background-color: var(--primary-color);
-  border-radius: 1.5px;
+  margin-bottom: 0.5rem;
 }
 
 .chart-container {
   position: relative;
-  height: 300px;
+  height: 200px;
   width: 100%;
-  background-color: var(--bg-card);
-  border-radius: var(--border-radius);
-  border: 1px solid var(--gray-200);
-  padding: 1rem;
-  box-shadow: var(--shadow);
 }
 
-.chart-desc {
-  font-size: 0.75rem;
-  color: var(--text-tertiary);
-  margin-top: 0.75rem;
-  padding: 0.75rem;
-  background-color: var(--bg-secondary);
-  border-radius: var(--border-radius-sm);
-  border-left: 3px solid var(--gray-300);
-}
-
-/* 响应式调整（现代化适配） */
-@media (max-width: 1024px) {
-  .lg:col-span-4, .lg:col-span-8 {
-    grid-column: span 12 !important;
-  }
-  
-  .chart-container {
-    height: 250px;
-  }
-}
-
-@media (max-width: 768px) {
-  .stock-detail-container {
-    padding: 0;
-  }
-  
-  .container {
-    padding: 0 1rem;
-  }
-  
-  .stock-header {
-    padding: 1rem;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 1rem;
-  }
-  
-  .price-group {
-    align-items: flex-start;
-    width: 100%;
-  }
-  
-  /* 修复错误：用原生CSS替换grid-cols-1 */
-  .trading-form .grid {
-    grid-template-columns: 1fr !important;
-  }
-  
-  .quick-metrics {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  
-  .info-grid {
-    grid-template-columns: 1fr;
-  }
-  
-  .chart-container {
-    height: 220px !important;
-    padding: 0.75rem;
-  }
-  
-  .competitor-item {
-    flex-wrap: wrap;
-    gap: 0.5rem;
-  }
-  
-  .competitor-rank {
-    margin-right: 0.5rem;
-  }
-}
-
-@media (max-width: 480px) {
-  .container {
-    padding: 0 0.75rem;
-  }
-  
-  .stock-title {
-    font-size: 0.9375rem;
-  }
-  
-  .current-price {
-    font-size: 1rem;
-  }
-  
-  .quick-metrics {
-    grid-template-columns: 1fr;
-  }
-  
-  .metric-item {
-    padding: 1rem;
-  }
-  
-  .financial-highlights {
-    grid-template-columns: 1fr;
-  }
-  
-  .chart-container {
-    height: 160px !important;
-  }
-}
-
-/* 自定义滚动条（现代化） */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: var(--bg-secondary);
-  border-radius: var(--border-radius);
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--gray-300);
-  border-radius: var(--border-radius);
-  border: 2px solid var(--bg-secondary);
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--gray-400);
-}
-
-/* 工具类（紧凑） */
-.line-clamp-2 {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.truncate {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* 估值逻辑与交易计划样式（紧凑） */
-.valuation-container {
-  margin-bottom: 0.75rem;
-}
-
-.trading-form .grid {
-  display: grid;
+/* 利好利空与总结样式 */
+.pros-cons-container {
+  display: flex;
+  flex-direction: column;
   gap: 0.75rem;
-}
-
-/* 双列布局（默认） */
-.trading-form .grid.cols-2 {
-  grid-template-columns: repeat(2, 1fr);
-}
-
-/* 现代化颜色系统 */
-:root {
-  --primary-color: #3b82f6; /* 蓝色主题 - 更现代友好 */
-  --primary-dark: #2563eb;
-  --primary-light: rgba(59, 130, 246, 0.1);
-  --success-color: #10b981; /* 成功/增长 - 绿色 */
-  --warning-color: #f59e0b; /* 警告/中性 - 橙色 */
-  --danger-color: #ef4444;  /* 危险/下跌 - 红色 */
-  --bg-primary: #ffffff;
-  --bg-secondary: #f9fafb;
-  --bg-card: #ffffff;
-  --gray-100: #f3f4f6;
-  --gray-200: #e5e7eb;
-  --gray-300: #d1d5db;
-  --gray-400: #9ca3af;
-  --gray-500: #6b7280;
-  --gray-600: #4b5563;
-  --gray-700: #374151;
-  --gray-800: #1f2937;
-  --gray-900: #111827;
-  --text-primary: var(--gray-900);
-  --text-secondary: var(--gray-600);
-  --text-tertiary: var(--gray-500);
-  --border-radius-sm: 0.375rem; /* 6px */
-  --border-radius: 0.5rem;     /* 8px */
-  --border-radius-lg: 0.75rem; /* 12px */
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-}
-
-.text-primary {
-  color: var(--primary-color);
-}
-
-.bg-primary\/10 {
-  background-color: var(--primary-light);
-}
-
-/* 字体系统统一 */
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  color: var(--text-primary);
-  line-height: 1.5;
-}
-
-/* 标题样式 */
-h1, h2, h3, h4, h5, h6 {
-  font-weight: 600;
-  line-height: 1.25;
-  color: var(--text-primary);
-}
-
-h1 { font-size: 1.5rem; } /* 24px */
-h2 { font-size: 1.25rem; } /* 20px */
-h3 { font-size: 1.125rem; } /* 18px */
-h4 { font-size: 1rem; } /* 16px */
-
-/* 文本样式 */
-.text-sm { font-size: 0.875rem; } /* 14px */
-.text-xs { font-size: 0.75rem; } /* 12px */
-.text-lg { font-size: 1.125rem; } /* 18px */
-.text-xl { font-size: 1.25rem; } /* 20px */
-.text-2xl { font-size: 1.5rem; } /* 24px */
-
-/* 间距系统 */
-.mt-1 { margin-top: 0.25rem; }
-.mt-2 { margin-top: 0.5rem; }
-.mt-3 { margin-top: 0.75rem; }
-.mt-4 { margin-top: 1rem; }
-
-.mb-1 { margin-bottom: 0.25rem; }
-.mb-2 { margin-bottom: 0.5rem; }
-.mb-3 { margin-bottom: 0.75rem; }
-.mb-4 { margin-bottom: 1rem; }
-.mb-5 { margin-bottom: 1.25rem; }
-
-.p-1 { padding: 0.25rem; }
-.p-2 { padding: 0.5rem; }
-.p-3 { padding: 0.75rem; }
-.p-4 { padding: 1rem; }
-
-/* 卡片通用样式 */
-.card {
-  background-color: var(--bg-card);
-  border-radius: var(--border-radius);
-  box-shadow: var(--shadow);
-  border: 1px solid var(--gray-200);
-  overflow: hidden;
-  transition: box-shadow 0.2s ease-in-out, transform 0.1s ease-in-out;
-}
-
-.card:hover {
-  box-shadow: var(--shadow-md);
-  transform: translateY(-1px);
-}
-
-.card-header {
-  padding: 1rem;
-  border-bottom: 1px solid var(--gray-200);
-  background-color: var(--bg-secondary);
-}
-
-.card-body {
-  padding: 1rem;
-}
-
-.card-footer {
-  padding: 0.75rem 1rem;
-  border-top: 1px solid var(--gray-200);
-  background-color: var(--bg-secondary);
-}
-
-/* 按钮通用样式 */
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--border-radius-sm);
-  font-weight: 500;
-  transition: all 0.2s ease;
-  border: 1px solid transparent;
-  cursor: pointer;
-  padding: 0.5rem 1rem;
-  font-size: 0.875rem;
-}
-
-.btn-primary {
-  background-color: var(--primary-color);
-  color: white;
-  border-color: var(--primary-color);
-}
-
-.btn-primary:hover {
-  background-color: var(--primary-dark);
-  border-color: var(--primary-dark);
-}
-
-.btn-secondary {
-  background-color: var(--gray-200);
-  color: var(--text-primary);
-  border-color: var(--gray-200);
-}
-
-.btn-secondary:hover {
-  background-color: var(--gray-300);
-  border-color: var(--gray-300);
-}
-
-/* 输入框样式 */
-.form-input, .form-textarea {
-  border-radius: var(--border-radius-sm);
-  border: 1px solid var(--gray-300);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-  padding: 0.5rem 0.75rem;
-  font-size: 0.875rem;
-}
-
-.form-input:focus, .form-textarea:focus {
-  outline: none;
-  border-color: var(--primary-color);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-}
-
-/* 标签样式 */
-.badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.125rem 0.375rem;
-  font-size: 0.75rem;
-  font-weight: 500;
-  border-radius: var(--border-radius-sm);
-  line-height: 1.25;
-}
-
-.badge-primary {
-  background-color: var(--primary-light);
-  color: var(--primary-color);
-}
-
-.badge-success {
-  background-color: rgba(16, 185, 129, 0.1);
-  color: var(--success-color);
-}
-
-.badge-danger {
-  background-color: rgba(239, 68, 68, 0.1);
-  color: var(--danger-color);
 }
 </style>
