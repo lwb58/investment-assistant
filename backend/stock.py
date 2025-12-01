@@ -370,104 +370,269 @@ def get_stock_quotes_api(stock_code: str):
     return data
 
 
+
+# ------------------- 杜邦分析数据提取 -------------------
+@stock_router.get("/dubang/{stock_id}")
+def sina_dupont_analysis(
+    stock_id: str, 
+    displaytype: str = "10",
+    export_excel: bool = True  # 默认导出Excel（全量数据）
+) -> Dict[str, Optional[List[Dict]]]:
+    """
+    全量解析新浪财经股票杜邦分析页面，提取所有指标（含周期类型识别）
+    包含：核心指标 + 完整拆解指标 + 周期类型（年报/中报/季报）
+    """
+    def parse_period_type(date_str: str) -> str:
+        """从报告期日期解析周期类型"""
+        try:
+            month = int(date_str.split("-")[1])
+            if month == 12:
+                return "年报"
+            elif month == 6:
+                return "中报"
+            elif month in [3, 9]:
+                return "季报"
+            else:
+                return "未知周期"
+        except:
+            return "未知周期"
+
+    url = f"https://vip.stock.finance.sina.com.cn/corp/go.php/vFD_DupontAnalysis/stockid/{stock_id}/displaytype/{displaytype}.phtml"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+        "Referer": "https://finance.sina.com.cn/"
+    }
+    
+    result = {
+        "stock_id": stock_id,
+        "full_data": None,  # 全量数据（含周期类型）
+        "error": None
+    }
+    
+    try:
+        # 1. 发送请求并解析页面
+        response = requests.get(url, headers=headers, timeout=20, verify=False)
+        response.encoding = "gb2312"
+        if response.status_code != 200:
+            result["error"] = f"请求失败，状态码：{response.status_code}"
+            return result
+        
+        soup = BeautifulSoup(response.text, "html.parser")
+        full_data = []
+        
+        # 2. 提取所有有效报告期（严格匹配YYYY-MM-DD格式）
+        report_dates = []
+        for a in soup.find_all("a", attrs={"name": True}):
+            date_str = a.get("name", "").strip()
+            if len(date_str) == 10 and date_str.count("-") == 2:
+                try:
+                    year, month, day = map(int, date_str.split("-"))
+                    if 2010 <= year <= 2100 and 1 <= month <= 12 and 1 <= day <= 31:
+                        report_dates.append(date_str)
+                except:
+                    continue
+        
+        if not report_dates:
+            result["error"] = "未找到有效报告期（页面无数据或结构变更）"
+            return result
+        
+        report_dates = list(set(report_dates))  # 去重
+        report_dates.sort(reverse=True)  # 按时间倒序
+        
+        # 3. 全量提取每个报告期的所有指标（新增周期类型）
+        for date in report_dates:
+            # 定位当前报告期的完整容器
+            anchor = soup.find("a", attrs={"name": date})
+            if not anchor:
+                continue
+            
+            # 找到包含所有指标的.wrap容器
+            wrap_div = anchor.find_next("div", class_="wrap")
+            if not wrap_div:
+                # 降级查找：如果找不到.wrap，查找包含.node的最近div
+                wrap_div = anchor.find_next("div", string=lambda text: text and "净资产收益率" in text)
+                if wrap_div:
+                    wrap_div = wrap_div.find_parent("div", recursive=True)
+            
+            if not wrap_div:
+                continue
+            
+            # 提取该容器下所有.node节点
+            node_divs = wrap_div.find_all("div", class_=lambda c: c and "node" in c)
+            period_indicators = {
+                "报告期": date,
+                "周期类型": parse_period_type(date)  # 新增周期类型字段
+            }
+            
+            for node in node_divs:
+                key_tags = node.find_all("p", class_=lambda c: c and "key" in c)
+                value_tag = node.find("p", class_=lambda c: c and "value" in c)
+                
+                if not key_tags or not value_tag:
+                    continue
+                
+                indicator_name = "".join([tag.get_text(strip=True) for tag in key_tags])
+                indicator_value = value_tag.get_text(strip=True)
+                period_indicators[indicator_name] = indicator_value
+            
+            # 过滤无效数据（至少包含核心4个指标）
+            core_keys = {"净资产收益率", "归属母公司股东的销售净利率", "资产周转率(次)", "权益乘数"}
+            if all(key in period_indicators for key in core_keys):
+                full_data.append(period_indicators)
+        
+        if not full_data:
+            result["error"] = "找到报告期，但未提取到有效指标（可能页面结构变更）"
+            return result
+        
+        result["full_data"] = full_data
+        
+        # 4. 导出全量数据到Excel（包含周期类型）
+        if export_excel:
+            df = pd.DataFrame(full_data)
+            # 重新排列列：报告期、周期类型在前，核心指标次之
+            core_cols = ["报告期", "周期类型", "净资产收益率", "归属母公司股东的销售净利率", "资产周转率(次)", "权益乘数"]
+            other_cols = [col for col in df.columns if col not in core_cols]
+            df = df[core_cols + other_cols]
+            excel_filename = f"股票{stock_id}_杜邦分析全量数据.xlsx"
+            df.to_excel(excel_filename, index=False, engine="openpyxl")
+            print(f"\n✅ 全量数据已导出到：{excel_filename}")
+        
+    except requests.exceptions.Timeout:
+        result["error"] = "请求超时（网络不稳定或页面响应慢）"
+    except requests.exceptions.ConnectionError:
+        result["error"] = "网络连接错误（请检查网络）"
+    except Exception as e:
+        result["error"] = f"解析失败：{str(e)}"
+    
+    return result
 @stock_router.get("/dupont/chart", response_class=StreamingResponse)
 def generate_dupont_chart(
     stock_id: str = Query(..., description="股票代码（如600000）"),
-    factor_type: str = Query("all", description="指标类型：all/roe/net_profit_margin/asset_turnover/equity_multiplier")
+    factor_type: str = Query("all", description="指标类型：all/roe/three/five/net_profit_margin/asset_turnover/equity_multiplier"),
+    cycle_type: str = Query("all", description="周期类型：all/年报/中报/季报（仅对比同周期数据）")
 ):
-    """生成杜邦分析图表（使用Plotly，支持多线程安全）"""
+    """生成杜邦分析图表（支持周期筛选，确保同周期对比）"""
     try:
-        # 1. 获取杜邦分析数据（调用你的解析函数）
+        # 1. 获取杜邦分析数据（含周期类型）
         dupont_data = sina_dupont_analysis(stock_id, export_excel=False)
+        logger.info(f"获取到的杜邦分析数据：{dupont_data}")
         if dupont_data.get("error") or not dupont_data.get("full_data"):
             raise HTTPException(status_code=404, detail=dupont_data.get("error") or "未找到杜邦分析数据")
         
-        # 2. 处理数据（转为DataFrame，按报告期排序）
+        # 2. 处理数据（清洗+周期筛选）
         df = pd.DataFrame(dupont_data["full_data"])
+        df.columns = df.columns.str.strip()  # 修复列名空格问题
         df["报告期"] = pd.to_datetime(df["报告期"])  # 转为日期格式
+        
+        # 按周期类型筛选（仅保留同周期数据）
+        if cycle_type != "all":
+            df = df[df["周期类型"] == cycle_type]
+            if df.empty:
+                raise HTTPException(status_code=404, detail=f"无{cycle_type}数据，请更换周期类型")
+        
         df = df.sort_values("报告期")  # 按时间升序排列
 
-        # 3. 定义要显示的指标（根据factor_type筛选）
+        # 3. 定义要显示的指标
         indicator_map = {
             "roe": {"name": "净资产收益率", "color": "#409eff"},
             "net_profit_margin": {"name": "归属母公司股东的销售净利率", "color": "#67c23a"},
             "asset_turnover": {"name": "资产周转率(次)", "color": "#faad14"},
             "equity_multiplier": {"name": "权益乘数", "color": "#f5222d"},
-            "all": None  # 显示全部指标
+            "interest_burden": {"name": "考虑利息负担", "color": "#8c8c8c"},
+            "tax_burden": {"name": "考虑税负因素", "color": "#52c41a"}
         }
+        
+        # 4. 验证指标类型合法性
+        valid_factor_types = ["all", "three", "five"] + list(indicator_map.keys())
+        if factor_type not in valid_factor_types:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"无效的指标类型，允许值：{valid_factor_types}"
+            )
 
-        # 4. 生成图表
+        # 5. 生成图表
         fig = go.Figure()
 
-        # 根据factor_type添加曲线
-        if factor_type == "all":
-            # 显示所有核心指标
-            for key, info in indicator_map.items():
-                if key != "all":
-                    fig.add_trace(go.Scatter(
-                        x=df["报告期"],
-                        y=df[info["name"]],
-                        mode="lines+markers",
-                        name=info["name"],
-                        line=dict(color=info["color"], width=2),
-                        marker=dict(size=6)
-                    ))
-            title = f"{stock_id} 杜邦分析核心指标趋势"
-        else:
-            # 显示单个指标
-            if factor_type not in indicator_map:
-                raise HTTPException(status_code=400, detail="无效的指标类型")
-            info = indicator_map[factor_type]
+        # 辅助函数：添加指标曲线
+        def add_trace(indicator_key):
+            info = indicator_map[indicator_key]
+            if info["name"] not in df.columns:
+                raise HTTPException(
+                    status_code=404, 
+                    detail=f"数据中缺少指标：{info['name']}（可能页面结构变更）"
+                )
+            # 处理指标值（去除百分号并转为数值）
+            y_values = df[info["name"]].replace("%", "", regex=True).astype(float)
+            # x轴标签：报告期+周期类型（如2023-12-31（年报））
+            x_labels = [f"{d.strftime('%Y-%m-%d')}（{t}）" for d, t in zip(df["报告期"], df["周期类型"])]
             fig.add_trace(go.Scatter(
-                x=df["报告期"],
-                y=df[info["name"]],
+                x=x_labels,
+                y=y_values,
                 mode="lines+markers",
                 name=info["name"],
                 line=dict(color=info["color"], width=2),
-                marker=dict(size=6)
+                marker=dict(size=6),
+                hovertemplate="%{x}<br>%{y:.2f}%<extra></extra>"  # 悬停显示周期和数值
             ))
-            title = f"{stock_id} {info['name']}趋势"
 
-        # 5. 美化图表布局
+        # 6. 根据factor_type添加曲线
+        if factor_type == "all":
+            for key in indicator_map:
+                add_trace(key)
+            title = f"{stock_id} 杜邦分析核心指标趋势（{cycle_type if cycle_type != 'all' else '全周期'}）"
+        elif factor_type == "three":
+            three_factors = ["net_profit_margin", "asset_turnover", "equity_multiplier"]
+            for key in three_factors:
+                add_trace(key)
+            title = f"{stock_id} 杜邦三因素分析趋势（{cycle_type if cycle_type != 'all' else '全周期'}）"
+        elif factor_type == "five":
+            five_factors = ["net_profit_margin", "asset_turnover", "equity_multiplier", "interest_burden", "tax_burden"]
+            for key in five_factors:
+                add_trace(key)
+            title = f"{stock_id} 杜邦五因素分析趋势（{cycle_type if cycle_type != 'all' else '全周期'}）"
+        else:
+            add_trace(factor_type)
+            title = f"{stock_id} {indicator_map[factor_type]['name']}趋势（{cycle_type if cycle_type != 'all' else '全周期'}）"
+
+        # 7. 美化图表布局
         fig.update_layout(
-            title=dict(
-                text=title,
-                font=dict(size=16, color="#333"),
-                x=0.5,  # 标题居中
-                xanchor="center"
-            ),
+            title=dict(text=title, font=dict(size=16, color="#333"), x=0.5, xanchor="center"),
             xaxis=dict(
-                title="报告期",
-                showgrid=True,
-                gridcolor="#f0f0f0",
-                tickangle=45  # x轴标签旋转45度，避免重叠
+                title="报告期（周期类型）", 
+                showgrid=True, 
+                gridcolor="#f0f0f0", 
+                tickangle=45,
+                tickfont=dict(size=10)  # 缩小x轴标签字体，避免重叠
             ),
             yaxis=dict(
-                title="指标值",
-                showgrid=True,
+                title="指标值（%）", 
+                showgrid=True, 
                 gridcolor="#f0f0f0"
             ),
             legend=dict(
-                orientation="h",  # 水平显示图例
-                yanchor="bottom",
-                y=1.02,
-                xanchor="right",
+                orientation="h", 
+                yanchor="bottom", 
+                y=1.02, 
+                xanchor="right", 
                 x=1
             ),
-            margin=dict(l=40, r=40, t=60, b=80),  # 调整边距
-            hovermode="x unified",  # 鼠标悬停时显示同一x值的所有指标
-            plot_bgcolor="white"  # 白色背景
+            margin=dict(l=40, r=40, t=60, b=120),  # 增加底部边距，避免x轴标签被截断
+            hovermode="x unified",
+            plot_bgcolor="white"
         )
 
-        # 6. 将图表保存到BytesIO缓冲区
+        # 8. 保存图表并返回
         buf = BytesIO()
-        fig.write_image(buf, format="png", width=1000, height=600, scale=2)  # scale=2提升清晰度
-        buf.seek(0)  # 重置缓冲区指针
-
-        # 7. 返回图片流
+        fig.write_image(buf, format="png", width=1200, height=700, scale=1.5, engine="kaleido")
+        buf.seek(0)
         return StreamingResponse(buf, media_type="image/png")
 
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"生成图表失败：{str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"生成图表失败：{str(e)}")
 
 
@@ -819,125 +984,3 @@ def delete_stock(stock_id: str):
     logger.info(f"成功删除股票: {stock_id}")
     return {"detail": "股票删除成功"}
 
-@stock_router.get("/dubang/{stock_id}")
-def sina_dupont_analysis(
-    stock_id: str, 
-    displaytype: str = "10",
-    export_excel: bool = True  # 默认导出Excel（全量数据）
-) -> Dict[str, Optional[List[Dict]]]:
-    """
-    全量解析新浪财经股票杜邦分析页面，提取所有指标（无遗漏）
-    包含：核心指标 + 完整拆解指标（EBIT、利润总额、营业总收入等所有页面显示数据）
-    """
-    url = f"https://vip.stock.finance.sina.com.cn/corp/go.php/vFD_DupontAnalysis/stockid/{stock_id}/displaytype/{displaytype}.phtml"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-        "Referer": "https://finance.sina.com.cn/"
-    }
-    
-    result = {
-        "stock_id": stock_id,
-        "full_data": None,  # 全量数据（核心+所有详细指标）
-        "error": None
-    }
-    
-    try:
-        # 1. 发送请求并解析页面
-        response = requests.get(url, headers=headers, timeout=20, verify=False)
-        response.encoding = "gb2312"
-        if response.status_code != 200:
-            result["error"] = f"请求失败，状态码：{response.status_code}"
-            return result
-        
-        soup = BeautifulSoup(response.text, "html.parser")
-        full_data = []
-        
-        # 2. 提取所有有效报告期（严格匹配YYYY-MM-DD格式）
-        report_dates = []
-        for a in soup.find_all("a", attrs={"name": True}):
-            date_str = a.get("name", "").strip()
-            if len(date_str) == 10 and date_str.count("-") == 2:
-                try:
-                    year, month, day = map(int, date_str.split("-"))
-                    if 2010 <= year <= 2100 and 1 <= month <= 12 and 1 <= day <= 31:
-                        report_dates.append(date_str)
-                except:
-                    continue
-        
-        if not report_dates:
-            result["error"] = "未找到有效报告期（页面无数据或结构变更）"
-            return result
-        
-        report_dates = list(set(report_dates))  # 去重
-        report_dates.sort(reverse=True)  # 按时间倒序
-        
-        # 3. 全量提取每个报告期的所有指标（无遗漏）
-        for date in report_dates:
-            # 定位当前报告期的完整容器
-            anchor = soup.find("a", attrs={"name": date})
-            if not anchor:
-                continue
-            
-            # 找到包含所有指标的.wrap容器（可能需要跨层级查找）
-            wrap_div = anchor.find_next("div", class_="wrap")
-            if not wrap_div:
-                # 降级查找：如果找不到.wrap，查找包含.node的最近div
-                wrap_div = anchor.find_next("div", string=lambda text: text and "净资产收益率" in text)
-                if wrap_div:
-                    wrap_div = wrap_div.find_parent("div", recursive=True)
-            
-            if not wrap_div:
-                continue
-            
-            # 提取该容器下所有.node节点（所有层级的指标）
-            node_divs = wrap_div.find_all("div", class_=lambda c: c and "node" in c)  # 匹配所有含node的class
-            period_indicators = {"报告期": date}
-            
-            for node in node_divs:
-                # 提取指标名称（支持多行拼接，如"归属母公司股东的\n销售净利率"）
-                key_tags = node.find_all("p", class_=lambda c: c and "key" in c)
-                value_tag = node.find("p", class_=lambda c: c and "value" in c)
-                
-                if not key_tags or not value_tag:
-                    continue
-                
-                # 拼接指标名称（去除空格和换行）
-                indicator_name = "".join([tag.get_text(strip=True) for tag in key_tags])
-                indicator_value = value_tag.get_text(strip=True)
-                
-                # 避免重复指标（保留最后一个值）
-                period_indicators[indicator_name] = indicator_value
-            
-            # 过滤无效数据（至少包含核心4个指标才保留）
-            core_keys = {"净资产收益率", "归属母公司股东的销售净利率", "资产周转率(次)", "权益乘数"}
-            if all(key in period_indicators for key in core_keys):
-                full_data.append(period_indicators)
-        
-        if not full_data:
-            result["error"] = "找到报告期，但未提取到有效指标（可能页面结构变更）"
-            return result
-        
-        result["full_data"] = full_data
-        
-        # 4. 导出全量数据到Excel（包含所有指标）
-        if export_excel:
-            df = pd.DataFrame(full_data)
-            # 重新排列列：报告期在前，核心指标次之，其他指标在后
-            core_cols = ["报告期", "净资产收益率", "归属母公司股东的销售净利率", "资产周转率(次)", "权益乘数"]
-            other_cols = [col for col in df.columns if col not in core_cols]
-            df = df[core_cols + other_cols]
-            # 保存Excel
-            excel_filename = f"股票{stock_id}_杜邦分析全量数据.xlsx"
-            df.to_excel(excel_filename, index=False, engine="openpyxl")
-            print(f"\n✅ 全量数据已导出到：{excel_filename}")
-        
-    except requests.exceptions.Timeout:
-        result["error"] = "请求超时（网络不稳定或页面响应慢）"
-    except requests.exceptions.ConnectionError:
-        result["error"] = "网络连接错误（请检查网络）"
-    except Exception as e:
-        result["error"] = f"解析失败：{str(e)}"
-    
-    return result
