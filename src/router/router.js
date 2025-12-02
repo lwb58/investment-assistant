@@ -31,6 +31,14 @@ const router = createRouter({
       meta: {
         title: '复盘笔记'
       }
+    },
+    {
+      path: '/cost-analysis',
+      name: 'costAnalysis',
+      component: () => import('../views/CostAnalysisView.vue'),
+      meta: {
+        title: '成本分析'
+      }
     }
   ]
 })

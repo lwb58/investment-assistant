@@ -130,10 +130,17 @@
           <!-- 三因素分析 -->
           <div class="mb-6">
             <h4 class="text-sm text-gray-600 mb-2">三因素分析（ROE = 销售净利率 × 资产周转率 × 权益乘数）</h4>
-            <div class="h-64 bg-gray-50 rounded flex items-center justify-center">
-              <img :src="`/api/stocks/dupont/chart?stock_id=${stockCode}&factor_type=three`" alt="杜邦三因素分析"
-                class="h-full w-full object-contain" @error="handleChartError('three')">
-              <div v-if="threeFactorError" class="text-red-500 text-sm">
+            <div class="h-64 bg-gray-50 rounded relative">
+              <!-- 加载状态 -->
+              <div v-if="dupontLoading" class="absolute inset-0 flex items-center justify-center bg-white/80 z-10">
+                <div class="loading-spinner"></div>
+              </div>
+              
+              <!-- 图表容器 -->
+              <canvas id="threeFactorChart" class="h-full w-full"></canvas>
+              
+              <!-- 错误提示 -->
+              <div v-if="!dupontLoading && threeFactorError" class="absolute inset-0 flex items-center justify-center text-red-500 text-sm">
                 {{ threeFactorError }}
               </div>
             </div>
@@ -141,11 +148,18 @@
 
           <!-- 五因素分析 -->
           <div>
-            <h4 class="text-sm text-gray-600 mb-2">五因素分析（ROE = 销售利润率 × 资产周转率 × 权益乘数 × 财务费用率 × 税率影响）</h4>
-            <div class="h-64 bg-gray-50 rounded flex items-center justify-center">
-              <img :src="`/api/stocks/dupont/chart?stock_id=${stockCode}&factor_type=five`" alt="杜邦五因素分析"
-                class="h-full w-full object-contain" @error="handleChartError('five')">
-              <div v-if="fiveFactorError" class="text-red-500 text-sm">
+            <h4 class="text-sm text-gray-600 mb-2">五因素分析（ROE = 经营利润率 × 资产周转率 × 权益乘数 × 税负因素 × 利息负担）</h4>
+            <div class="h-64 bg-gray-50 rounded relative">
+              <!-- 加载状态 -->
+              <div v-if="dupontLoading" class="absolute inset-0 flex items-center justify-center bg-white/80 z-10">
+                <div class="loading-spinner"></div>
+              </div>
+              
+              <!-- 图表容器 -->
+              <canvas id="fiveFactorChart" class="h-full w-full"></canvas>
+              
+              <!-- 错误提示 -->
+              <div v-if="!dupontLoading && fiveFactorError" class="absolute inset-0 flex items-center justify-center text-red-500 text-sm">
                 {{ fiveFactorError }}
               </div>
             </div>
@@ -440,6 +454,12 @@ const router = useRouter()
 const threeFactorError = ref('')
 const fiveFactorError = ref('')
 
+// 杜邦分析相关状态
+const dupontData = ref(null)
+const dupontLoading = ref(false)
+const threeFactorChartInstance = ref(null)
+const fiveFactorChartInstance = ref(null)
+
 // 响应式状态（新增估值、买卖点、竞争对手字段）
 const stockInfo = ref({
   code: '',
@@ -473,6 +493,351 @@ const handleChartError = (type) => {
   } else {
     fiveFactorError.value = '五因素图表加载失败'
   }
+}
+
+// 组件挂载时执行
+onMounted(() => {
+  fetchStockData()
+  fetchStockNotes()
+  // fetchValuationLogic()
+  fetchDupontData() // 新增：加载杜邦分析数据
+  
+  // 窗口大小变化时重新渲染图表
+  window.addEventListener('resize', handleResize)
+})
+
+// 处理窗口大小变化
+const handleResize = () => {
+  if (dupontData.value && dupontData.value.full_data) {
+    setTimeout(() => {
+      initThreeFactorChart()
+      initFiveFactorChart()
+    }, 100)
+  }
+}
+
+// 组件卸载时清理
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResize)
+  
+  // 销毁图表实例
+  if (threeFactorChartInstance.value) {
+    threeFactorChartInstance.value.destroy()
+  }
+  if (fiveFactorChartInstance.value) {
+    fiveFactorChartInstance.value.destroy()
+  }
+})
+
+// 获取杜邦分析数据
+const fetchDupontData = async () => {
+  if (!stockCode.value) return
+  
+  dupontLoading.value = true
+  try {
+    const data = await apiService.getStockDupontAnalysis(stockCode.value)
+    if (data && data.full_data) {
+      dupontData.value = data
+      // 数据加载完成后初始化图表
+      setTimeout(() => {
+        initThreeFactorChart()
+        initFiveFactorChart()
+      }, 100)
+    }
+  } catch (error) {
+    console.error('获取杜邦分析数据失败:', error)
+  } finally {
+    dupontLoading.value = false
+  }
+}
+
+// 初始化三因素杜邦分析图表
+const initThreeFactorChart = () => {
+  if (!Chart || !dupontData.value || !dupontData.value.full_data) return
+  
+  const ctx = document.getElementById('threeFactorChart')
+  if (!ctx) return
+  
+  // 销毁现有图表实例
+  if (threeFactorChartInstance.value) {
+    threeFactorChartInstance.value.destroy()
+  }
+  
+  // 准备数据 - 从最新到最旧排序
+  const sortedData = [...dupontData.value.full_data].reverse()
+  const labels = sortedData.map(item => item['报告期'])
+  
+  // 提取ROE数据（去掉%号并转换为数字）
+  const roeData = sortedData.map(item => {
+    const value = parseFloat(item['净资产收益率']?.replace('%', '') || 0)
+    return isNaN(value) ? 0 : value
+  })
+  
+  // 提取销售净利率数据
+  const profitMarginData = sortedData.map(item => {
+    const value = parseFloat(item['归属母公司股东的销售净利率']?.replace('%', '') || 0)
+    return isNaN(value) ? 0 : value
+  })
+  
+  // 提取资产周转率数据
+  const assetTurnoverData = sortedData.map(item => {
+    const value = parseFloat(item['资产周转率(次)'] || 0)
+    return isNaN(value) ? 0 : value
+  })
+  
+  // 提取权益乘数数据
+  const equityMultiplierData = sortedData.map(item => {
+    const value = parseFloat(item['权益乘数'] || 0)
+    return isNaN(value) ? 0 : value
+  })
+  
+  // 创建图表
+  threeFactorChartInstance.value = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'ROE (%)',
+          data: roeData,
+          borderColor: '#165DFF',
+          backgroundColor: 'rgba(22, 93, 255, 0.1)',
+          borderWidth: 2,
+          pointBackgroundColor: '#165DFF',
+          pointRadius: 4,
+          tension: 0.3
+        },
+        {
+          label: '销售净利率 (%)',
+          data: profitMarginData,
+          borderColor: '#52C41A',
+          backgroundColor: 'rgba(82, 196, 26, 0.1)',
+          borderWidth: 2,
+          pointBackgroundColor: '#52C41A',
+          pointRadius: 4,
+          tension: 0.3
+        },
+        {
+          label: '资产周转率 (次)',
+          data: assetTurnoverData,
+          borderColor: '#FAAD14',
+          backgroundColor: 'rgba(250, 173, 20, 0.1)',
+          borderWidth: 2,
+          pointBackgroundColor: '#FAAD14',
+          pointRadius: 4,
+          tension: 0.3,
+          yAxisID: 'y1'
+        },
+        {
+          label: '权益乘数',
+          data: equityMultiplierData,
+          borderColor: '#F5222D',
+          backgroundColor: 'rgba(245, 34, 45, 0.1)',
+          borderWidth: 2,
+          pointBackgroundColor: '#F5222D',
+          pointRadius: 4,
+          tension: 0.3,
+          yAxisID: 'y1'
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'top',
+          labels: {
+            font: { size: 12 },
+            boxWidth: 15
+          }
+        },
+        tooltip: {
+          padding: 10,
+          mode: 'index',
+          intersect: false
+        }
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: {
+            font: { size: 11 },
+            maxRotation: 45,
+            minRotation: 45
+          }
+        },
+        y: {
+          beginAtZero: true,
+          grid: { color: 'rgba(0, 0, 0, 0.05)' },
+          ticks: {
+            font: { size: 11 },
+            callback: (value) => `${value}%`
+          },
+          title: {
+            display: true,
+            text: '百分比 (%)',
+            font: { size: 12 }
+          }
+        },
+        y1: {
+          position: 'right',
+          beginAtZero: true,
+          grid: { display: false },
+          ticks: {
+            font: { size: 11 }
+          },
+          title: {
+            display: true,
+            text: '倍数',
+            font: { size: 12 }
+          }
+        }
+      },
+      interaction: {
+        mode: 'nearest',
+        axis: 'x',
+        intersect: false
+      }
+    }
+  })
+}
+
+// 初始化五因素杜邦分析图表
+const initFiveFactorChart = () => {
+  if (!Chart || !dupontData.value || !dupontData.value.full_data) return
+  
+  const ctx = document.getElementById('fiveFactorChart')
+  if (!ctx) return
+  
+  // 销毁现有图表实例
+  if (fiveFactorChartInstance.value) {
+    fiveFactorChartInstance.value.destroy()
+  }
+  
+  // 准备数据 - 从最新到最旧排序
+  const sortedData = [...dupontData.value.full_data].reverse()
+  const labels = sortedData.map(item => item['报告期'])
+  
+  // 提取ROE数据
+  const roeData = sortedData.map(item => {
+    const value = parseFloat(item['净资产收益率']?.replace('%', '') || 0)
+    return isNaN(value) ? 0 : value
+  })
+  
+  // 提取经营利润率数据
+  const operatingMarginData = sortedData.map(item => {
+    const value = parseFloat(item['经营利润率']?.replace('%', '') || 0)
+    return isNaN(value) ? 0 : value
+  })
+  
+  // 提取考虑税负因素数据
+  const taxFactorData = sortedData.map(item => {
+    const value = parseFloat(item['考虑税负因素']?.replace('%', '') || 0)
+    return isNaN(value) ? 0 : value
+  })
+  
+  // 提取考虑利息负担数据
+  const interestFactorData = sortedData.map(item => {
+    const value = parseFloat(item['考虑利息负担']?.replace('%', '') || 0)
+    return isNaN(value) ? 0 : value
+  })
+  
+  // 创建图表
+  fiveFactorChartInstance.value = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'ROE (%)',
+          data: roeData,
+          borderColor: '#165DFF',
+          backgroundColor: 'rgba(22, 93, 255, 0.1)',
+          borderWidth: 2,
+          pointBackgroundColor: '#165DFF',
+          pointRadius: 4,
+          tension: 0.3
+        },
+        {
+          label: '经营利润率 (%)',
+          data: operatingMarginData,
+          borderColor: '#52C41A',
+          backgroundColor: 'rgba(82, 196, 26, 0.1)',
+          borderWidth: 2,
+          pointBackgroundColor: '#52C41A',
+          pointRadius: 4,
+          tension: 0.3
+        },
+        {
+          label: '税负因素 (%)',
+          data: taxFactorData,
+          borderColor: '#FAAD14',
+          backgroundColor: 'rgba(250, 173, 20, 0.1)',
+          borderWidth: 2,
+          pointBackgroundColor: '#FAAD14',
+          pointRadius: 4,
+          tension: 0.3
+        },
+        {
+          label: '利息负担 (%)',
+          data: interestFactorData,
+          borderColor: '#F5222D',
+          backgroundColor: 'rgba(245, 34, 45, 0.1)',
+          borderWidth: 2,
+          pointBackgroundColor: '#F5222D',
+          pointRadius: 4,
+          tension: 0.3
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'top',
+          labels: {
+            font: { size: 12 },
+            boxWidth: 15
+          }
+        },
+        tooltip: {
+          padding: 10,
+          mode: 'index',
+          intersect: false
+        }
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: {
+            font: { size: 11 },
+            maxRotation: 45,
+            minRotation: 45
+          }
+        },
+        y: {
+          beginAtZero: true,
+          grid: { color: 'rgba(0, 0, 0, 0.05)' },
+          ticks: {
+            font: { size: 11 },
+            callback: (value) => `${value}%`
+          },
+          title: {
+            display: true,
+            text: '百分比 (%)',
+            font: { size: 12 }
+          }
+        }
+      },
+      interaction: {
+        mode: 'nearest',
+        axis: 'x',
+        intersect: false
+      }
+    }
+  })
 }
 
 // 新增：估值与交易计划相关状态
@@ -943,6 +1308,20 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+/* 加载动画样式 */
+.loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid #f3f3f3;
+  border-top: 3px solid #165DFF;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
 /* 基础样式：紧凑布局核心配置 */
 .stock-detail-container {
   background-color: #f5f7fa;

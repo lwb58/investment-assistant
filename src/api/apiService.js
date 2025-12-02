@@ -214,6 +214,15 @@ async updateStock(stockId, updateData) {  // 参数名从stockCode改为stockId
     // 调用实际后端接口（已实现）
     return this.request('GET', `/market/overview`);
   }
+
+  /**
+   * 获取股票杜邦分析数据
+   * @param {string} stockId - 股票ID
+   * @returns {Promise<Object>} 杜邦分析数据
+   */
+  async getStockDupontAnalysis(stockId) {
+    return this.request('GET', `/stock/dubang/${stockId}`);
+  }
 }
 
 // 导出单例实例

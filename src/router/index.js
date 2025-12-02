@@ -6,6 +6,7 @@ const StockDetailView = () => import('../views/StockDetailView.vue')
 const ReviewNotesView = () => import('../views/ReviewNotesView.vue')
 const MarketOverviewView = () => import('../views/MarketOverviewView.vue')
 const SettingsView = () => import('../views/SettingsView.vue')
+const PositionAnalysisView = () => import('../views/PositionAnalysisView.vue')
 
 const routes = [
   {
@@ -43,6 +44,14 @@ const routes = [
     component: ReviewNotesView,
     meta: {
       title: '复盘笔记'
+    }
+  },
+  {
+    path: '/position-analysis',
+    name: 'PositionAnalysis',
+    component: PositionAnalysisView,
+    meta: {
+      title: '持仓分析'
     }
   },
   {

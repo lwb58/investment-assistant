@@ -95,6 +95,27 @@ def init_database(notes_storage: List[Dict[str, Any]] = None, stock_storage: Lis
         logger.error(f"初始化stocks表失败: {str(e)}")
         conn.rollback()
     
+    # 创建持仓分析持仓表
+    try:
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS cost_positions (
+                id TEXT PRIMARY KEY,
+                stock_code TEXT NOT NULL,
+                stock_name TEXT NOT NULL,
+                quantity INTEGER NOT NULL,
+                cost_price REAL NOT NULL,
+                total_cost REAL NOT NULL,
+                remark TEXT DEFAULT '',
+                create_time TEXT NOT NULL,
+                update_time TEXT NOT NULL
+            )
+        ''')
+        conn.commit()
+        logger.info("cost_positions表结构初始化成功")
+    except Exception as e:
+        logger.error(f"初始化cost_positions表失败: {str(e)}")
+        conn.rollback()
+    
     # 实现数据迁移逻辑
     try:
         # 迁移笔记数据
@@ -397,3 +418,177 @@ def delete_stock(stock_id: str) -> bool:
     conn.close()
     
     return True
+
+# 持仓分析相关操作
+def get_all_cost_positions() -> List[Dict[str, Any]]:
+    """获取所有持仓分析持仓记录"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM cost_positions ORDER BY create_time DESC")
+    rows = cursor.fetchall()
+    conn.close()
+    
+    # 将数据库字段转换为API需要的格式（驼峰命名法）
+    result = []
+    for row in rows:
+        row_dict = dict(row)
+        result.append({
+            "id": row_dict["id"],
+            "stockCode": row_dict["stock_code"],
+            "stockName": row_dict["stock_name"],
+            "quantity": row_dict["quantity"],
+            "costPrice": row_dict["cost_price"],
+            "totalCost": row_dict["total_cost"],
+            "remark": row_dict["remark"],
+            "createTime": row_dict["create_time"],
+            "updateTime": row_dict["update_time"],
+            # 这些字段可以在前端根据实时价格计算
+            "currentPrice": 0.0,
+            "marketValue": 0.0,
+            "profit": 0.0,
+            "profitRate": 0.0
+        })
+    
+    return result
+
+def get_cost_position_by_id(position_id: str) -> Optional[Dict[str, Any]]:
+    """根据ID获取持仓分析持仓记录"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM cost_positions WHERE id = ?", (position_id,))
+    row = cursor.fetchone()
+    conn.close()
+    
+    if not row:
+        return None
+    
+    # 将数据库字段转换为API需要的格式（驼峰命名法）
+    row_dict = dict(row)
+    return {
+        "id": row_dict["id"],
+        "stockCode": row_dict["stock_code"],
+        "stockName": row_dict["stock_name"],
+        "quantity": row_dict["quantity"],
+        "costPrice": row_dict["cost_price"],
+        "totalCost": row_dict["total_cost"],
+        "remark": row_dict["remark"],
+        "createTime": row_dict["create_time"],
+        "updateTime": row_dict["update_time"],
+        # 这些字段可以在前端根据实时价格计算
+        "currentPrice": 0.0,
+        "marketValue": 0.0,
+        "profit": 0.0,
+        "profitRate": 0.0
+    }
+
+def create_cost_position(position_data: Dict[str, Any]) -> Dict[str, Any]:
+    """创建新的持仓分析持仓记录"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute(
+            "INSERT INTO cost_positions (id, stock_code, stock_name, quantity, cost_price, total_cost, remark, create_time, update_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (position_data["id"], position_data["stockCode"], position_data["stockName"], 
+             position_data["quantity"], position_data["costPrice"], position_data["totalCost"],
+             position_data.get("remark", ""), position_data.get("createTime", datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+             position_data.get("updateTime", datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        )
+        conn.commit()
+        success = True
+    except Exception as e:
+        logger.error(f"创建持仓分析持仓记录失败: {str(e)}")
+        success = False
+    finally:
+        conn.close()
+    
+    return position_data if success else None
+
+def update_cost_position(position_id: str, update_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """更新持仓分析持仓记录"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # 检查记录是否存在
+    if not get_cost_position_by_id(position_id):
+        conn.close()
+        return None
+    
+    # 获取当前记录，用于计算total_cost
+    cursor.execute("SELECT quantity, cost_price FROM cost_positions WHERE id = ?", (position_id,))
+    row = cursor.fetchone()
+    current_quantity = row[0] if row else 0
+    current_cost_price = row[1] if row else 0
+    
+    # 构建更新语句
+    update_fields = []
+    update_values = []
+    
+    # 计算新的总成本
+    new_quantity = update_data.get("quantity", current_quantity)
+    new_cost_price = update_data.get("costPrice", current_cost_price)
+    new_total_cost = new_quantity * new_cost_price
+    
+    if "quantity" in update_data:
+        update_fields.append("quantity = ?")
+        update_values.append(update_data["quantity"])
+    if "costPrice" in update_data:
+        update_fields.append("cost_price = ?")
+        update_values.append(update_data["costPrice"])
+    if "remark" in update_data:
+        update_fields.append("remark = ?")
+        update_values.append(update_data["remark"])
+    
+    # 总是更新total_cost和update_time
+    update_fields.append("total_cost = ?")
+    update_values.append(new_total_cost)
+    update_fields.append("update_time = ?")
+    update_values.append(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    
+    # 添加WHERE条件
+    update_values.append(position_id)
+    query = f"UPDATE cost_positions SET {', '.join(update_fields)} WHERE id = ?"
+    cursor.execute(query, update_values)
+    conn.commit()
+    conn.close()
+    
+    return get_cost_position_by_id(position_id)
+
+def delete_cost_position(position_id: str) -> bool:
+    """删除持仓分析持仓记录"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # 检查记录是否存在
+    if not get_cost_position_by_id(position_id):
+        conn.close()
+        return False
+    
+    cursor.execute("DELETE FROM cost_positions WHERE id = ?", (position_id,))
+    conn.commit()
+    conn.close()
+    
+    return True
+
+def get_cost_overview() -> Dict[str, Any]:
+    """获取持仓分析概览数据"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # 获取总投入成本和持仓数量
+    cursor.execute("SELECT SUM(total_cost) as total_cost, COUNT(*) as position_count FROM cost_positions")
+    result = cursor.fetchone()
+    conn.close()
+    
+    total_cost = result["total_cost"] or 0.0
+    position_count = result["position_count"] or 0
+    
+    # 由于没有实时价格数据，这里返回基础概览
+    # 实时市值、盈亏和盈亏率可以在前端计算
+    return {
+        "totalCost": round(total_cost, 2),
+        "totalMarketValue": 0.0,
+        "totalProfit": 0.0,
+        "totalProfitRate": 0.0,
+        "positionCount": position_count
+    }
