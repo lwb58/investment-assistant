@@ -221,7 +221,7 @@ async updateStock(stockId, updateData) {  // 参数名从stockCode改为stockId
    * @returns {Promise<Object>} 杜邦分析数据
    */
   async getStockDupontAnalysis(stockId) {
-    return this.request('GET', `/stock/dubang/${stockId}`);
+    return this.request('GET', `/stocks/dubang/${stockId}`);
   }
 }
 

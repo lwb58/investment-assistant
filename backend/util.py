@@ -258,7 +258,7 @@ class DataSource:
         # 拼接 paperCode（market+股票代码，如 sh601669）
         paper_code = f"{market}{stock_code}"
         # 要获取的年份和报表类型（lrb=利润表，核心财务数据来源）
-        years = ["2024", "2023", "2022"]
+        years = [ "2022"]
         report_type = "lrb"  # lrb-利润表、zcfz-资产负债表、xjll-现金流量表
         financial_data = {}
         
