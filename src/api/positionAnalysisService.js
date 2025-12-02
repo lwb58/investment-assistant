@@ -127,8 +127,8 @@ class PositionAnalysisService {
    */
   async calculateAdditionalPurchase(position, additionalPrice, additionalQuantity) {
     try {
-      // 获取当前价格用于计算盈亏
-      const currentPrice = this.getMockStockPrice(position.stockCode);
+      // 获取当前价格（保留，可能用于其他计算）
+      const currentPrice = parseFloat(position.currentPrice) || this.getMockStockPrice(position.stockCode);
       
       // 计算现有持仓
       const currentQuantity = parseFloat(position.holdingQuantity);
@@ -143,8 +143,8 @@ class PositionAnalysisService {
       const totalCostAfter = totalCurrentCost + additionalCost;
       const averageCostAfter = totalQuantityAfter > 0 ? totalCostAfter / totalQuantityAfter : 0;
       
-      // 计算补仓后的盈亏
-      const totalValueAfter = totalQuantityAfter * currentPrice;
+      // 计算补仓后的盈亏 - 使用补仓价格而非当前价格计算
+      const totalValueAfter = totalQuantityAfter * additionalPrice;
       const profitAmountAfter = totalValueAfter - totalCostAfter;
       const profitRateAfter = totalCostAfter > 0 ? (profitAmountAfter / totalCostAfter) * 100 : 0;
       
