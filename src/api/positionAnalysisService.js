@@ -1,4 +1,5 @@
 import axios from 'axios';
+import apiService from './apiService.js';
 
 /**
  * 持仓分析服务类
@@ -23,19 +24,79 @@ class PositionAnalysisService {
     try {
       const response = await this.api.get('/positions');
       // 数据转换：将后端返回的字段转换为前端期望的格式
-      return response.data.map(position => ({
-        stockCode: position.stockCode,
-        stockName: position.stockName,
-        holdingQuantity: position.quantity || 0,
-        currentCost: position.costPrice || 0,
-        currentPrice: position.currentPrice || 0,
-        totalCost: position.totalCost || 0,
-        currentValue: position.marketValue || 0,
-        profitAmount: position.profit || 0,
-        profitRate: position.profitRate || 0,
-        remark: position.remark || '',
-        id: position.id
-      }));
+      const positions = response.data;
+      
+      // 并行获取所有股票的行情数据
+      const enhancedPositions = await Promise.all(
+        positions.map(async (position) => {
+          let currentPrice, changeRate, changeAmount, openingPrice;
+          
+          try {
+            // 尝试从API获取股票实时行情数据
+            const quoteData = await apiService.getStockQuotes(position.stockCode);
+            if (quoteData && quoteData.coreQuotes) {
+              // 从API获取的真实数据
+              currentPrice = quoteData.coreQuotes.currentPrice || 0;
+              const prevClose = quoteData.coreQuotes.prevClosePrice || 0;
+              
+              // 复用股票清单模块的涨跌幅计算逻辑
+              if (prevClose > 0.01 && currentPrice >= 0) {
+                changeAmount = currentPrice - prevClose;
+                changeRate = (changeAmount / prevClose) * 100;
+              } else {
+                changeAmount = 0;
+                changeRate = 0;
+              }
+              
+              // 获取开盘价（如果API提供）
+              openingPrice = quoteData.coreQuotes.openPrice || currentPrice;
+            } else {
+              // 如果API调用失败，使用模拟数据作为后备
+              currentPrice = position.currentPrice || this.getMockStockPrice(position.stockCode);
+              const basePrice = currentPrice * 0.95; // 模拟昨收价
+              changeAmount = currentPrice - basePrice;
+              changeRate = (changeAmount / basePrice) * 100;
+              openingPrice = this.getMockOpeningPrice(position.stockCode, currentPrice);
+            }
+          } catch (error) {
+            console.warn(`获取股票 ${position.stockCode} 行情数据失败，使用模拟数据:`, error);
+            // 出错时使用模拟数据
+            currentPrice = position.currentPrice || this.getMockStockPrice(position.stockCode);
+            const basePrice = currentPrice * 0.95; // 模拟昨收价
+            changeAmount = currentPrice - basePrice;
+            changeRate = (changeAmount / basePrice) * 100;
+            openingPrice = this.getMockOpeningPrice(position.stockCode, currentPrice);
+          }
+          
+          // 计算基本字段
+          const currentValue = position.marketValue || (position.quantity * currentPrice);
+          const totalCost = position.totalCost || (position.quantity * (position.costPrice || 0));
+          const profitAmount = position.profit || (currentValue - totalCost);
+          const profitRate = position.profitRate || (totalCost > 0 ? (profitAmount / totalCost) * 100 : 0);
+          
+          // 使用涨跌幅计算当日盈亏金额
+          const todayProfit = position.quantity * changeAmount;
+          
+          return {
+            stockCode: position.stockCode,
+            stockName: position.stockName,
+            holdingQuantity: position.quantity || 0,
+            currentCost: position.costPrice || 0,
+            currentPrice,
+            totalCost,
+            currentValue,
+            profitAmount,
+            profitRate,
+            openingPrice,
+            todayProfit, // 当日盈亏金额
+            todayProfitRate: changeRate, // 使用涨跌幅作为当日涨幅
+            remark: position.remark || '',
+            id: position.id
+          };
+        })
+      );
+      
+      return enhancedPositions;
     } catch (error) {
       console.error('从API获取持仓数据失败:', error);
       throw error;
@@ -177,6 +238,23 @@ class PositionAnalysisService {
     // 添加一些随机波动，但保持相对稳定
     const randomFactor = 0.9 + (Math.sin(Date.now() / 100000 + seed) + 1) * 0.1; // 0.9-1.1之间的波动因子
     return Number((basePrice * randomFactor).toFixed(2));
+  }
+  
+  /**
+   * 获取模拟开盘价
+   * @param {string} stockCode - 股票代码
+   * @param {number} currentPrice - 当前价格
+   * @returns {number} 模拟的开盘价
+   */
+  getMockOpeningPrice(stockCode, currentPrice) {
+    // 使用股票代码生成相对稳定的开盘价
+    // 确保开盘价与当前价格有一定关联但不完全相同
+    const seed = stockCode.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    // 创建一个基于股票代码的随机因子，但与当前价格相关联
+    const dayRandom = 0.98 + (Math.sin(Date.now() / 1000000 + seed) + 1) * 0.02; // 0.98-1.02之间的因子
+    // 基于当前价格计算开盘价，添加一定波动
+    const openingPrice = currentPrice * dayRandom;
+    return Number(openingPrice.toFixed(2));
   }
 }
 

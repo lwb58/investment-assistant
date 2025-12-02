@@ -38,15 +38,18 @@
       <table v-else class="positions-table">
         <thead>
           <tr>
-            <th>股票名称</th>
-            <th>股票代码</th>
-            <th>持有数量</th>
-            <th>当前成本(元)</th>
-            <th>当前价格(元)</th>
+            <th @click="handleSort('stockName')">股票名称{{ getSortIcon('stockName') }}</th>
+            <th @click="handleSort('stockCode')">股票代码{{ getSortIcon('stockCode') }}</th>
+            <th @click="handleSort('holdingQuantity')">持有数量{{ getSortIcon('holdingQuantity') }}</th>
+            <th @click="handleSort('currentCost')">当前成本(元){{ getSortIcon('currentCost') }}</th>
+            <th @click="handleSort('currentPrice')">当前价格(元){{ getSortIcon('currentPrice') }}</th>
+            <th @click="handleSort('openingPrice')">开盘价(元){{ getSortIcon('openingPrice') }}</th>
             <th>总成本(元)</th>
             <th>当前市值(元)</th>
-            <th>盈亏金额(元)</th>
-            <th>盈亏比例(%)</th>
+            <th @click="handleSort('todayProfit')">当日盈亏(元){{ getSortIcon('todayProfit') }}</th>
+            <th @click="handleSort('todayProfitRate')">当日涨幅(%){{ getSortIcon('todayProfitRate') }}</th>
+            <th @click="handleSort('profitAmount')">盈亏金额(元){{ getSortIcon('profitAmount') }}</th>
+            <th @click="handleSort('profitRate')">盈亏比例(%){{ getSortIcon('profitRate') }}</th>
             <th>操作</th>
           </tr>
         </thead>
@@ -57,8 +60,15 @@
             <td>{{ position.holdingQuantity }}</td>
             <td>{{ position.currentCost.toFixed(2) }}</td>
             <td>{{ position.currentPrice.toFixed(2) }}</td>
+            <td>{{ position.openingPrice.toFixed(2) }}</td>
             <td>{{ position.totalCost.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}</td>
             <td>{{ position.currentValue.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}</td>
+            <td :class="{ 'profit': position.todayProfit >= 0, 'loss': position.todayProfit < 0 }">
+              {{ position.todayProfit >= 0 ? '+' : '' }}{{ position.todayProfit.toFixed(2) }}
+            </td>
+            <td :class="{ 'profit': position.todayProfitRate >= 0, 'loss': position.todayProfitRate < 0 }">
+              {{ position.todayProfitRate >= 0 ? '+' : '' }}{{ position.todayProfitRate.toFixed(2) }}
+            </td>
             <td :class="{ 'profit': position.profitAmount >= 0, 'loss': position.profitAmount < 0 }">
               {{ position.profitAmount >= 0 ? '+' : '' }}{{ position.profitAmount.toFixed(2) }}
             </td>
@@ -68,7 +78,6 @@
             <td>
               <div class="action-buttons">
                 <button class="btn btn-secondary btn-sm" @click="openEditPositionModal(position)">编辑</button>
-                <button class="btn btn-danger btn-sm" @click="deletePosition(position.stockCode)">删除</button>
                 <button class="btn btn-primary btn-sm" @click="openAdditionalPurchaseModal(position)">补仓测算</button>
               </div>
             </td>
@@ -201,6 +210,8 @@ const additionalModalOpen = ref(false);
 const isEditing = ref(false);
 const selectedPosition = ref(null);
 const additionalResult = ref(null);
+const sortField = ref(null);
+const sortOrder = ref('asc'); // 'asc' or 'desc'
 
 // 表单数据
 const positionForm = ref({
@@ -236,13 +247,59 @@ const totalProfitRate = computed(() => {
 const fetchPositions = async () => {
   loading.value = true;
   try {
-    positions.value = await positionAnalysisService.getStockPositions();
+    const data = await positionAnalysisService.getStockPositions();
+    // 应用排序
+    sortPositions(data);
   } catch (error) {
     console.error('获取持仓数据失败:', error);
     alert('获取数据失败，请稍后重试');
   } finally {
     loading.value = false;
   }
+};
+
+// 排序持仓数据
+const sortPositions = (data) => {
+  if (!sortField.value) {
+    positions.value = data;
+    return;
+  }
+  
+  const sortedData = [...data].sort((a, b) => {
+    let valueA = a[sortField.value];
+    let valueB = b[sortField.value];
+    
+    // 确保值是数字类型
+    if (typeof valueA === 'string') valueA = parseFloat(valueA) || 0;
+    if (typeof valueB === 'string') valueB = parseFloat(valueB) || 0;
+    
+    if (valueA < valueB) return sortOrder.value === 'asc' ? -1 : 1;
+    if (valueA > valueB) return sortOrder.value === 'asc' ? 1 : -1;
+    return 0;
+  });
+  
+  positions.value = sortedData;
+};
+
+// 处理排序点击
+const handleSort = (field) => {
+  if (sortField.value === field) {
+    // 切换排序方向
+    sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc';
+  } else {
+    // 设置新的排序字段
+    sortField.value = field;
+    sortOrder.value = 'asc';
+  }
+  
+  // 重新排序数据
+  sortPositions(positions.value);
+};
+
+// 获取排序图标
+const getSortIcon = (field) => {
+  if (sortField.value !== field) return '';
+  return sortOrder.value === 'asc' ? ' ▲' : ' ▼';
 };
 
 // 保存持仓数据
