@@ -138,6 +138,11 @@ def fetch_url(url: str, timeout: int = 15, is_sina_var: bool = False, retry: int
         "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8"
     }
     
+    # 特别为财务数据接口添加调试
+    is_finance_api = "getFinanceReport2022" in url
+    if is_finance_api:
+        print(f"DEBUG: fetch_url - 正在请求财务数据API: {url}")
+    
     for attempt in range(retry + 1):
         try:
             response = requests.get(
@@ -161,6 +166,11 @@ def fetch_url(url: str, timeout: int = 15, is_sina_var: bool = False, retry: int
                     time.sleep(0.5)
                     continue
                 return None
+            
+            # 打印财务数据API的完整返回内容
+            if is_finance_api:
+                print(f"DEBUG: fetch_url - 财务数据API返回内容:")
+                print(f"DEBUG: {content[:500]}..." if len(content) > 500 else f"DEBUG: {content}")
             
             if is_sina_var:
                 return content
@@ -257,72 +267,143 @@ class DataSource:
         
         # 拼接 paperCode（market+股票代码，如 sh601669）
         paper_code = f"{market}{stock_code}"
-        # 要获取的年份和报表类型（lrb=利润表，核心财务数据来源）
-        years = [ "2022"]
+        # 报表类型（lrb=利润表，核心财务数据来源）
         report_type = "lrb"  # lrb-利润表、zcfz-资产负债表、xjll-现金流量表
         financial_data = {}
         
-        for year in years:
-            try:
-                # 构造指定URL（年份拼接在接口路径中）
-                url = (
-                    f"https://quotes.sina.cn/cn/api/openapi.php/CompanyFinanceService.getFinanceReport{year}"
-                    f"?paperCode={paper_code}&source={report_type}&type=0&page=1&num=10"
-                )
-                logger.info(f"请求财务数据：{url}")
-                
-                # 调用fetch_url获取JSONP数据（无需callback参数，接口会自动返回）
-                raw_data = fetch_url(url, timeout=20, is_sina_var=False)
-                if not raw_data:
-                    logger.warning(f"{year}年财务数据接口返回空：{stock_code}")
-                    financial_data[year] = DataSource._get_default_finance_data()
-                    continue
-                
-                # 处理JSONP格式：去掉外层callback包裹（如 hqccall469743798({...})）
-                json_str = re.sub(r'^hqccall\d+\(', '', raw_data).rstrip(')')
-                data = json.loads(json_str)
-                
-                # 解析接口返回结果（接口格式：{result: {...}, data: [...]}）
-                if data.get("result", {}).get("code") != 0:
-                    logger.error(f"{year}年财务数据接口返回错误：{data.get('result', {})}")
-                    financial_data[year] = DataSource._get_default_finance_data()
-                    continue
-                
-                # 提取报表数据（data数组中第一个元素是最新报表）
-                report_data = data.get("data", [{}])[0]
-                if not report_data:
-                    logger.warning(f"{year}年无财务报表数据：{stock_code}")
-                    financial_data[year] = DataSource._get_default_finance_data()
-                    continue
-                
-                # 映射接口字段到财务模型（字段含义对应新浪接口返回）
-                # 接口字段说明：
-                # total_operating_income-营业收入、operating_profit-营业利润、net_profit-净利润
-                # revenue_growth-营收增长率、net_profit_growth-净利润增长率、basic_eps-基本每股收益
-                # net_asset_per_share-每股净资产、roe-净资产收益率、pe-市盈率、pb-市净率
-                # gross_margin-毛利率、net_margin-净利率、asset_liability_ratio-资产负债率
-                financial_data[year] = {
-                    "revenue": str(report_data.get("total_operating_income", 0.0)),
-                    "revenueGrowth": str(report_data.get("revenue_growth", 0.0)),
-                    "netProfit": str(report_data.get("net_profit", 0.0)),
-                    "netProfitGrowth": str(report_data.get("net_profit_growth", 0.0)),
-                    "eps": str(report_data.get("basic_eps", 0.0)),
-                    "navps": str(report_data.get("net_asset_per_share", 0.0)),
-                    "roe": str(report_data.get("roe", 0.0)),
-                    "pe": str(report_data.get("pe", 0.0)),
-                    "pb": str(report_data.get("pb", 0.0)),
-                    "grossMargin": str(report_data.get("gross_margin", 0.0)),
-                    "netMargin": str(report_data.get("net_margin", 0.0)),
-                    "debtRatio": str(report_data.get("asset_liability_ratio", 0.0))
-                }
-                logger.info(f"{year}年财务数据获取成功：{stock_code} | 营收：{financial_data[year]['revenue']}亿元")
+        try:
+            # 构造URL，使用固定的getFinanceReport2022接口路径（2022是接口固定标识，不是年份）
+            url = (
+                f"https://quotes.sina.cn/cn/api/openapi.php/CompanyFinanceService.getFinanceReport2022"
+                f"?paperCode={paper_code}&source={report_type}&type=0&page=1&num=10"
+            )
+            logger.info(f"请求财务数据：{url}")
             
-            except json.JSONDecodeError as e:
-                logger.error(f"{year}年财务数据JSON解析失败：{stock_code} | 错误：{str(e)}")
-                financial_data[year] = DataSource._get_default_finance_data()
-            except Exception as e:
-                logger.error(f"{year}年财务数据获取失败：{stock_code} | 错误：{str(e)}", exc_info=True)
-                financial_data[year] = DataSource._get_default_finance_data()
+            # 调用fetch_url获取JSONP数据
+            raw_data = fetch_url(url, timeout=20, is_sina_var=False)
+            
+            if not raw_data:
+                logger.warning(f"财务数据接口返回空或格式错误：{stock_code}")
+                financial_data["2022"] = DataSource._get_default_finance_data()
+                return financial_data
+            
+            # 直接使用返回的字典数据
+            data = raw_data
+            
+            # 解析接口返回结果（适配新的数据结构路径）
+            # 注意：数据结构可能是 result.code 或 result.status.code
+            if isinstance(data.get("result"), dict):
+                result_code = data["result"].get("code")
+                if result_code is None:
+                    result_code = data["result"].get("status", {}).get("code", -1)
+            else:
+                result_code = -1
+                
+            if result_code != 0:
+                logger.error(f"财务数据接口返回错误：{data.get('result', {})}")
+                financial_data["2022"] = DataSource._get_default_finance_data()
+                return financial_data
+            
+            # 提取最新报表数据（适配新路径：data['result']['data']['report_list']）
+            result_data = data.get("result", {})
+            report_list = result_data.get("data", {}).get("report_list", {})
+            
+            # 获取最新报表的年份和数据
+            latest_year = "2022"
+            report_data = []
+            
+            if report_list and isinstance(report_list, dict):
+                # report_list是一个以日期为键的字典，获取最新的日期
+                latest_date = sorted(report_list.keys(), reverse=True)[0] if report_list else None
+                if latest_date:
+                    latest_report = report_list[latest_date]
+                    
+                    # 提取年份
+                    latest_year = latest_date[:4]
+                    
+                    # 提取报表数据（适配新字段名：'data' 而不是 'report_data'）
+                    if isinstance(latest_report, dict):
+                        report_data = latest_report.get("data", [])
+            else:
+                logger.warning(f"report_list不是预期的字典类型: {type(report_list)}")
+                financial_data["2022"] = DataSource._get_default_finance_data()
+                return financial_data
+            
+            # 初始化该年份的财务数据
+            financial_data[latest_year] = DataSource._get_default_finance_data()
+            
+            # 遍历所有财务项，提取需要的指标
+            if report_data and isinstance(report_data, list):
+                total_profit = None
+                income_tax = None
+                
+                for item in report_data:
+                    if not isinstance(item, dict):
+                        continue
+                    
+                    item_field = item.get("item_field", "")
+                    item_title = item.get("item_title", "")
+                    item_value = item.get("item_value", "0.0")
+                    
+                    # 直接匹配字段名
+                    if item_field == "BASICEPS" and item_value:
+                        financial_data[latest_year]["eps"] = item_value
+                    elif (item_field == "BIZINCO" or item_field == "BIZTOTINCO") and item_value:  # 营业收入或营业总收入
+                        financial_data[latest_year]["revenue"] = item_value
+                    elif item_field == "TOTPROFIT" and item_value:  # 利润总额
+                        total_profit = float(item_value) if item_value else 0.0
+                    elif item_field == "INCOTAXEXPE" and item_value:  # 所得税费用
+                        income_tax = float(item_value) if item_value else 0.0
+                    elif item_field == "NETPROFIT" and item_value:
+                        financial_data[latest_year]["netProfit"] = item_value
+                    elif item_field == "NAVPS" and item_value:
+                        financial_data[latest_year]["navps"] = item_value
+                    elif item_field == "ROE" and item_value:
+                        financial_data[latest_year]["roe"] = item_value
+                    elif item_field == "TOTASS" and item_value:
+                        financial_data[latest_year]["totalAssets"] = item_value
+                    elif item_field == "TOTSHOLDEREQ" and item_value:
+                        financial_data[latest_year]["totalEquity"] = item_value
+                    elif item_field == "TOTDEBT" and item_value:
+                        financial_data[latest_year]["totalDebt"] = item_value
+                    elif item_field == "GROSMPROFIT" and item_value:
+                        financial_data[latest_year]["grossProfit"] = item_value
+                    elif item_field == "NETCASHFLOWOPS" and item_value:
+                        financial_data[latest_year]["operatingCashFlow"] = item_value
+                    
+                    # 基于标题匹配（备用方案）
+                    elif item_title == "基本每股收益" and item_value:
+                        financial_data[latest_year]["eps"] = item_value
+                    elif ("营业" in item_title and "收入" in item_title) and item_value:
+                        financial_data[latest_year]["revenue"] = item_value
+                    elif "利润总额" in item_title and item_value:
+                        total_profit = float(item_value) if item_value else 0.0
+                    elif "所得税费用" in item_title and item_value:
+                        income_tax = float(item_value) if item_value else 0.0
+                    elif "净利润" in item_title and item_value:
+                        financial_data[latest_year]["netProfit"] = item_value
+                    elif "每股净资产" in item_title and item_value:
+                        financial_data[latest_year]["navps"] = item_value
+                    elif "净资产收益率" in item_title and item_value:
+                        financial_data[latest_year]["roe"] = item_value
+                
+                # 计算净利润：利润总额 - 所得税费用
+                if total_profit is not None and income_tax is not None and financial_data[latest_year]["netProfit"] == "0.00":
+                    net_profit = total_profit - income_tax
+                    financial_data[latest_year]["netProfit"] = f"{net_profit:.2f}"
+                elif total_profit is not None and financial_data[latest_year]["netProfit"] == "0.00":
+                    financial_data[latest_year]["netProfit"] = f"{total_profit:.2f}"  # 如果没有所得税费用，直接使用利润总额
+                
+            logger.info(f"财务数据获取成功：{stock_code} | 营收：{financial_data[latest_year]['revenue']}")
+            # 使用提取的年份作为键，保持向后兼容
+            financial_data[latest_year] = financial_data[latest_year]
+            
+        except json.JSONDecodeError as e:
+            logger.error(f"财务数据JSON解析失败：{stock_code} | 错误：{str(e)}")
+            financial_data["2022"] = DataSource._get_default_finance_data()
+        except Exception as e:
+            logger.error(f"财务数据获取失败：{stock_code} | 错误：{str(e)}", exc_info=True)
+            financial_data["2022"] = DataSource._get_default_finance_data()
         
         return financial_data
 
