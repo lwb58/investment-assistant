@@ -123,6 +123,43 @@
             </div>
           </div>
         </div>
+        <!-- 杜邦分析数据表格 -->
+        <div class="mt-6 p-4 border rounded-lg">
+          <h3 class="text-lg font-semibold mb-3">杜邦分析数据</h3>
+          <div v-if="dupontLoading" class="flex items-center justify-center py-8">
+            <div class="loading-spinner"></div>
+          </div>
+          <div v-else-if="dupontData && dupontData.full_data && dupontData.full_data.length > 0">
+            <div class="overflow-x-auto">
+              <table class="min-w-full border-collapse">
+                <thead>
+                  <tr class="bg-gray-50">
+                    <th class="border border-gray-200 px-4 py-2 text-left text-sm font-medium text-gray-600">报告期</th>
+                    <th class="border border-gray-200 px-4 py-2 text-left text-sm font-medium text-gray-600">周期类型</th>
+                    <th class="border border-gray-200 px-4 py-2 text-right text-sm font-medium text-gray-600">净资产收益率</th>
+                    <th class="border border-gray-200 px-4 py-2 text-right text-sm font-medium text-gray-600">销售净利率</th>
+                    <th class="border border-gray-200 px-4 py-2 text-right text-sm font-medium text-gray-600">资产周转率(次)</th>
+                    <th class="border border-gray-200 px-4 py-2 text-right text-sm font-medium text-gray-600">权益乘数</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(item, index) in dupontData.full_data" :key="index" :class="index % 2 === 0 ? 'bg-white' : 'bg-gray-50'">
+                    <td class="border border-gray-200 px-4 py-2 text-sm text-gray-800">{{ item['报告期'] }}</td>
+                    <td class="border border-gray-200 px-4 py-2 text-sm text-gray-800">{{ item['周期类型'] }}</td>
+                    <td class="border border-gray-200 px-4 py-2 text-sm text-right text-gray-800">{{ item['净资产收益率'] || '-' }}</td>
+                    <td class="border border-gray-200 px-4 py-2 text-sm text-right text-gray-800">{{ item['归属母公司股东的销售净利率'] || '-' }}</td>
+                    <td class="border border-gray-200 px-4 py-2 text-sm text-right text-gray-800">{{ item['资产周转率(次)'] || '-' }}</td>
+                    <td class="border border-gray-200 px-4 py-2 text-sm text-right text-gray-800">{{ item['权益乘数'] || '-' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div v-else>
+            <div class="text-center text-gray-500 py-8">未获取到杜邦分析数据</div>
+          </div>
+        </div>
+
         <!-- 杜邦分析图表区域 -->
         <div class="mt-6 p-4 border rounded-lg">
           <h3 class="text-lg font-semibold mb-3">杜邦分析法趋势</h3>
@@ -443,9 +480,11 @@
 import { ref, computed, onMounted, watch, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import apiService from '../api/apiService.js'
+import Chart from 'chart.js/auto'
+import ChartDataLabels from 'chartjs-plugin-datalabels'
 
-// 关键修改：确保Chart对象可用（CDN引入方式）
-const Chart = window.Chart || null
+// 注册数据标签插件
+Chart.register(ChartDataLabels)
 
 const route = useRoute()
 const router = useRouter()
@@ -656,6 +695,22 @@ const initThreeFactorChart = () => {
           padding: 10,
           mode: 'index',
           intersect: false
+        },
+        // 添加数据点标签
+        datalabels: {
+          display: true,
+          color: '#333',
+          font: {
+            size: 10
+          },
+          formatter: function(value, context) {
+            // 根据数据类型显示不同格式
+            if (context.dataset.label.includes('(%)')) {
+              return value.toFixed(2) + '%';
+            } else {
+              return value.toFixed(2);
+            }
+          }
         }
       },
       scales: {
@@ -743,6 +798,12 @@ const initFiveFactorChart = () => {
     return isNaN(value) ? 0 : value
   })
   
+  // 提取资产周转率数据（新增）
+  const assetTurnoverData = sortedData.map(item => {
+    const value = parseFloat(item['资产周转率(次)'] || 0)
+    return isNaN(value) ? 0 : value
+  })
+  
   // 创建图表
   fiveFactorChartInstance.value = new Chart(ctx, {
     type: 'line',
@@ -788,6 +849,17 @@ const initFiveFactorChart = () => {
           pointBackgroundColor: '#F5222D',
           pointRadius: 4,
           tension: 0.3
+        },
+        {
+          label: '资产周转率 (次)',
+          data: assetTurnoverData,
+          borderColor: '#95DE64',
+          backgroundColor: 'rgba(149, 222, 100, 0.1)',
+          borderWidth: 2,
+          pointBackgroundColor: '#95DE64',
+          pointRadius: 4,
+          tension: 0.3,
+          yAxisID: 'y1'
         }
       ]
     },
@@ -806,6 +878,22 @@ const initFiveFactorChart = () => {
           padding: 10,
           mode: 'index',
           intersect: false
+        },
+        // 添加数据点标签
+        datalabels: {
+          display: true,
+          color: '#333',
+          font: {
+            size: 10
+          },
+          formatter: function(value, context) {
+            // 根据数据类型显示不同格式
+            if (context.dataset.label.includes('(%)')) {
+              return value.toFixed(2) + '%';
+            } else {
+              return value.toFixed(2);
+            }
+          }
         }
       },
       scales: {
@@ -827,6 +915,20 @@ const initFiveFactorChart = () => {
           title: {
             display: true,
             text: '百分比 (%)',
+            font: { size: 12 }
+          }
+        },
+        // 添加右侧Y轴用于资产周转率
+        y1: {
+          position: 'right',
+          beginAtZero: true,
+          grid: { display: false },
+          ticks: {
+            font: { size: 11 }
+          },
+          title: {
+            display: true,
+            text: '倍数/次',
             font: { size: 12 }
           }
         }
