@@ -111,6 +111,12 @@ class StockDetailResponse(BaseModel):
     topShareholders: List[StockShareholder]  # 十大股东
     dataValidity: Dict[str, Union[bool, str]]  # 数据有效性
 
+class DupontAnalysisResponse(BaseModel):
+    """杜邦分析响应模型"""
+    stock_id: str  # 股票代码
+    full_data: Optional[List[Dict]]  # 全量数据
+    error: Optional[str]  # 错误信息
+
 # -------------- 核心修复：同步行情获取函数 --------------
 @sync_cache_with_timeout(300)
 def get_stock_quotes(stock_code: str) -> Optional[Dict[str, Any]]:
@@ -372,12 +378,12 @@ def get_stock_quotes_api(stock_code: str):
 
 
 # ------------------- 杜邦分析数据提取 -------------------
-@stock_router.get("/dubang/{stock_id}")
+@stock_router.get("/dubang/{stock_id}", response_model=DupontAnalysisResponse)
 def sina_dupont_analysis(
     stock_id: str, 
     displaytype: str = "10",
     export_excel: bool = True  # 默认导出Excel（全量数据）
-) -> Dict[str, Optional[List[Dict]]]:
+):
     """
     全量解析新浪财经股票杜邦分析页面，提取所有指标（含周期类型识别）
     包含：核心指标 + 完整拆解指标 + 周期类型（年报/中报/季报）
@@ -406,7 +412,7 @@ def sina_dupont_analysis(
     }
     
     result = {
-        "stock_id": stock_id,
+        "stock_id": stock_id,  # 响应模型要求stock_id为字符串类型
         "full_data": None,  # 全量数据（含周期类型）
         "error": None
     }
