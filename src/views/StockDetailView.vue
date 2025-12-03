@@ -59,420 +59,480 @@
       </div>
 
       <div class="container mx-auto px-2 py-4 max-w-7xl">
-        <!-- 快速指标卡片（紧凑网格） -->
-        <div
-          class="quick-metrics card mb-3 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 p-3 border border-gray-100 rounded-lg shadow-sm bg-white">
-          <div
-            class="metric-item bg-gray-50 p-2 rounded-lg border border-gray-100 hover:bg-gray-100 transition-all duration-200">
-            <div class="metric-label text-xs text-gray-600 mb-0.5">总市值</div>
-            <div class="metric-value font-semibold text-gray-800 text-sm">{{ formatNumber(stockInfo.marketCap) }}亿</div>
-          </div>
-          <div
-            class="metric-item bg-gray-50 p-2 rounded-lg border border-gray-100 hover:bg-gray-100 transition-all duration-200">
-            <div class="metric-label text-xs text-gray-600 mb-0.5">市盈率(TTM)</div>
-            <div class="metric-value font-semibold text-gray-800 text-sm">{{ currentFinancialData.pe || '--' }}</div>
-          </div>
-          <div
-            class="metric-item bg-gray-50 p-2 rounded-lg border border-gray-100 hover:bg-gray-100 transition-all duration-200">
-            <div class="metric-label text-xs text-gray-600 mb-0.5">净资产收益率</div>
-            <div class="metric-value font-semibold text-gray-800 text-sm">{{ currentFinancialData.roe || '--' }}%</div>
-          </div>
-          <div
-            class="metric-item bg-gray-50 p-2 rounded-lg border border-gray-100 hover:bg-gray-100 transition-all duration-200">
-            <div class="metric-label text-xs text-gray-600 mb-0.5">所属行业</div>
-            <div class="metric-value font-semibold text-gray-800 text-sm">{{ stockInfo.industry || '--' }}</div>
-          </div>
-          <div
-            class="metric-item bg-gray-50 p-2 rounded-lg border border-gray-100 hover:bg-gray-100 transition-all duration-200">
-            <div class="metric-label text-xs text-gray-600 mb-0.5">总股本</div>
-            <div class="metric-value font-semibold text-gray-800 text-sm">{{ formatNumber(stockInfo.totalShares) }}亿股
+        <!-- 左侧导航栏 -->
+        <div class="flex flex-col md:flex-row gap-2">
+          <!-- 固定导航栏 -->
+          <div class="md:w-1/6 lg:w-1/7">
+            <div class="sticky top-20 bg-white border border-gray-200 rounded-lg shadow-sm p-2">
+              <h3 class="nav-title text-sm font-semibold text-gray-800 mb-2 px-1">快速导航</h3>
+              <ul class="nav-list space-y-1">
+                <li>
+                  <a href="#financial-trends" class="nav-item block px-2 py-1.5 text-xs rounded-md hover:bg-gray-100 transition-colors">
+                    <i class="icon mr-1.5">📊</i> 财务趋势
+                  </a>
+                </li>
+                <li>
+                  <a href="#dupont-analysis" class="nav-item block px-2 py-1.5 text-xs rounded-md hover:bg-gray-100 transition-colors">
+                    <i class="icon mr-1.5">📈</i> 杜邦分析
+                  </a>
+                </li>
+                <li>
+                  <a href="#competitor-analysis" class="nav-item block px-2 py-1.5 text-xs rounded-md hover:bg-gray-100 transition-colors">
+                    <i class="icon mr-1.5">🏢</i> 竞争对手
+                  </a>
+                </li>
+                <li>
+                  <a href="#financial-indicators" class="nav-item block px-2 py-1.5 text-xs rounded-md hover:bg-gray-100 transition-colors">
+                    <i class="icon mr-1.5">📋</i> 财务指标
+                  </a>
+                </li>
+                <li>
+                  <a href="#investment-forecast" class="nav-item block px-2 py-1.5 text-xs rounded-md hover:bg-gray-100 transition-colors">
+                    <i class="icon mr-1.5">🎯</i> 投资预测
+                  </a>
+                </li>
+                <li>
+                  <a href="#related-notes" class="nav-item block px-2 py-1.5 text-xs rounded-md hover:bg-gray-100 transition-colors">
+                    <i class="icon mr-1.5">📝</i> 关联笔记
+                  </a>
+                </li>
+                <li>
+                  <a href="#company-profile" class="nav-item block px-2 py-1.5 text-xs rounded-md hover:bg-gray-100 transition-colors">
+                    <i class="icon mr-1.5">ℹ️</i> 公司简介
+                  </a>
+                </li>
+              </ul>
             </div>
           </div>
-          <div
-            class="metric-item bg-gray-50 p-2 rounded-lg border border-gray-100 hover:bg-gray-100 transition-all duration-200">
-            <div class="metric-label text-xs text-gray-600 mb-0.5">流通股本</div>
-            <div class="metric-value font-semibold text-gray-800 text-sm">{{ formatNumber(stockInfo.floatShares) }}亿股
+          
+          <!-- 主要内容区域 -->
+          <div class="md:w-5/6 lg:w-6/7">
+            <!-- 快速指标卡片（紧凑网格） -->
+            <div
+              class="quick-metrics card mb-3 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 p-3 border border-gray-100 rounded-lg shadow-sm bg-white">
+              <div
+                class="metric-item bg-gray-50 p-2 rounded-lg border border-gray-100 hover:bg-gray-100 transition-all duration-200">
+                <div class="metric-label text-xs text-gray-600 mb-0.5">总市值</div>
+                <div class="metric-value font-semibold text-gray-800 text-sm">{{ formatNumber(stockInfo.marketCap) }}亿</div>
+              </div>
+              <div
+                class="metric-item bg-gray-50 p-2 rounded-lg border border-gray-100 hover:bg-gray-100 transition-all duration-200">
+                <div class="metric-label text-xs text-gray-600 mb-0.5">市盈率(TTM)</div>
+                <div class="metric-value font-semibold text-gray-800 text-sm">{{ currentFinancialData.pe || '--' }}</div>
+              </div>
+              <div
+                class="metric-item bg-gray-50 p-2 rounded-lg border border-gray-100 hover:bg-gray-100 transition-all duration-200">
+                <div class="metric-label text-xs text-gray-600 mb-0.5">净资产收益率</div>
+                <div class="metric-value font-semibold text-gray-800 text-sm">{{ currentFinancialData.roe || '--' }}%</div>
+              </div>
+              <div
+                class="metric-item bg-gray-50 p-2 rounded-lg border border-gray-100 hover:bg-gray-100 transition-all duration-200">
+                <div class="metric-label text-xs text-gray-600 mb-0.5">所属行业</div>
+                <div class="metric-value font-semibold text-gray-800 text-sm">{{ stockInfo.industry || '--' }}</div>
+              </div>
+              <div
+                class="metric-item bg-gray-50 p-2 rounded-lg border border-gray-100 hover:bg-gray-100 transition-all duration-200">
+                <div class="metric-label text-xs text-gray-600 mb-0.5">总股本</div>
+                <div class="metric-value font-semibold text-gray-800 text-sm">{{ formatNumber(stockInfo.totalShares) }}亿股
+                </div>
+              </div>
+              <div
+                class="metric-item bg-gray-50 p-2 rounded-lg border border-gray-100 hover:bg-gray-100 transition-all duration-200">
+                <div class="metric-label text-xs text-gray-600 mb-0.5">流通股本</div>
+                <div class="metric-value font-semibold text-gray-800 text-sm">{{ formatNumber(stockInfo.floatShares) }}亿股
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
 
-        <!-- 财务数据与趋势图表（顶部区域） -->
-        <div class="grid grid-cols-1 gap-2 mb-2">
-          <!-- 财务趋势图表组 -->
-          <div class="card p-2 border border-gray-100 rounded-lg shadow-sm bg-white">
-            <div class="card-header mb-1">
-              <h3 class="card-title text-sm font-semibold flex items-center gap-1.5 text-gray-800">
-                <i class="icon text-primary">📊</i> 财务趋势（{{ financialYears.length }}年）
-              </h3>
+            <!-- 财务数据与趋势图表（顶部区域） -->
+            <div class="grid grid-cols-1 gap-2 mb-2">
+              <!-- 财务趋势图表组 -->
+                <div id="financial-trends" class="card p-2 border border-gray-100 rounded-lg shadow-sm bg-white">
+                <div class="card-header mb-1">
+                  <h3 class="card-title text-sm font-semibold flex items-center gap-1.5 text-gray-800">
+                    <i class="icon text-primary">📊</i> 财务趋势（{{ financialYears.length }}年）
+                  </h3>
+                </div>
+
+                <!-- 图表容器：上下紧凑布局 -->
+                <div class="chart-group space-y-3">
+                  <!-- 总营收趋势图 -->
+                  <div>
+                    <h4 class="chart-subtitle text-sm font-medium mb-1.5">总营收趋势（单位：亿元）</h4>
+                    <div class="chart-container h-48">
+                      <canvas id="revenueTrendChart"></canvas>
+                    </div>
+                  </div>
+                  <!-- 归母净利润趋势图 -->
+                  <div>
+                    <h4 class="chart-subtitle text-sm font-medium mb-1.5">归母净利润趋势（单位：亿元）</h4>
+                    <div class="chart-container h-48">
+                      <canvas id="netProfitTrendChart"></canvas>
+                    </div>
+                  </div>
+                  <!-- 扣非净利润趋势图 -->
+                  <div>
+                    <h4 class="chart-subtitle text-sm font-medium mb-1.5">扣非净利润趋势（单位：亿元）</h4>
+                    <div class="chart-container h-48">
+                      <canvas id="nonProfitTrendChart"></canvas>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 图表说明 -->
+                <div class="chart-desc text-xs text-gray-500 mt-2">
+                  <p>数据来源：公司年度财务报告 | 自动适配{{ financialYears.length }}年数据</p>
+                </div>
+              </div>
+            </div>
+            <!-- 杜邦分析数据表格 -->
+            <div id="dupont-analysis" class="mt-6 p-4 border rounded-lg">
+              <h3 class="text-lg font-semibold mb-3">杜邦分析数据</h3>
+              <div v-if="dupontLoading" class="flex items-center justify-center py-8">
+                <div class="loading-spinner"></div>
+              </div>
+              <div v-else-if="dupontData && dupontData.full_data && dupontData.full_data.length > 0">
+                <div class="overflow-x-auto">
+                  <table class="min-w-full border-collapse">
+                    <thead>
+                      <tr class="bg-gray-50">
+                        <th class="border border-gray-200 px-4 py-2 text-left text-sm font-medium text-gray-600">报告期</th>
+                        <th class="border border-gray-200 px-4 py-2 text-left text-sm font-medium text-gray-600">周期类型</th>
+                        <th class="border border-gray-200 px-4 py-2 text-right text-sm font-medium text-gray-600">净资产收益率</th>
+                        <th class="border border-gray-200 px-4 py-2 text-right text-sm font-medium text-gray-600">销售净利率</th>
+                        <th class="border border-gray-200 px-4 py-2 text-right text-sm font-medium text-gray-600">资产周转率(次)</th>
+                        <th class="border border-gray-200 px-4 py-2 text-right text-sm font-medium text-gray-600">权益乘数</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="(item, index) in dupontData.full_data" :key="index" :class="index % 2 === 0 ? 'bg-white' : 'bg-gray-50'">
+                        <td class="border border-gray-200 px-4 py-2 text-sm text-gray-800">{{ item['报告期'] }}</td>
+                        <td class="border border-gray-200 px-4 py-2 text-sm text-gray-800">{{ item['周期类型'] }}</td>
+                        <td class="border border-gray-200 px-4 py-2 text-sm text-right text-gray-800">{{ item['净资产收益率'] || '-' }}</td>
+                        <td class="border border-gray-200 px-4 py-2 text-sm text-right text-gray-800">{{ item['归属母公司股东的销售净利率'] || '-' }}</td>
+                        <td class="border border-gray-200 px-4 py-2 text-sm text-right text-gray-800">{{ item['资产周转率(次)'] || '-' }}</td>
+                        <td class="border border-gray-200 px-4 py-2 text-sm text-right text-gray-800">{{ item['权益乘数'] || '-' }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div v-else>
+                <div class="text-center text-gray-500 py-8">未获取到杜邦分析数据</div>
+              </div>
             </div>
 
-            <!-- 图表容器：上下紧凑布局 -->
-            <div class="chart-group space-y-3">
-              <!-- 扣非净利润趋势图 -->
+            <!-- 杜邦分析图表区域 -->
+            <div class="mt-6 p-4 border rounded-lg">
+              <h3 class="text-lg font-semibold mb-3">杜邦分析法趋势</h3>
+
+              <!-- 三因素分析 -->
+              <div class="mb-6">
+                <h4 class="text-sm text-gray-600 mb-2">三因素分析（ROE = 销售净利率 × 资产周转率 × 权益乘数）</h4>
+                <div class="h-64 bg-gray-50 rounded relative">
+                  <!-- 加载状态 -->
+                  <div v-if="dupontLoading" class="absolute inset-0 flex items-center justify-center bg-white/80 z-10">
+                    <div class="loading-spinner"></div>
+                  </div>
+                  
+                  <!-- 图表容器 -->
+                  <canvas id="threeFactorChart" class="h-full w-full"></canvas>
+                  
+                  <!-- 错误提示 -->
+                  <div v-if="!dupontLoading && threeFactorError" class="absolute inset-0 flex items-center justify-center text-red-500 text-sm">
+                    {{ threeFactorError }}
+                  </div>
+                </div>
+              </div>
+
+              <!-- 五因素分析 -->
               <div>
-                <h4 class="chart-subtitle text-sm font-medium mb-1.5">扣非净利润趋势（单位：亿元）</h4>
-                <div class="chart-container h-48">
-                  <canvas id="nonProfitTrendChart"></canvas>
+                <h4 class="text-sm text-gray-600 mb-2">五因素分析（ROE = 经营利润率 × 资产周转率 × 权益乘数 × 税负因素 × 利息负担）</h4>
+                <div class="h-64 bg-gray-50 rounded relative">
+                  <!-- 加载状态 -->
+                  <div v-if="dupontLoading" class="absolute inset-0 flex items-center justify-center bg-white/80 z-10">
+                    <div class="loading-spinner"></div>
+                  </div>
+                  
+                  <!-- 图表容器 -->
+                  <canvas id="fiveFactorChart" class="h-full w-full"></canvas>
+                  
+                  <!-- 错误提示 -->
+                  <div v-if="!dupontLoading && fiveFactorError" class="absolute inset-0 flex items-center justify-center text-red-500 text-sm">
+                    {{ fiveFactorError }}
+                  </div>
                 </div>
               </div>
             </div>
 
-            <!-- 图表说明 -->
-            <div class="chart-desc text-xs text-gray-500 mt-2">
-              <p>数据来源：公司年度财务报告 | 自动适配{{ financialYears.length }}年数据</p>
-            </div>
-          </div>
-        </div>
-        <!-- 杜邦分析数据表格 -->
-        <div class="mt-6 p-4 border rounded-lg">
-          <h3 class="text-lg font-semibold mb-3">杜邦分析数据</h3>
-          <div v-if="dupontLoading" class="flex items-center justify-center py-8">
-            <div class="loading-spinner"></div>
-          </div>
-          <div v-else-if="dupontData && dupontData.full_data && dupontData.full_data.length > 0">
-            <div class="overflow-x-auto">
-              <table class="min-w-full border-collapse">
-                <thead>
-                  <tr class="bg-gray-50">
-                    <th class="border border-gray-200 px-4 py-2 text-left text-sm font-medium text-gray-600">报告期</th>
-                    <th class="border border-gray-200 px-4 py-2 text-left text-sm font-medium text-gray-600">周期类型</th>
-                    <th class="border border-gray-200 px-4 py-2 text-right text-sm font-medium text-gray-600">净资产收益率</th>
-                    <th class="border border-gray-200 px-4 py-2 text-right text-sm font-medium text-gray-600">销售净利率</th>
-                    <th class="border border-gray-200 px-4 py-2 text-right text-sm font-medium text-gray-600">资产周转率(次)</th>
-                    <th class="border border-gray-200 px-4 py-2 text-right text-sm font-medium text-gray-600">权益乘数</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="(item, index) in dupontData.full_data" :key="index" :class="index % 2 === 0 ? 'bg-white' : 'bg-gray-50'">
-                    <td class="border border-gray-200 px-4 py-2 text-sm text-gray-800">{{ item['报告期'] }}</td>
-                    <td class="border border-gray-200 px-4 py-2 text-sm text-gray-800">{{ item['周期类型'] }}</td>
-                    <td class="border border-gray-200 px-4 py-2 text-sm text-right text-gray-800">{{ item['净资产收益率'] || '-' }}</td>
-                    <td class="border border-gray-200 px-4 py-2 text-sm text-right text-gray-800">{{ item['归属母公司股东的销售净利率'] || '-' }}</td>
-                    <td class="border border-gray-200 px-4 py-2 text-sm text-right text-gray-800">{{ item['资产周转率(次)'] || '-' }}</td>
-                    <td class="border border-gray-200 px-4 py-2 text-sm text-right text-gray-800">{{ item['权益乘数'] || '-' }}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-          <div v-else>
-            <div class="text-center text-gray-500 py-8">未获取到杜邦分析数据</div>
-          </div>
-        </div>
-
-        <!-- 杜邦分析图表区域 -->
-        <div class="mt-6 p-4 border rounded-lg">
-          <h3 class="text-lg font-semibold mb-3">杜邦分析法趋势</h3>
-
-          <!-- 三因素分析 -->
-          <div class="mb-6">
-            <h4 class="text-sm text-gray-600 mb-2">三因素分析（ROE = 销售净利率 × 资产周转率 × 权益乘数）</h4>
-            <div class="h-64 bg-gray-50 rounded relative">
-              <!-- 加载状态 -->
-              <div v-if="dupontLoading" class="absolute inset-0 flex items-center justify-center bg-white/80 z-10">
-                <div class="loading-spinner"></div>
-              </div>
-              
-              <!-- 图表容器 -->
-              <canvas id="threeFactorChart" class="h-full w-full"></canvas>
-              
-              <!-- 错误提示 -->
-              <div v-if="!dupontLoading && threeFactorError" class="absolute inset-0 flex items-center justify-center text-red-500 text-sm">
-                {{ threeFactorError }}
-              </div>
-            </div>
-          </div>
-
-          <!-- 五因素分析 -->
-          <div>
-            <h4 class="text-sm text-gray-600 mb-2">五因素分析（ROE = 经营利润率 × 资产周转率 × 权益乘数 × 税负因素 × 利息负担）</h4>
-            <div class="h-64 bg-gray-50 rounded relative">
-              <!-- 加载状态 -->
-              <div v-if="dupontLoading" class="absolute inset-0 flex items-center justify-center bg-white/80 z-10">
-                <div class="loading-spinner"></div>
-              </div>
-              
-              <!-- 图表容器 -->
-              <canvas id="fiveFactorChart" class="h-full w-full"></canvas>
-              
-              <!-- 错误提示 -->
-              <div v-if="!dupontLoading && fiveFactorError" class="absolute inset-0 flex items-center justify-center text-red-500 text-sm">
-                {{ fiveFactorError }}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 主内容区域：左右并列布局 -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-2">
-          <!-- 左侧：占6列 -->
-          <div class="space-y-2">
-            <!-- 关联笔记卡片 -->
-            <div class="card p-2 border border-gray-100 rounded-lg shadow-sm bg-white">
-              <div class="card-header mb-1 flex justify-between items-center">
-                <h3 class="card-title text-sm font-semibold flex items-center gap-1.5 text-gray-800">
-                  <i class="icon text-primary">📝</i> 关联笔记
-                </h3>
-                <button class="btn bg-primary/10 text-primary hover:bg-primary/20 py-1.5 px-3"
-                  @click="openNoteModal('create')">
-                  新增
-                </button>
-              </div>
-
-              <!-- 笔记列表（紧凑间距） -->
-              <div v-if="stockNotes.length > 0" class="notes-list space-y-2 max-h-48 overflow-y-auto pr-1">
-                <div
-                  class="note-item p-2 bg-gray-50 rounded-lg border border-gray-100 cursor-pointer hover:bg-gray-100 transition-colors"
-                  v-for="(note, index) in stockNotes" :key="note.id" @click="openNoteModal('view', note)">
-                  <div class="note-title font-medium text-sm truncate">{{ note.title }}</div>
-                  <div class="note-meta text-xs text-gray-500 mt-0.5 flex justify-between">
-                    <span>{{ formatDate(note.createTime) }}</span>
-                    <span>{{ formatDate(note.updateTime) }}</span>
+            <!-- 主内容区域：左右并列布局 -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-2">
+              <!-- 左侧：占6列 -->
+              <div class="space-y-2">
+                <!-- 关联笔记卡片 -->
+                <div class="card p-2 border border-gray-100 rounded-lg shadow-sm bg-white">
+                  <div class="card-header mb-1 flex justify-between items-center">
+                    <h3 class="card-title text-sm font-semibold flex items-center gap-1.5 text-gray-800">
+                      <i class="icon text-primary">📝</i> 关联笔记
+                    </h3>
+                    <button class="btn bg-primary/10 text-primary hover:bg-primary/20 py-1.5 px-3"
+                      @click="openNoteModal('create')">
+                      新增
+                    </button>
                   </div>
-                  <div class="note-content text-xs text-gray-600 mt-1 line-clamp-2">
-                    {{ note.content }}
+
+                  <!-- 笔记列表（紧凑间距） -->
+                  <div v-if="stockNotes.length > 0" class="notes-list space-y-2 max-h-48 overflow-y-auto pr-1">
+                    <div
+                      class="note-item p-2 bg-gray-50 rounded-lg border border-gray-100 cursor-pointer hover:bg-gray-100 transition-colors"
+                      v-for="(note, index) in stockNotes" :key="note.id" @click="openNoteModal('view', note)">
+                      <div class="note-title font-medium text-sm truncate">{{ note.title }}</div>
+                      <div class="note-meta text-xs text-gray-500 mt-0.5 flex justify-between">
+                        <span>{{ formatDate(note.createTime) }}</span>
+                        <span>{{ formatDate(note.updateTime) }}</span>
+                      </div>
+                      <div class="note-content text-xs text-gray-600 mt-1 line-clamp-2">
+                        {{ note.content }}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div v-else class="empty-state py-4 text-center">
+                    <div class="empty-icon text-2xl mb-1">📝</div>
+                    <p class="empty-text text-xs text-gray-500">暂无关联笔记</p>
+                    <button class="btn primary mt-2 py-1.5 px-3" @click="openNoteModal('create')">
+                      <i class="icon">✏️</i> 创建第一条
+                    </button>
+                  </div>
+                </div>
+
+                <!-- 利好利空点和总结卡片 -->
+                <div class="card p-2 border border-gray-100 rounded-lg shadow-sm bg-white">
+                  <div class="card-header mb-1">
+                    <h3 class="card-title text-sm font-semibold flex items-center gap-1.5 text-gray-800">
+                      <i class="icon text-primary">📊</i> 利好利空与总结
+                    </h3>
+                  </div>
+                  <div class="pros-cons-container space-y-2">
+                    <div>
+                      <label class="form-label block text-xs font-medium text-gray-600 mb-0.5">利好点</label>
+                      <textarea v-model="prosPoints"
+                        class="form-textarea w-full px-2 py-2 border border-gray-100 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent mb-2 text-sm"
+                        rows="2" placeholder="记录利好因素"></textarea>
+                    </div>
+                    <div>
+                      <label class="form-label block text-xs font-medium text-gray-600 mb-0.5">利空点</label>
+                      <textarea v-model="consPoints"
+                        class="form-textarea w-full px-2 py-2 border border-gray-100 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent mb-2 text-sm"
+                        rows="2" placeholder="记录利空因素"></textarea>
+                    </div>
+                    <div>
+                      <label class="form-label block text-xs font-medium text-gray-600 mb-0.5">投资总结</label>
+                      <textarea v-model="investmentSummary"
+                        class="form-textarea w-full px-2 py-2 border border-gray-100 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent mb-2 text-sm"
+                        rows="2" placeholder="记录投资总结"></textarea>
+                    </div>
+                    <button class="btn primary w-full py-2" @click="saveProsConsSummary">
+                      保存利好利空与总结
+                    </button>
+                  </div>
+                </div>
+
+                <!-- 估值逻辑记录卡片 -->
+                <div class="card p-2 border border-gray-100 rounded-lg shadow-sm bg-white">
+                  <div class="card-header mb-1">
+                    <h3 class="card-title text-sm font-semibold flex items-center gap-1.5 text-gray-800">
+                      <i class="icon text-primary">💡</i> 估值逻辑
+                    </h3>
+                  </div>
+                  <div class="valuation-container">
+                    <textarea v-model="valuationLogic"
+                      class="form-textarea w-full px-2 py-2 border border-gray-100 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent mb-2 text-sm"
+                      rows="3" placeholder="记录估值逻辑（行业中枢、增长预期等）"></textarea>
+                    <button class="btn primary w-full py-2" @click="saveValuationLogic">
+                      保存估值逻辑
+                    </button>
                   </div>
                 </div>
               </div>
 
-              <div v-else class="empty-state py-4 text-center">
-                <div class="empty-icon text-2xl mb-1">📝</div>
-                <p class="empty-text text-xs text-gray-500">暂无关联笔记</p>
-                <button class="btn primary mt-2 py-1.5 px-3" @click="openNoteModal('create')">
-                  <i class="icon">✏️</i> 创建第一条
-                </button>
-              </div>
-            </div>
-
-
-
-            <!-- 利好利空点和总结卡片 -->
-            <div class="card p-2 border border-gray-100 rounded-lg shadow-sm bg-white">
-              <div class="card-header mb-1">
-                <h3 class="card-title text-sm font-semibold flex items-center gap-1.5 text-gray-800">
-                  <i class="icon text-primary">📊</i> 利好利空与总结
-                </h3>
-              </div>
-              <div class="pros-cons-container space-y-2">
-                <div>
-                  <label class="form-label block text-xs font-medium text-gray-600 mb-0.5">利好点</label>
-                  <textarea v-model="prosPoints"
-                    class="form-textarea w-full px-2 py-2 border border-gray-100 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent mb-2 text-sm"
-                    rows="2" placeholder="记录利好因素"></textarea>
-                </div>
-                <div>
-                  <label class="form-label block text-xs font-medium text-gray-600 mb-0.5">利空点</label>
-                  <textarea v-model="consPoints"
-                    class="form-textarea w-full px-2 py-2 border border-gray-100 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent mb-2 text-sm"
-                    rows="2" placeholder="记录利空因素"></textarea>
-                </div>
-                <div>
-                  <label class="form-label block text-xs font-medium text-gray-600 mb-0.5">投资总结</label>
-                  <textarea v-model="investmentSummary"
-                    class="form-textarea w-full px-2 py-2 border border-gray-100 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent mb-2 text-sm"
-                    rows="2" placeholder="记录投资总结"></textarea>
-                </div>
-                <button class="btn primary w-full py-2" @click="saveProsConsSummary">
-                  保存利好利空与总结
-                </button>
-              </div>
-            </div>
-
-            <!-- 估值逻辑记录卡片 -->
-            <div class="card p-2 border border-gray-100 rounded-lg shadow-sm bg-white">
-              <div class="card-header mb-1">
-                <h3 class="card-title text-sm font-semibold flex items-center gap-1.5 text-gray-800">
-                  <i class="icon text-primary">💡</i> 估值逻辑
-                </h3>
-              </div>
-              <div class="valuation-container">
-                <textarea v-model="valuationLogic"
-                  class="form-textarea w-full px-2 py-2 border border-gray-100 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent mb-2 text-sm"
-                  rows="3" placeholder="记录估值逻辑（行业中枢、增长预期等）"></textarea>
-                <button class="btn primary w-full py-2" @click="saveValuationLogic">
-                  保存估值逻辑
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <!-- 右侧：占6列 -->
-          <div class="space-y-2">
-            <!-- 投资预测与交易计划卡片 -->
-            <div class="card p-2 border border-gray-100 rounded-lg shadow-sm bg-white">
-              <div class="card-header mb-1">
-                <h3 class="card-title text-sm font-semibold flex items-center gap-1.5 text-gray-800">
-                  <i class="icon text-primary">📈</i> 投资预测与交易计划
-                </h3>
-              </div>
-              <div class="trading-form grid grid-cols-1 gap-2 mb-2">
-                <div class="grid grid-cols-2 gap-2">
-                  <div class="form-group">
-                    <label class="form-label block text-xs font-medium text-gray-600 mb-0.5">目标买入点（元）</label>
-                    <input v-model="buyPoint" type="number" step="0.01"
-                      class="form-input w-full px-2 py-2 border border-gray-100 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent text-sm"
-                      placeholder="输入买入价">
+              <!-- 右侧：占6列 -->
+              <div class="space-y-2">
+                <!-- 友商录入卡片 -->
+                <div id="competitor-analysis" class="card p-2 border border-gray-100 rounded-lg shadow-sm bg-white">
+                  <div class="card-header mb-1">
+                    <h3 class="card-title text-sm font-semibold flex items-center gap-1.5 text-gray-800">
+                      <i class="icon text-primary">🤝</i> 友商录入
+                    </h3>
                   </div>
-                  <div class="form-group">
-                    <label class="form-label block text-xs font-medium text-gray-600 mb-0.5">预期涨幅（%）</label>
-                    <input v-model="expectedGrowthRate" type="number" step="0.1"
-                      class="form-input w-full px-2 py-2 border border-gray-100 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent text-sm"
-                      placeholder="预期涨幅">
-                  </div>
-                </div>
-                <div class="grid grid-cols-2 gap-2">
-                  <div class="form-group">
-                    <label class="form-label block text-xs font-medium text-gray-600 mb-0.5">预期目标点位（元）</label>
-                    <input v-model="expectedPoint" type="number" step="0.01"
-                      class="form-input w-full px-2 py-2 border border-gray-100 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent text-sm bg-gray-50"
-                      placeholder="自动计算" readonly>
-                  </div>
-                  <div class="form-group">
-                    <label class="form-label block text-xs font-medium text-gray-600 mb-0.5">预期市值（亿元）</label>
-                    <input v-model="expectedMarketCap" type="number" step="0.1"
-                      class="form-input w-full px-2 py-2 border border-gray-100 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent text-sm bg-gray-50"
-                      placeholder="自动计算" readonly>
-                  </div>
-                </div>
-                <div class="grid grid-cols-2 gap-2">
-                  <div class="form-group">
-                    <label class="form-label block text-xs font-medium text-gray-600 mb-0.5">最大跌幅（%）</label>
-                    <input v-model="maxLossRate" type="number" step="0.1"
-                      class="form-input w-full px-2 py-2 border border-gray-100 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent text-sm"
-                      placeholder="可接受跌幅">
-                  </div>
-                  <div class="form-group">
-                    <label class="form-label block text-xs font-medium text-gray-600 mb-0.5">最大亏损点位（元）</label>
-                    <input v-model="maxLossPoint" type="number" step="0.01"
-                      class="form-input w-full px-2 py-2 border border-gray-100 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent text-sm bg-gray-50"
-                      placeholder="自动计算" readonly>
-                  </div>
-                </div>
-                <div class="grid grid-cols-2 gap-2">
-                  <div class="form-group">
-                    <label class="form-label block text-xs font-medium text-gray-600 mb-0.5">最大上涨幅度（%）</label>
-                    <input v-model="maxUpwardRange" type="number" step="0.1"
-                      class="form-input w-full px-2 py-2 border border-gray-100 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent text-sm"
-                      placeholder="预期最大涨幅">
-                  </div>
-                  <div class="form-group">
-                    <label class="form-label block text-xs font-medium text-gray-600 mb-0.5">最大下跌幅度（%）</label>
-                    <input v-model="maxDownwardRange" type="number" step="0.1"
-                      class="form-input w-full px-2 py-2 border border-gray-100 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent text-sm"
-                      placeholder="预期最大跌幅">
-                  </div>
-                </div>
-                <div class="form-group">
-                  <label class="form-label block text-xs font-medium text-gray-600 mb-0.5">投资时长（月）</label>
-                  <input v-model="investmentDuration" type="number" step="1"
-                    class="form-input w-full px-2 py-2 border border-gray-100 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent text-sm"
-                    placeholder="预期投资时长">
-                </div>
-                <button class="btn primary py-2" @click="saveInvestmentPlan">
-                  保存投资计划
-                </button>
-              </div>
-            </div>
-
-            <!-- 友商录入卡片 -->
-            <div class="card p-2 border border-gray-100 rounded-lg shadow-sm bg-white">
-              <div class="card-header mb-1">
-                <h3 class="card-title text-sm font-semibold flex items-center gap-1.5 text-gray-800">
-                  <i class="icon text-primary">🤝</i> 友商录入
-                </h3>
-              </div>
-              <div class="competitors-container space-y-2">
-                <div v-if="competitors.length > 0" class="competitor-list space-y-2 max-h-48 overflow-y-auto pr-1">
-                  <div
-                    class="competitor-item p-2 bg-gray-50 rounded-lg border border-gray-100 flex items-center justify-between cursor-pointer hover:bg-gray-100 transition-colors"
-                    v-for="(competitor, index) in competitors" :key="index"
-                    @click="goToCompetitorDetail(competitor.code)">
-                    <div class="competitor-info flex items-center gap-1.5">
+                  <div class="competitors-container space-y-2">
+                    <div v-if="competitors.length > 0" class="competitor-list space-y-2 max-h-48 overflow-y-auto pr-1">
                       <div
-                        class="competitor-rank w-5 h-5 flex items-center justify-center bg-primary/10 text-primary rounded-full text-xs">
-                        {{ index + 1 }}
-                      </div>
-                      <div class="competitor-details min-w-0">
-                        <div class="competitor-name font-medium text-sm truncate">{{ competitor.name }}</div>
-                        <div class="competitor-code text-xs text-gray-500">{{ competitor.code }}</div>
+                        class="competitor-item p-2 bg-gray-50 rounded-lg border border-gray-100 flex items-center justify-between cursor-pointer hover:bg-gray-100 transition-colors"
+                        v-for="(competitor, index) in competitors" :key="index"
+                        @click="goToCompetitorDetail(competitor.code)">
+                        <div class="competitor-info flex items-center gap-1.5">
+                          <div
+                            class="competitor-rank w-5 h-5 flex items-center justify-center bg-primary/10 text-primary rounded-full text-xs">
+                            {{ index + 1 }}
+                          </div>
+                          <div class="competitor-details min-w-0">
+                            <div class="competitor-name font-medium text-sm truncate">{{ competitor.name }}</div>
+                            <div class="competitor-code text-xs text-gray-500">{{ competitor.code }}</div>
+                          </div>
+                        </div>
+                        <div class="competitor-action text-primary text-xs">
+                          查看详情 →
+                        </div>
                       </div>
                     </div>
-                    <div class="competitor-action text-primary text-xs">
-                      查看详情 →
+                    <div v-else class="empty-state py-3 text-center">
+                      <p class="empty-text text-xs text-gray-500">暂无友商数据</p>
+                    </div>
+                    <div class="add-competitor-form grid grid-cols-2 gap-2">
+                      <input v-model="newCompetitor.name" type="text"
+                        class="form-input px-2 py-2 border border-gray-100 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent text-sm"
+                        placeholder="友商名称">
+                      <input v-model="newCompetitor.code" type="text"
+                        class="form-input px-2 py-2 border border-gray-100 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent text-sm"
+                        placeholder="友商代码">
+                      <button class="btn primary col-span-2 py-2" @click="addCompetitor"
+                        :disabled="!newCompetitor.name || !newCompetitor.code">
+                        添加友商
+                      </button>
                     </div>
                   </div>
                 </div>
-                <div v-else class="empty-state py-3 text-center">
-                  <p class="empty-text text-xs text-gray-500">暂无友商数据</p>
+              </div>
+            </div>
+          </div> <!-- 修复：闭合主要内容区域的外层div -->
+        </div>
+      </div>
+
+      <!-- 笔记模态框（紧凑样式） -->
+      <teleport to="body">
+        <div v-if="noteModalOpen"
+          class="modal-backdrop fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-3">
+          <div class="modal-container bg-white rounded-lg shadow-lg w-full max-w-md max-h-[85vh] flex flex-col">
+            <div class="modal-header p-2.5 border-b border-gray-200 flex justify-between items-center">
+              <h3 class="modal-title text-base font-semibold">
+                {{ noteModalType === 'create' ? '创建股票笔记' : '查看/编辑笔记' }}
+              </h3>
+              <button class="modal-close text-gray-500 hover:text-gray-700" @click="closeNoteModal">
+                ✕
+              </button>
+            </div>
+            <div class="modal-body p-2.5 flex-1 overflow-y-auto">
+              <form @submit.prevent="saveNote">
+                <div class="form-group mb-2.5">
+                  <label class="form-label block text-sm font-medium text-gray-700 mb-0.5">笔记标题</label>
+                  <input v-model="noteForm.title" type="text"
+                    class="form-input w-full px-2.5 py-1.5 border border-gray-200 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent text-sm"
+                    placeholder="输入笔记标题（关联股票：{{ stockInfo.code }} {{ stockInfo.name }}）" required>
                 </div>
-                <div class="add-competitor-form grid grid-cols-2 gap-2">
-                  <input v-model="newCompetitor.name" type="text"
-                    class="form-input px-2 py-2 border border-gray-100 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent text-sm"
-                    placeholder="友商名称">
-                  <input v-model="newCompetitor.code" type="text"
-                    class="form-input px-2 py-2 border border-gray-100 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent text-sm"
-                    placeholder="友商代码">
-                  <button class="btn primary col-span-2 py-2" @click="addCompetitor"
-                    :disabled="!newCompetitor.name || !newCompetitor.code">
-                    添加友商
+                <div class="form-group mb-2.5">
+                  <label class="form-label block text-sm font-medium text-gray-700 mb-0.5">笔记内容</label>
+                  <textarea v-model="noteForm.content"
+                    class="form-textarea w-full px-2.5 py-1.5 border border-gray-200 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent text-sm"
+                    rows="6" placeholder="输入笔记内容（分析、操作计划等）" required></textarea>
+                </div>
+                <div class="form-group mb-2.5">
+                  <label class="form-label block text-sm font-medium text-gray-700 mb-0.5">关联股票</label>
+                  <div
+                    class="form-control bg-gray-50 px-2.5 py-1.5 border border-gray-200 rounded-md text-gray-700 text-sm">
+                    {{ stockInfo.code }} {{ stockInfo.name }}
+                  </div>
+                </div>
+                <div class="form-actions flex justify-end gap-1.5 mt-3">
+                  <button type="button" class="btn btn-secondary btn-xs px-3 py-1.5 rounded-md" @click="closeNoteModal">
+                    取消
+                  </button>
+                  <button type="submit" class="btn primary btn-xs px-3 py-1.5 rounded-md">
+                    {{ noteModalType === 'create' ? '创建笔记' : '保存修改' }}
                   </button>
                 </div>
-              </div>
+              </form>
             </div>
-
-
           </div>
+        </div>
+      </teleport>
+      
+      <!-- 投资预测与交易计划卡片（移动到页面底部） -->
+      <div id="investment-forecast" class="card p-2 border border-gray-100 rounded-lg shadow-sm bg-white mt-4">
+        <div class="card-header mb-1">
+          <h3 class="card-title text-sm font-semibold flex items-center gap-1.5 text-gray-800">
+            <i class="icon text-primary">📈</i> 投资预测与交易计划
+          </h3> <!-- 修复：闭合h3标签，删除多余文字 -->
+        </div>
+        <div class="trading-form grid grid-cols-1 gap-2 mb-2">
+          <div class="grid grid-cols-2 gap-2">
+            <div class="form-group">
+              <label class="form-label block text-xs font-medium text-gray-600 mb-0.5">目标买入点（元）</label>
+              <input v-model="buyPoint" type="number" step="0.01"
+                class="form-input w-full px-2 py-2 border border-gray-100 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent text-sm"
+                placeholder="输入买入价">
+            </div>
+            <div class="form-group">
+              <label class="form-label block text-xs font-medium text-gray-600 mb-0.5">预期涨幅（%）</label>
+              <input v-model="expectedGrowthRate" type="number" step="0.1"
+                class="form-input w-full px-2 py-2 border border-gray-100 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent text-sm"
+                placeholder="预期涨幅">
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <div class="form-group">
+              <label class="form-label block text-xs font-medium text-gray-600 mb-0.5">预期目标点位（元）</label>
+              <input v-model="expectedPoint" type="number" step="0.01"
+                class="form-input w-full px-2 py-2 border border-gray-100 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent text-sm bg-gray-50"
+                placeholder="自动计算" readonly>
+            </div>
+            <div class="form-group">
+              <label class="form-label block text-xs font-medium text-gray-600 mb-0.5">预期市值（亿元）</label>
+              <input v-model="expectedMarketCap" type="number" step="0.1"
+                class="form-input w-full px-2 py-2 border border-gray-100 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent text-sm bg-gray-50"
+                placeholder="自动计算" readonly>
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <div class="form-group">
+              <label class="form-label block text-xs font-medium text-gray-600 mb-0.5">最大跌幅（%）</label>
+              <input v-model="maxLossRate" type="number" step="0.1"
+                class="form-input w-full px-2 py-2 border border-gray-100 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent text-sm"
+                placeholder="可接受跌幅">
+            </div>
+            <div class="form-group">
+              <label class="form-label block text-xs font-medium text-gray-600 mb-0.5">最大亏损点位（元）</label>
+              <input v-model="maxLossPoint" type="number" step="0.01"
+                class="form-input w-full px-2 py-2 border border-gray-100 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent text-sm bg-gray-50"
+                placeholder="自动计算" readonly>
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <div class="form-group">
+              <label class="form-label block text-xs font-medium text-gray-600 mb-0.5">最大上涨幅度（%）</label>
+              <input v-model="maxUpwardRange" type="number" step="0.1"
+                class="form-input w-full px-2 py-2 border border-gray-100 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent text-sm"
+                placeholder="预期最大涨幅">
+            </div>
+            <div class="form-group">
+              <label class="form-label block text-xs font-medium text-gray-600 mb-0.5">最大下跌幅度（%）</label>
+              <input v-model="maxDownwardRange" type="number" step="0.1"
+                class="form-input w-full px-2 py-2 border border-gray-100 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent text-sm"
+                placeholder="预期最大跌幅">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label block text-xs font-medium text-gray-600 mb-0.5">投资时长（月）</label>
+            <input v-model="investmentDuration" type="number" step="1"
+              class="form-input w-full px-2 py-2 border border-gray-100 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent text-sm"
+              placeholder="预期投资时长">
+          </div>
+          <button class="btn primary py-2" @click="saveInvestmentPlan">
+            保存投资计划
+          </button>
         </div>
       </div>
     </template>
-
-    <!-- 笔记模态框（紧凑样式） -->
-    <teleport to="body">
-      <div v-if="noteModalOpen"
-        class="modal-backdrop fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-3">
-        <div class="modal-container bg-white rounded-lg shadow-lg w-full max-w-md max-h-[85vh] flex flex-col">
-          <div class="modal-header p-2.5 border-b border-gray-200 flex justify-between items-center">
-            <h3 class="modal-title text-base font-semibold">
-              {{ noteModalType === 'create' ? '创建股票笔记' : '查看/编辑笔记' }}
-            </h3>
-            <button class="modal-close text-gray-500 hover:text-gray-700" @click="closeNoteModal">
-              ✕
-            </button>
-          </div>
-          <div class="modal-body p-2.5 flex-1 overflow-y-auto">
-            <form @submit.prevent="saveNote">
-              <div class="form-group mb-2.5">
-                <label class="form-label block text-sm font-medium text-gray-700 mb-0.5">笔记标题</label>
-                <input v-model="noteForm.title" type="text"
-                  class="form-input w-full px-2.5 py-1.5 border border-gray-200 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent text-sm"
-                  placeholder="输入笔记标题（关联股票：{{ stockInfo.code }} {{ stockInfo.name }}）" required>
-              </div>
-              <div class="form-group mb-2.5">
-                <label class="form-label block text-sm font-medium text-gray-700 mb-0.5">笔记内容</label>
-                <textarea v-model="noteForm.content"
-                  class="form-textarea w-full px-2.5 py-1.5 border border-gray-200 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent text-sm"
-                  rows="6" placeholder="输入笔记内容（分析、操作计划等）" required></textarea>
-              </div>
-              <div class="form-group mb-2.5">
-                <label class="form-label block text-sm font-medium text-gray-700 mb-0.5">关联股票</label>
-                <div
-                  class="form-control bg-gray-50 px-2.5 py-1.5 border border-gray-200 rounded-md text-gray-700 text-sm">
-                  {{ stockInfo.code }} {{ stockInfo.name }}
-                </div>
-              </div>
-              <div class="form-actions flex justify-end gap-1.5 mt-3">
-                <button type="button" class="btn btn-secondary btn-xs px-3 py-1.5 rounded-md" @click="closeNoteModal">
-                  取消
-                </button>
-                <button type="submit" class="btn primary btn-xs px-3 py-1.5 rounded-md">
-                  {{ noteModalType === 'create' ? '创建笔记' : '保存修改' }}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      </div>
-    </teleport>
   </div>
 </template>
 
@@ -992,6 +1052,8 @@ const maxLossPoint = computed(() => {
 // 图表实例（新增扣非净利润、应收账款图表）
 const nonProfitChartInstance = ref(null)
 const receivablesChartInstance = ref(null)
+const revenueChartInstance = ref(null)
+const netProfitChartInstance = ref(null)
 
 // 笔记相关
 const stockNotes = ref([])
@@ -1024,6 +1086,14 @@ const initFinancialCharts = () => {
     const value = parseFloat(financialData.value[year]?.receivables || '0')
     return isNaN(value) ? 0 : value
   })
+  const revenueData = labels.map(year => {
+    const value = parseFloat(financialData.value[year]?.totalRevenue || '0')
+    return isNaN(value) ? 0 : value
+  })
+  const netProfitData = labels.map(year => {
+    const value = parseFloat(financialData.value[year]?.netProfitAttribution || '0')
+    return isNaN(value) ? 0 : value
+  })
 
   // 扣非净利润图表
   const nonProfitCtx = document.getElementById('nonProfitTrendChart')
@@ -1040,6 +1110,130 @@ const initFinancialCharts = () => {
           backgroundColor: 'rgba(22, 93, 255, 0.1)',
           borderWidth: 1.5,
           pointBackgroundColor: '#165DFF',
+          pointRadius: 3,
+          pointHoverRadius: 4,
+          tension: 0.3,
+          fill: true
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            display: false
+          },
+          tooltip: {
+            padding: 8,
+            callbacks: {
+              label: (context) => `${context.dataset.label}: ${context.raw.toFixed(2)} 亿元`
+            }
+          }
+        },
+        scales: {
+          x: {
+            grid: { display: false },
+            ticks: { font: { size: 10 } }
+          },
+          y: {
+            beginAtZero: true,
+            grid: { color: 'rgba(0, 0, 0, 0.03)' },
+            ticks: {
+              font: { size: 10 },
+              callback: (value) => `${value} 亿`
+            }
+          }
+        },
+        interaction: {
+          mode: 'nearest',
+          axis: 'x',
+          intersect: false
+        },
+        animation: {
+          duration: 800,
+          easing: 'easeOutQuart'
+        }
+      }
+    })
+  }
+
+  // 总营收图表
+  const revenueCtx = document.getElementById('revenueTrendChart')
+  if (revenueCtx) {
+    if (revenueChartInstance.value) revenueChartInstance.value.destroy()
+    revenueChartInstance.value = new Chart(revenueCtx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: '总营收（亿元）',
+          data: revenueData,
+          borderColor: '#2EC7C9',
+          backgroundColor: 'rgba(46, 199, 201, 0.1)',
+          borderWidth: 1.5,
+          pointBackgroundColor: '#2EC7C9',
+          pointRadius: 3,
+          pointHoverRadius: 4,
+          tension: 0.3,
+          fill: true
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            display: false
+          },
+          tooltip: {
+            padding: 8,
+            callbacks: {
+              label: (context) => `${context.dataset.label}: ${context.raw.toFixed(2)} 亿元`
+            }
+          }
+        },
+        scales: {
+          x: {
+            grid: { display: false },
+            ticks: { font: { size: 10 } }
+          },
+          y: {
+            beginAtZero: true,
+            grid: { color: 'rgba(0, 0, 0, 0.03)' },
+            ticks: {
+              font: { size: 10 },
+              callback: (value) => `${value} 亿`
+            }
+          }
+        },
+        interaction: {
+          mode: 'nearest',
+          axis: 'x',
+          intersect: false
+        },
+        animation: {
+          duration: 800,
+          easing: 'easeOutQuart'
+        }
+      }
+    })
+  }
+
+  // 归母净利润图表
+  const netProfitCtx = document.getElementById('netProfitTrendChart')
+  if (netProfitCtx) {
+    if (netProfitChartInstance.value) netProfitChartInstance.value.destroy()
+    netProfitChartInstance.value = new Chart(netProfitCtx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: '归母净利润（亿元）',
+          data: netProfitData,
+          borderColor: '#5AB1EF',
+          backgroundColor: 'rgba(90, 177, 239, 0.1)',
+          borderWidth: 1.5,
+          pointBackgroundColor: '#5AB1EF',
           pointRadius: 3,
           pointHoverRadius: 4,
           tension: 0.3,

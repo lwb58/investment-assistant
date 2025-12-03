@@ -886,29 +886,21 @@ def get_stock_detail(stock_code: str):
         # 2. 获取财务数据（调用上面修改后的方法，使用指定新浪接口）
         financial_data = DataSource.get_stock_financial_data(stock_code)
         
-        # 3. 十大股东数据
-        top_shareholders = [
-            {"name": f"股东{i+1}", "type": "流通股东", "percentage": f"{round(random.uniform(1.5, 8.5), 2)}%"}
-            for i in range(10)
-        ]
-        
-        # 4. 构造基础信息
-        total_shares = round(random.uniform(5, 50), 2)
-        current_price = float(base_info_data["coreQuotes"]["currentPrice"])
+        # 3. 构造基础信息（使用实际可用的数据）
         base_info = {
             **base_info_data["baseInfo"],
-            "companyName": f"{base_info_data['baseInfo']['stockName']}股份有限公司",
-            "listDate": f"{random.randint(2000, 2020)}-{random.randint(1, 12):02d}-{random.randint(1, 28):02d}",
-            "totalShares": f"{total_shares}",  # 总股本（亿股）
-            "floatShares": f"{round(random.uniform(3, 45), 2)}",  # 流通股本（亿股）
-            "marketCap": f"{round(current_price * total_shares, 2)}"  # 总市值（亿元）
+            "companyName": base_info_data['baseInfo']['stockName'] or '未知公司',
+            "listDate": "--",  # 实际数据接口暂不提供，显示占位符
+            "totalShares": "--",  # 实际数据接口暂不提供，显示占位符
+            "floatShares": "--",  # 实际数据接口暂不提供，显示占位符
+            "marketCap": "--"   # 实际数据接口暂不提供，显示占位符
         }
         
         return {
             "baseInfo": base_info,
             "coreQuotes": base_info_data["coreQuotes"],
             "financialData": financial_data,  # 这里返回的是指定接口的财务数据
-            "topShareholders": top_shareholders,
+            "topShareholders": [],  # 已移除十大股东数据
             "dataValidity": {
                 "isValid": True,
                 "reason": ""
