@@ -55,8 +55,8 @@
         </thead>
         <tbody>
           <tr v-for="position in positions" :key="position.stockCode">
-            <td>{{ position.stockName }}</td>
-            <td>{{ position.stockCode }}</td>
+          <td><router-link :to="{ name: 'StockDetail', params: { code: position.stockCode } }" class="text-primary hover:underline">{{ position.stockName }}</router-link></td>
+          <td><router-link :to="{ name: 'StockDetail', params: { code: position.stockCode } }" class="text-primary hover:underline">{{ position.stockCode }}</router-link></td>
             <td>{{ position.holdingQuantity }}</td>
             <td>{{ position.currentCost.toFixed(2) }}</td>
             <td>{{ position.currentPrice.toFixed(2) }}</td>
