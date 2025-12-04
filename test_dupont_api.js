@@ -3,7 +3,7 @@
 import fetch from 'node-fetch';
 
 // 测试股票ID，使用一个已知存在的股票ID
-const testStockId = '300308';
+const testStockId = '600036';
 const apiUrl = `http://localhost:5174/api/stocks/dubang/${testStockId}`;
 
 async function testDupontApi() {

@@ -201,10 +201,10 @@
                       <canvas id="netProfitTrendChart"></canvas>
                     </div>
                   </div>
-                  <!-- 扣非净利润趋势图 -->
+                  <!-- ROE趋势图 -->
                   <div class="chart-section bg-gradient-to-r from-white to-gray-50 p-4 rounded-lg border border-gray-200">
                     <h4 class="chart-subtitle text-lg font-semibold mb-3 text-gray-700 flex items-center gap-1.5">
-                      <i class="icon">📊</i> 扣非净利润趋势（单位：亿元）
+                      <i class="icon">📊</i> ROE趋势（单位：%）
                     </h4>
                     <div class="chart-container h-64 rounded-lg border border-gray-200 overflow-hidden bg-white">
                       <canvas id="nonProfitTrendChart"></canvas>
@@ -1203,7 +1203,7 @@ const initFinancialCharts = () => {
     return `${year}-Q${quarter}`
   })
   const nonProfitData = reversedDates.map(date => {
-    const value = parseFloat(financialData.value[date]?.nonNetProfit || '0')
+    const value = parseFloat(financialData.value[date]?.roe || '0')
     return isNaN(value) ? 0 : parseFloat(value.toFixed(2))
   })
   const receivablesData = reversedDates.map(date => {
@@ -1228,7 +1228,7 @@ const initFinancialCharts = () => {
       data: {
         labels,
         datasets: [{
-          label: '扣非净利润（亿元）',
+          label: 'ROE（%）',
           data: nonProfitData,
           borderColor: '#165DFF',
           backgroundColor: 'rgba(22, 93, 255, 0.1)',
@@ -1250,7 +1250,7 @@ const initFinancialCharts = () => {
           tooltip: {
             padding: 8,
             callbacks: {
-              label: (context) => `${context.dataset.label}: ${context.raw.toFixed(2)} 亿元`
+              label: (context) => `${context.dataset.label}: ${context.raw.toFixed(2)}%`
             }
           }
         },
@@ -1264,7 +1264,7 @@ const initFinancialCharts = () => {
             grid: { color: 'rgba(0, 0, 0, 0.03)' },
             ticks: {
               font: { size: 10 },
-              callback: (value) => `${value} 亿`
+              callback: (value) => `${value}%`
             }
           }
         },
@@ -1569,9 +1569,8 @@ const fetchStockData = async () => {
         
         // 净资产收益率（ROE，去掉%号）
         const roe = item['净资产收益率'] ? parseFloat(item['净资产收益率'].replace(/%/g, '')) : 0
-        if (roe > 0) {
-          newFinanceData[reportPeriod].roe = parseFloat(roe.toFixed(2))
-        }
+        // 保留所有ROE值，包括负数和0
+        newFinanceData[reportPeriod].roe = parseFloat(roe.toFixed(2))
         
         // 应收账款（杜邦分析数据中没有直接提供，暂时设为0）
         newFinanceData[reportPeriod].receivables = 0
