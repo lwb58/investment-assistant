@@ -2,8 +2,8 @@ import requests
 
 # 测试腾讯财经API直接调用
 def test_tencent_api():
-    stock_code = "600036"
-    market = "sh"  # 上海市场
+    stock_code = "300548"
+    market = "sz"  # 上海市场
     tencent_code = f"{market}{stock_code}"
     tencent_url = f"http://qt.gtimg.cn/q={tencent_code}"
     
