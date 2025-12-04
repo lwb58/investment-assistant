@@ -118,6 +118,69 @@ class DupontAnalysisResponse(BaseModel):
     error: Optional[str]  # 错误信息
 
 # -------------- 核心修复：同步行情获取函数 --------------
+def get_tencent_stock_data(stock_code: str) -> Optional[Dict[str, Any]]:
+    """
+    获取腾讯财经的股票数据（包含市值和市盈率）
+    - stock_code: 6位股票代码（如600036）
+    - 返回: 包含市值、市盈率等信息的字典
+    """
+    logger.info(f"请求腾讯财经股票数据: {stock_code}")
+    
+    # 获取市场代码（sh/sz）
+    market = get_stock_market(stock_code)
+    if not market:
+        logger.warning(f"不支持的市场: {stock_code}（仅支持沪深A：60/00/30开头）")
+        return None
+    
+    # 构造腾讯财经接口URL
+    # 格式：http://qt.gtimg.cn/q=sh600036
+    tencent_code = f"{market}{stock_code}"
+    tencent_url = f"http://qt.gtimg.cn/q={tencent_code}"
+    
+    try:
+        # 请求数据
+        response = fetch_url(tencent_url, retry=3)
+        if not response:
+            logger.error(f"腾讯接口返回空数据: {stock_code}")
+            return None
+        
+        # 解析腾讯财经的数据格式
+        # 格式：v_sh600036="1~招商银行~600036~30.75~30.65~30.68~457585~27775~28689~457585~4817412425~..."
+        if isinstance(response, str):
+            # 提取数据部分
+            data_part = response.split('="')[1].split('"')[0]
+            fields = data_part.split('~')
+            
+            if len(fields) < 41:
+                logger.error(f"腾讯财经数据字段不足: {stock_code}")
+                return None
+            
+            # 提取市值和市盈率数据
+            # 根据实际测试的腾讯财经数据字段映射：
+            # 3: 当前价格
+            # 32: 涨跌幅百分比
+            # 39: 市盈率(PE)
+            # 44: 总市值（亿元，可能是旧数据）
+            # 45: 流通市值（亿元，约等于总市值）
+            # 46: 市净率(PB)
+            return {
+                "currentPrice": float(fields[3]) if fields[3] and fields[3].replace('.', '').isdigit() else 0.0,
+                "marketCap": float(fields[45]) * 100000000 if fields[45] and fields[45].replace('.', '').isdigit() else 0.0,  # 流通市值（亿元转元，约1.1万亿）
+                "floatMarketCap": float(fields[45]) * 100000000 if fields[45] and fields[45].replace('.', '').isdigit() else 0.0,  # 流通市值（亿元转元）
+                "peDynamic": float(fields[39]) if fields[39] and fields[39].replace('.', '').isdigit() and float(fields[39]) > 0 and float(fields[39]) < 1000 else 0.0,  # 市盈率(7.32)
+                "peStatic": float(fields[39]) if fields[39] and fields[39].replace('.', '').isdigit() and float(fields[39]) > 0 and float(fields[39]) < 1000 else 0.0,  # 暂时使用同一市盈率
+                "pbRatio": float(fields[46]) if fields[46] and fields[46].replace('.', '').isdigit() and float(fields[46]) > 0 else 0.0,  # 市净率(1.00)
+                "changeRate": float(fields[32]) if fields[32] and fields[32].replace('.', '').isdigit() else 0.0,  # 涨跌幅(0.49%)
+                "totalShares": float(fields[45]) * 100000000 / float(fields[3]) if fields[3] and fields[3] != '0.00' and fields[45] else 0.0,  # 市值/价格 = 总股数
+                "floatShares": float(fields[45]) * 100000000 / float(fields[3]) if fields[3] and fields[3] != '0.00' and fields[45] else 0.0,  # 流通市值/价格 = 流通股数
+                "psRatio": float(fields[70]) if fields[70] and fields[70].replace('.', '').isdigit() and float(fields[70]) > 0 else 0.0  # 市销率
+            }
+        
+    except Exception as e:
+        logger.error(f"获取腾讯财经股票{stock_code}数据失败: {str(e)}", exc_info=True)
+    
+    return None
+
 @sync_cache_with_timeout(300)
 def get_stock_quotes(stock_code: str) -> Optional[Dict[str, Any]]:
     """获取股票实时行情（同步版本，修复核心问题）"""
@@ -174,12 +237,15 @@ def get_stock_quotes(stock_code: str) -> Optional[Dict[str, Any]]:
             value = supplement_data[idx] if len(supplement_data) > idx else ""
             supplement_info[field] = format_field(value, formatter)
         
+        # 获取腾讯财经的补充数据（市值和市盈率）
+        tencent_data = get_tencent_stock_data(stock_code)
+        
         # 输出关键数据日志，便于排查
         current_price = core_quotes["currentPrice"]
         prev_close = core_quotes["prevClosePrice"]
         logger.info(f"股票{stock_code}行情解析完成 - 最新价: {current_price}, 昨收: {prev_close}, 股票名称: {core_quotes['stockName']}")
         
-        return {
+        result = {
             "baseInfo": {
                 "stockCode": stock_code,
                 "market": "沪A" if market == "sh" else "深A",
@@ -194,6 +260,12 @@ def get_stock_quotes(stock_code: str) -> Optional[Dict[str, Any]]:
                           else "股票数据无效（可能停牌、退市或代码错误）"
             }
         }
+        
+        # 添加腾讯财经数据（如果获取成功）
+        if tencent_data:
+            result["tencentData"] = tencent_data
+        
+        return result
     
     except Exception as e:
         logger.error(f"股票{stock_code}行情解析失败: {str(e)}", exc_info=True)
@@ -891,14 +963,47 @@ def get_stock_detail(stock_code: str):
             **base_info_data["baseInfo"],
             "companyName": base_info_data['baseInfo']['stockName'] or '未知公司',
             "listDate": "--",  # 实际数据接口暂不提供，显示占位符
-            "totalShares": "--",  # 实际数据接口暂不提供，显示占位符
-            "floatShares": "--",  # 实际数据接口暂不提供，显示占位符
-            "marketCap": "--"   # 实际数据接口暂不提供，显示占位符
+            "totalShares": "--",  # 默认占位符
+            "floatShares": "--",  # 默认占位符
+            "marketCap": "--"    # 默认占位符
         }
+        
+        # 4. 如果有腾讯财经数据，替换占位符
+        if "tencentData" in base_info_data and base_info_data["tencentData"]:
+            tencent_data = base_info_data["tencentData"]
+            
+            # 替换市值（单位：元）
+            if tencent_data["marketCap"] > 0:
+                # 转换为亿元显示，保留两位小数
+                base_info["marketCap"] = f"{tencent_data['marketCap'] / 100000000:.2f}亿元"
+            
+            # 替换总股本和流通股（单位：股）
+            if tencent_data["totalShares"] > 0:
+                # 转换为亿股显示，保留两位小数
+                base_info["totalShares"] = f"{tencent_data['totalShares'] / 100000000:.2f}亿股"
+            
+            if tencent_data["floatShares"] > 0:
+                # 转换为亿股显示，保留两位小数
+                base_info["floatShares"] = f"{tencent_data['floatShares'] / 100000000:.2f}亿股"
+            
+            # 在coreQuotes中添加腾讯财经数据
+            if tencent_data["peDynamic"] >= 0:
+                base_info_data["coreQuotes"]["peDynamic"] = tencent_data["peDynamic"]
+            
+            if tencent_data["peStatic"] >= 0:
+                base_info_data["coreQuotes"]["peStatic"] = tencent_data["peStatic"]
+            
+            # 添加市净率和涨跌幅
+            if tencent_data["pbRatio"] >= 0:
+                base_info_data["coreQuotes"]["pbRatio"] = tencent_data["pbRatio"]
+            
+            if tencent_data["changeRate"] >= 0:
+                base_info_data["coreQuotes"]["changeRate"] = tencent_data["changeRate"]
         
         return {
             "baseInfo": base_info,
             "coreQuotes": base_info_data["coreQuotes"],
+            "tencentData": base_info_data.get("tencentData", {}),  # 包含完整的腾讯财经数据
             "financialData": financial_data,  # 这里返回的是指定接口的财务数据
             "topShareholders": [],  # 已移除十大股东数据
             "dataValidity": {

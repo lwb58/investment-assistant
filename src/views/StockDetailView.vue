@@ -133,7 +133,12 @@
           <div class="md:w-5/6 lg:w-6/7">
             <!-- 快速指标卡片（现代化网格布局） -->
             <div id="financial-indicators"
-              class="quick-metrics card mb-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 p-4 border border-gray-200 rounded-xl shadow-md bg-white hover:shadow-lg transition-all duration-300">
+              class="quick-metrics card mb-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 p-4 border border-gray-200 rounded-xl shadow-md bg-white hover:shadow-lg transition-all duration-300">
+              <div
+                class="metric-item bg-gradient-to-br from-white to-gray-50 p-3 rounded-lg border border-gray-200 hover:border-primary/30 hover:shadow-md transition-all duration-300 transform hover:-translate-y-1">
+                <div class="metric-label text-sm text-gray-600 mb-1 font-medium">目前价格</div>
+                <div class="metric-value font-bold text-xl text-gray-800">{{ stockInfo.price }}元</div>
+              </div>
               <div
                 class="metric-item bg-gradient-to-br from-white to-gray-50 p-3 rounded-lg border border-gray-200 hover:border-primary/30 hover:shadow-md transition-all duration-300 transform hover:-translate-y-1">
                 <div class="metric-label text-sm text-gray-600 mb-1 font-medium">总市值</div>
@@ -151,20 +156,18 @@
               </div>
               <div
                 class="metric-item bg-gradient-to-br from-white to-gray-50 p-3 rounded-lg border border-gray-200 hover:border-primary/30 hover:shadow-md transition-all duration-300 transform hover:-translate-y-1">
+                <div class="metric-label text-sm text-gray-600 mb-1 font-medium">最新总营收</div>
+                <div class="metric-value font-bold text-xl text-gray-800">{{ (currentFinancialData.totalRevenue || '--') }}亿元</div>
+              </div>
+              <div
+                class="metric-item bg-gradient-to-br from-white to-gray-50 p-3 rounded-lg border border-gray-200 hover:border-primary/30 hover:shadow-md transition-all duration-300 transform hover:-translate-y-1">
+                <div class="metric-label text-sm text-gray-600 mb-1 font-medium">最新归母净利润</div>
+                <div class="metric-value font-bold text-xl text-gray-800">{{ (currentFinancialData.netProfitAttribution || '--') }}亿元</div>
+              </div>
+              <div
+                class="metric-item bg-gradient-to-br from-white to-gray-50 p-3 rounded-lg border border-gray-200 hover:border-primary/30 hover:shadow-md transition-all duration-300 transform hover:-translate-y-1">
                 <div class="metric-label text-sm text-gray-600 mb-1 font-medium">所属行业</div>
                 <div class="metric-value font-bold text-xl text-gray-800">{{ stockInfo.industry || '--' }}</div>
-              </div>
-              <div
-                class="metric-item bg-gradient-to-br from-white to-gray-50 p-3 rounded-lg border border-gray-200 hover:border-primary/30 hover:shadow-md transition-all duration-300 transform hover:-translate-y-1">
-                <div class="metric-label text-sm text-gray-600 mb-1 font-medium">总股本</div>
-                <div class="metric-value font-bold text-xl text-gray-800">{{ formatNumber(stockInfo.totalShares) }}亿股
-                </div>
-              </div>
-              <div
-                class="metric-item bg-gradient-to-br from-white to-gray-50 p-3 rounded-lg border border-gray-200 hover:border-primary/30 hover:shadow-md transition-all duration-300 transform hover:-translate-y-1">
-                <div class="metric-label text-sm text-gray-600 mb-1 font-medium">流通股本</div>
-                <div class="metric-value font-bold text-xl text-gray-800">{{ formatNumber(stockInfo.floatShares) }}亿股
-                </div>
               </div>
             </div>
 
@@ -647,14 +650,31 @@ const stockInfo = ref({
   competitors: [] // 新增：竞争对手列表（{code: string, name: string}）
 })
 
+// 完整的股票详情数据
+const stockDetailData = ref(null)
+
 // 财务数据相关（新增扣非净利润、应收账款字段，自适应年份）
 const financialData = ref({})
 const financialYears = ref([]) // 动态存储可用年份（3-5年）
 const currentFinancialData = computed(() => {
   // 默认取最新年份数据
-  if (financialYears.value.length === 0) return {}
-  const latestYear = financialYears.value[0]
-  return financialData.value[latestYear] || {}
+  let latestData = {}
+  if (financialYears.value.length > 0) {
+    const latestYear = financialYears.value[0]
+    latestData = financialData.value[latestYear] || {}
+  }
+  
+  // 如果coreQuotes中有市盈率数据（来自腾讯财经），优先使用
+  if (stockDetailData.value && stockDetailData.value.coreQuotes) {
+    const coreQuotes = stockDetailData.value.coreQuotes
+    if (coreQuotes.peDynamic) {
+      latestData.pe = coreQuotes.peDynamic
+    } else if (coreQuotes.peStatic) {
+      latestData.pe = coreQuotes.peStatic
+    }
+  }
+  
+  return latestData
 })
 
 // 处理图表加载错误
@@ -765,25 +785,25 @@ const initThreeFactorChart = () => {
   // 提取ROE数据（去掉%号并转换为数字）
   const roeData = sortedData.map(item => {
     const value = parseFloat(item['净资产收益率']?.replace('%', '') || 0)
-    return isNaN(value) ? 0 : value
+    return isNaN(value) ? 0 : parseFloat(value.toFixed(2))
   })
   
   // 提取销售净利率数据
   const profitMarginData = sortedData.map(item => {
     const value = parseFloat(item['归属母公司股东的销售净利率']?.replace('%', '') || 0)
-    return isNaN(value) ? 0 : value
+    return isNaN(value) ? 0 : parseFloat(value.toFixed(2))
   })
   
   // 提取资产周转率数据
   const assetTurnoverData = sortedData.map(item => {
     const value = parseFloat(item['资产周转率(次)'] || 0)
-    return isNaN(value) ? 0 : value
+    return isNaN(value) ? 0 : parseFloat(value.toFixed(2))
   })
   
   // 提取权益乘数数据
   const equityMultiplierData = sortedData.map(item => {
     const value = parseFloat(item['权益乘数'] || 0)
-    return isNaN(value) ? 0 : value
+    return isNaN(value) ? 0 : parseFloat(value.toFixed(2))
   })
   
   // 创建图表
@@ -933,31 +953,31 @@ const initFiveFactorChart = () => {
   // 提取ROE数据
   const roeData = sortedData.map(item => {
     const value = parseFloat(item['净资产收益率']?.replace('%', '') || 0)
-    return isNaN(value) ? 0 : value
+    return isNaN(value) ? 0 : parseFloat(value.toFixed(2))
   })
   
   // 提取经营利润率数据
   const operatingMarginData = sortedData.map(item => {
     const value = parseFloat(item['经营利润率']?.replace('%', '') || 0)
-    return isNaN(value) ? 0 : value
+    return isNaN(value) ? 0 : parseFloat(value.toFixed(2))
   })
   
   // 提取考虑税负因素数据
   const taxFactorData = sortedData.map(item => {
     const value = parseFloat(item['考虑税负因素']?.replace('%', '') || 0)
-    return isNaN(value) ? 0 : value
+    return isNaN(value) ? 0 : parseFloat(value.toFixed(2))
   })
   
   // 提取考虑利息负担数据
   const interestFactorData = sortedData.map(item => {
     const value = parseFloat(item['考虑利息负担']?.replace('%', '') || 0)
-    return isNaN(value) ? 0 : value
+    return isNaN(value) ? 0 : parseFloat(value.toFixed(2))
   })
   
   // 提取资产周转率数据（新增）
   const assetTurnoverData = sortedData.map(item => {
     const value = parseFloat(item['资产周转率(次)'] || 0)
-    return isNaN(value) ? 0 : value
+    return isNaN(value) ? 0 : parseFloat(value.toFixed(2))
   })
   
   // 创建图表
@@ -1165,7 +1185,10 @@ const loading = ref(false)
 const error = ref(null)
 
 // 获取股票代码
-const stockCode = computed(() => route.params.code)
+const stockCode = computed(() => {
+  console.log('路由参数:', route.params)
+  return route.params.code
+})
 
 // 初始化财务趋势图表（自适应季度数据）
 const initFinancialCharts = () => {
@@ -1181,19 +1204,19 @@ const initFinancialCharts = () => {
   })
   const nonProfitData = reversedDates.map(date => {
     const value = parseFloat(financialData.value[date]?.nonNetProfit || '0')
-    return isNaN(value) ? 0 : value
+    return isNaN(value) ? 0 : parseFloat(value.toFixed(2))
   })
   const receivablesData = reversedDates.map(date => {
     const value = parseFloat(financialData.value[date]?.receivables || '0')
-    return isNaN(value) ? 0 : value
+    return isNaN(value) ? 0 : parseFloat(value.toFixed(2))
   })
   const revenueData = reversedDates.map(date => {
     const value = parseFloat(financialData.value[date]?.totalRevenue || '0')
-    return isNaN(value) ? 0 : value
+    return isNaN(value) ? 0 : parseFloat(value.toFixed(2))
   })
   const netProfitData = reversedDates.map(date => {
     const value = parseFloat(financialData.value[date]?.netProfitAttribution || '0')
-    return isNaN(value) ? 0 : value
+    return isNaN(value) ? 0 : parseFloat(value.toFixed(2))
   })
 
   // 扣非净利润图表
@@ -1460,6 +1483,7 @@ const goToCompetitorDetail = (code) => {
 
 // 获取股票所有数据（单接口）
 const fetchStockData = async () => {
+  console.log('开始加载股票数据，股票代码：', stockCode.value)
   if (!stockCode.value) {
     error.value = '未找到股票代码'
     loading.value = false
@@ -1471,37 +1495,42 @@ const fetchStockData = async () => {
 
   try {
     // 获取股票基本信息
-    const stockDetailData = await apiService.getStockDetail(stockCode.value)
-    if (!stockDetailData) throw new Error('股票数据返回为空')
+    const data = await apiService.getStockDetail(stockCode.value)
+    console.log('获取到股票详情数据：', data)
+    if (!data) throw new Error('股票数据返回为空')
+    
+    // 保存完整的股票详情数据
+    stockDetailData.value = data
 
     // 获取杜邦分析数据
     await fetchDupontData()
+    console.log('获取到杜邦分析数据：', dupontData.value)
 
     // 基础信息赋值
     stockInfo.value = {
-      code: stockDetailData.baseInfo.stockCode || stockCode.value,
-      name: stockDetailData.baseInfo.stockName || '未知股票',
-      price: stockDetailData.coreQuotes.currentPrice || '0.00',
-      changeRate: stockDetailData.coreQuotes.changeRate || 0,
-      industry: stockDetailData.baseInfo.industry || '未知行业',
-      companyName: stockDetailData.baseInfo.companyName || '未知公司',
-      companyProfile: stockDetailData.baseInfo.companyProfile || '',
-      listDate: stockDetailData.baseInfo.listDate || '--',
-      totalShares: stockDetailData.baseInfo.totalShares || '0',
-      floatShares: stockDetailData.baseInfo.floatShares || '0',
-      marketCap: stockDetailData.baseInfo.marketCap || '0',
-      topShareholders: stockDetailData.topShareholders || [],
-      competitors: stockDetailData.competitors || [] // 竞争对手数据
+      code: stockDetailData.value.baseInfo.stockCode || stockCode.value,
+      name: stockDetailData.value.baseInfo.stockName || '未知股票',
+      price: stockDetailData.value.coreQuotes.currentPrice || '0.00',
+      changeRate: stockDetailData.value.coreQuotes.changeRate || 0,
+      industry: stockDetailData.value.baseInfo.industry || '未知行业',
+      companyName: stockDetailData.value.baseInfo.companyName || '未知公司',
+      companyProfile: stockDetailData.value.baseInfo.companyProfile || '',
+      listDate: stockDetailData.value.baseInfo.listDate || '--',
+      totalShares: stockDetailData.value.baseInfo.totalShares || '0',
+      floatShares: stockDetailData.value.baseInfo.floatShares || '0',
+      marketCap: stockDetailData.value.baseInfo.marketCap || '0',
+      topShareholders: stockDetailData.value.topShareholders || [],
+      competitors: stockDetailData.value.competitors || [] // 竞争对手数据
     }
 
     // 财务数据处理（自适应3-5年）
-    let financeData = stockDetailData.financialData || {}
+    let financeData = stockDetailData.value.financialData || {}
     
-    // 处理财务数据 - 即使stockDetailData.financialData存在，也从杜邦分析数据中提取最新的财务指标
+    // 处理财务数据 - 即使stockDetailData.value.financialData存在，也从杜邦分析数据中提取最新的财务指标
     // 这样可以确保数据的完整性和一致性
-    if (dupontData.value && dupontData.value.full_data) {
-      // 首先，使用stockDetailData.financialData作为基础数据
-      const newFinanceData = { ...financeData }
+    if (dupontData.value && dupontData.value.full_data && stockDetailData.value) {
+      // 首先，使用stockDetailData.value.financialData作为基础数据
+      const newFinanceData = { ...stockDetailData.value.financialData }
       
       // 处理杜邦分析数据中的财务指标
       dupontData.value.full_data.forEach(item => {
@@ -1513,29 +1542,35 @@ const fetchStockData = async () => {
           newFinanceData[reportPeriod] = {}
         }
         
-        // 提取并转换财务指标
+        // 提取并转换财务指标，保留两位小数
         // 总营收（单位：万元转亿元）
         const revenue = item['营业总收入'] ? parseFloat(item['营业总收入'].replace(/,/g, '')) / 10000 : 0
         if (revenue > 0) {
-          newFinanceData[reportPeriod].totalRevenue = revenue
+          newFinanceData[reportPeriod].totalRevenue = parseFloat(revenue.toFixed(2))
         }
         
         // 净利润（单位：万元转亿元）
         const netProfit = item['净利润'] ? parseFloat(item['净利润'].replace(/,/g, '')) / 10000 : 0
         if (netProfit > 0) {
-          newFinanceData[reportPeriod].netProfit = netProfit
+          newFinanceData[reportPeriod].netProfit = parseFloat(netProfit.toFixed(2))
         }
         
         // 归属母公司股东净利润（单位：万元转亿元）
         const netProfitAttr = item['归属母公司股东净利润'] ? parseFloat(item['归属母公司股东净利润'].replace(/,/g, '')) / 10000 : 0
         if (netProfitAttr > 0) {
-          newFinanceData[reportPeriod].netProfitAttribution = netProfitAttr
+          newFinanceData[reportPeriod].netProfitAttribution = parseFloat(netProfitAttr.toFixed(2))
         }
         
         // 扣非净利润（使用净利润作为近似值，因为杜邦分析数据中没有直接提供）
         const nonNetProfit = item['净利润'] ? parseFloat(item['净利润'].replace(/,/g, '')) / 10000 : 0
         if (nonNetProfit > 0) {
-          newFinanceData[reportPeriod].nonNetProfit = nonNetProfit
+          newFinanceData[reportPeriod].nonNetProfit = parseFloat(nonNetProfit.toFixed(2))
+        }
+        
+        // 净资产收益率（ROE，去掉%号）
+        const roe = item['净资产收益率'] ? parseFloat(item['净资产收益率'].replace(/%/g, '')) : 0
+        if (roe > 0) {
+          newFinanceData[reportPeriod].roe = parseFloat(roe.toFixed(2))
         }
         
         // 应收账款（杜邦分析数据中没有直接提供，暂时设为0）
@@ -1544,29 +1579,50 @@ const fetchStockData = async () => {
       
       // 使用新的财务数据
       financialData.value = newFinanceData
+    } else {
+      // 如果没有杜邦分析数据，直接使用接口返回的财务数据
+      financialData.value = financeData
     }
+    
     // 提取报告期并按日期降序排序（最新报告期在前）
-      financialYears.value = Object.keys(financialData.value).sort((a, b) => new Date(b) - new Date(a))
+    financialYears.value = Object.keys(financialData.value).sort((a, b) => new Date(b) - new Date(a))
+      
+    // 计算并填充用户需要的指标
+    if (financialYears.value.length > 0) {
+      const latestReport = financialYears.value[0]
+      const latestData = financialData.value[latestReport]
+      
+      // 更新当前价格
+      if (stockDetailData.value.coreQuotes.currentPrice) {
+        stockInfo.value.price = stockDetailData.value.coreQuotes.currentPrice.toString()
+      }
+      
+      // 如果baseInfo中已有总市值数据，则使用该数据，否则显示占位符
+      // 新浪接口不提供总股本数据，但我们可以直接使用API返回的总市值
+      if (!stockDetailData.value.baseInfo.marketCap) {
+        stockInfo.value.marketCap = '--'  // 无法获取总市值时显示占位符
+      }
+    }
 
     // 估值与交易计划数据（从接口获取已保存的数据）
-    valuationLogic.value = stockDetailData.valuationLogic || ''
-    buyPoint.value = stockDetailData.tradingPlan?.buyPoint || ''
-    maxLossPoint.value = stockDetailData.tradingPlan?.maxLossPoint || ''
-    maxLossRate.value = stockDetailData.tradingPlan?.maxLossRate || ''
-    expectedGrowthRate.value = stockDetailData.tradingPlan?.expectedGrowthRate || ''
-    expectedPoint.value = stockDetailData.tradingPlan?.expectedPoint || ''
+    valuationLogic.value = stockDetailData.value.valuationLogic || ''
+    buyPoint.value = stockDetailData.value.tradingPlan?.buyPoint || ''
+    maxLossPoint.value = stockDetailData.value.tradingPlan?.maxLossPoint || ''
+    maxLossRate.value = stockDetailData.value.tradingPlan?.maxLossRate || ''
+    expectedGrowthRate.value = stockDetailData.value.tradingPlan?.expectedGrowthRate || ''
+    expectedPoint.value = stockDetailData.value.tradingPlan?.expectedPoint || ''
 
     // 利好利空数据处理：由fetchStockNotes()从笔记API加载，这里不做处理
     // prosPoints.value = data.prosCons?.prosPoints || ''
     // consPoints.value = data.prosCons?.consPoints || ''
 
     // 预测数据
-    maxUpwardRange.value = stockDetailData.prediction?.maxUpwardRange || ''
-    maxDownwardRange.value = stockDetailData.prediction?.maxDownwardRange || ''
-    investmentDuration.value = stockDetailData.prediction?.investmentDuration || ''
+    maxUpwardRange.value = stockDetailData.value.prediction?.maxUpwardRange || ''
+    maxDownwardRange.value = stockDetailData.value.prediction?.maxDownwardRange || ''
+    investmentDuration.value = stockDetailData.value.prediction?.investmentDuration || ''
 
     // 竞争对手数据
-    competitors.value = stockDetailData.competitors || []
+    competitors.value = stockDetailData.value.competitors || []
 
   } catch (err) {
     console.error('获取股票数据失败:', err)

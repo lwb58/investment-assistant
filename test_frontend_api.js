@@ -5,15 +5,16 @@ console.log('测试前端API调用...');
 
 async function testApiCall() {
     try {
-        // 直接调用后端API（模拟前端通过代理的调用）
-        const response = await fetch('http://localhost:8000/api/stocks');
+        // 测试股票详情API
+        const response = await fetch('http://localhost:8000/api/stocks/600036/detail');
         
         console.log(`响应状态码: ${response.status}`);
         
         if (response.ok) {
             const data = await response.json();
-            console.log(`获取到的股票数量: ${data.length}`);
-            console.log('股票数据:', JSON.stringify(data, null, 2));
+            console.log('股票详情数据:', JSON.stringify(data, null, 2));
+            console.log('基础信息:', JSON.stringify(data.baseInfo, null, 2));
+            console.log('核心行情:', JSON.stringify(data.coreQuotes, null, 2));
         } else {
             const errorText = await response.text();
             console.log(`API调用失败: ${errorText}`);
