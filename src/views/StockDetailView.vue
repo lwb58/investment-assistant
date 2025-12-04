@@ -1198,7 +1198,15 @@ const initFinancialCharts = () => {
   const reversedDates = [...financialYears.value].reverse() // 最新报告期在右侧
   const labels = reversedDates.map(date => {
     // 将日期格式化为友好的显示格式（如"2025-Q3"或"2025"）
-    const [year, month] = date.split('-')
+    const parts = date.split('-')
+    const year = parts[0]
+    const month = parts[1]
+    
+    // 处理只有年份的情况或无效月份
+    if (!month || isNaN(parseInt(month))) {
+      return year
+    }
+    
     const quarter = Math.ceil(parseInt(month) / 3)
     return `${year}-Q${quarter}`
   })
