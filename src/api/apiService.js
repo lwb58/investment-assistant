@@ -156,6 +156,15 @@ async updateStock(stockId, updateData) {  // 参数名从stockCode改为stockId
   }
 
   /**
+   * 根据股票代码获取相关笔记
+   * @param {string} stockCode - 股票代码
+   * @returns {Promise<Array>} 笔记列表
+   */
+  async getNotesByStockCode(stockCode) {
+    return this.request('GET', `/notes/stock/${stockCode}`);
+  }
+
+  /**
    * 添加新笔记
    * @param {Object} noteData - 笔记数据
    * @returns {Promise<Object>} 创建的笔记
@@ -222,6 +231,52 @@ async updateStock(stockId, updateData) {  // 参数名从stockCode改为stockId
    */
   async getStockDupontAnalysis(stockId) {
     return this.request('GET', `/stocks/dubang/${stockId}`);
+  }
+
+  /**
+   * 保存利好利空分析
+   * @param {Object} data - 利好利空数据
+   * @param {number} existingNoteId - 已有的利好利空笔记ID（可选）
+   * @returns {Promise<Object>} 保存结果
+   */
+  async saveProsConsSummary(data, existingNoteId = null) {
+    try {
+      const prosConsData = {
+        title: `[利好利空] ${data.stockCode}`,
+        content: JSON.stringify({
+          prosPoints: data.prosPoints,
+          consPoints: data.consPoints
+        }),
+        stockCode: data.stockCode,
+        stockName: ''
+      };
+      
+      // 如果提供了现有笔记ID，则直接更新
+      if (existingNoteId) {
+        return this.request('PUT', `/notes/${existingNoteId}`, {
+          body: JSON.stringify(prosConsData)
+        });
+      } else {
+        // 查找是否已有利好利空笔记（仅在没有提供ID时才需要查找）
+        const stockNotes = await this.getNotesByStockCode(data.stockCode);
+        const existingProsConsNote = stockNotes.find(note => 
+          note.title.startsWith('[利好利空]')
+        );
+        
+        if (existingProsConsNote) {
+          return this.request('PUT', `/notes/${existingProsConsNote.id}`, {
+            body: JSON.stringify(prosConsData)
+          });
+        } else {
+          return this.request('POST', `/notes`, {
+            body: JSON.stringify(prosConsData)
+          });
+        }
+      }
+    } catch (error) {
+      console.error('保存利好利空数据失败:', error);
+      throw error;
+    }
   }
 }
 

@@ -1,7 +1,5 @@
 <template>
-  <div class="stock-detail-container">
-    <!-- 顶部锚点 -->
-    <div id="top"></div>
+  <div class="stock-detail-container" id="top">
     <!-- 加载状态 -->
     <div v-if="loading" class="loading-container">
       <div class="loading-spinner"></div>
@@ -83,8 +81,13 @@
               </h3>
               <ul class="nav-list space-y-2">
                 <li>
-                  <a href="#top" class="nav-item block px-3 py-2 text-sm rounded-lg hover:bg-primary/10 hover:text-primary transition-all duration-300 flex items-center gap-2" @click.prevent="scrollToTop">
+                  <a href="#top" @click.prevent="scrollToTop" class="nav-item block px-3 py-2 text-sm rounded-lg hover:bg-primary/10 hover:text-primary transition-all duration-300 flex items-center gap-2">
                     <i class="icon">🔝</i> 返回顶部
+                  </a>
+                </li>
+                <li>
+                  <a href="#financial-indicators" class="nav-item block px-3 py-2 text-sm rounded-lg hover:bg-primary/10 hover:text-primary transition-all duration-300 flex items-center gap-2">
+                    <i class="icon">📋</i> 财务指标
                   </a>
                 </li>
                 <li>
@@ -98,23 +101,28 @@
                   </a>
                 </li>
                 <li>
+                  <a href="#related-notes" class="nav-item block px-3 py-2 text-sm rounded-lg hover:bg-primary/10 hover:text-primary transition-all duration-300 flex items-center gap-2">
+                    <i class="icon">📝</i> 关联笔记
+                  </a>
+                </li>
+                <li>
+                  <a href="#pros-cons-analysis" class="nav-item block px-3 py-2 text-sm rounded-lg hover:bg-primary/10 hover:text-primary transition-all duration-300 flex items-center gap-2">
+                    <i class="icon">👍</i> 利好利空
+                  </a>
+                </li>
+                <li>
+                  <a href="#valuation-logic" class="nav-item block px-3 py-2 text-sm rounded-lg hover:bg-primary/10 hover:text-primary transition-all duration-300 flex items-center gap-2">
+                    <i class="icon">💡</i> 估值逻辑
+                  </a>
+                </li>
+                <li>
                   <a href="#competitor-analysis" class="nav-item block px-3 py-2 text-sm rounded-lg hover:bg-primary/10 hover:text-primary transition-all duration-300 flex items-center gap-2">
                     <i class="icon">🏢</i> 竞争对手
                   </a>
                 </li>
                 <li>
-                  <a href="#financial-indicators" class="nav-item block px-3 py-2 text-sm rounded-lg hover:bg-primary/10 hover:text-primary transition-all duration-300 flex items-center gap-2">
-                    <i class="icon">📋</i> 财务指标
-                  </a>
-                </li>
-                <li>
                   <a href="#investment-forecast" class="nav-item block px-3 py-2 text-sm rounded-lg hover:bg-primary/10 hover:text-primary transition-all duration-300 flex items-center gap-2">
                     <i class="icon">🎯</i> 投资预测
-                  </a>
-                </li>
-                <li>
-                  <a href="#related-notes" class="nav-item block px-3 py-2 text-sm rounded-lg hover:bg-primary/10 hover:text-primary transition-all duration-300 flex items-center gap-2">
-                    <i class="icon">📝</i> 关联笔记
                   </a>
                 </li>
               </ul>
@@ -328,40 +336,62 @@
                   </div>
                 </div>
 
-                <!-- 利好利空点和总结卡片 -->
-                <div class="card p-4 border border-gray-200 rounded-xl shadow-md bg-white hover:shadow-lg transition-all duration-300 mb-6">
-                  <div class="card-header mb-1">
-                    <h3 class="card-title text-sm font-semibold flex items-center gap-1.5 text-gray-800">
-                      <i class="icon text-primary">📊</i> 利好利空与总结
+                <!-- 利好利空点卡片 -->
+                <div id="pros-cons-analysis" class="card p-5 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-300 mb-6">
+                  <div class="card-header mb-5">
+                    <h3 class="card-title text-lg font-semibold text-gray-800 flex items-center gap-2">
+                      <i class="text-primary">📊</i> 利好利空分析
                     </h3>
                   </div>
-                  <div class="pros-cons-container space-y-2">
-                    <div>
-                      <label class="form-label block text-xs font-medium text-gray-600 mb-0.5">利好点</label>
-                      <textarea v-model="prosPoints"
-                        class="form-textarea w-full px-2 py-2 border border-gray-100 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent mb-2 text-sm"
-                        rows="2" placeholder="记录利好因素"></textarea>
+                  <div class="pros-cons-container grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <!-- 利好点区域 -->
+                    <div class="pros-section">
+                      <div class="section-header flex items-center mb-4">
+                        <div class="flex items-center gap-2">
+                          <div class="bg-red-300 text-white w-6 h-6 rounded-full flex items-center justify-center text-sm font-medium">
+                            ✓
+                          </div>
+                          <span class="text-base font-semibold text-red-700">利好点</span>
+                        </div>
+                      </div>
+                      <div class="pros-area p-3 bg-red-50 rounded-lg hover:bg-red-100/70 transition-all duration-200">
+                        <textarea v-model="prosPoints"
+                                  v-auto-resize
+                                  class="form-textarea w-full px-2 py-2 border-none bg-transparent focus:outline-none text-xl resize-y"
+                                  placeholder="输入利好因素..."
+                                  style="min-height: 80px; height: auto; overflow-y: hidden;"></textarea>
+                      </div>
                     </div>
-                    <div>
-                      <label class="form-label block text-xs font-medium text-gray-600 mb-0.5">利空点</label>
-                      <textarea v-model="consPoints"
-                        class="form-textarea w-full px-2 py-2 border border-gray-100 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent mb-2 text-sm"
-                        rows="2" placeholder="记录利空因素"></textarea>
+
+                    <!-- 利空点区域 -->
+                    <div class="cons-section">
+                      <div class="section-header flex items-center mb-4">
+                        <div class="flex items-center gap-2">
+                          <div class="bg-green-300 text-white w-6 h-6 rounded-full flex items-center justify-center text-sm font-medium">
+                            ✗
+                          </div>
+                          <span class="text-base font-semibold text-green-700">利空点</span>
+                        </div>
+                      </div>
+                      <div class="cons-area p-3 bg-green-50 rounded-lg hover:bg-green-100/70 transition-all duration-200">
+                        <textarea v-model="consPoints"
+                                  v-auto-resize
+                                  class="form-textarea w-full px-2 py-2 border-none bg-transparent focus:outline-none text-xl resize-y"
+                                  placeholder="输入利空因素..."
+                                  style="min-height: 80px; height: auto; overflow-y: hidden;"></textarea>
+                      </div>
                     </div>
-                    <div>
-                      <label class="form-label block text-xs font-medium text-gray-600 mb-0.5">投资总结</label>
-                      <textarea v-model="investmentSummary"
-                        class="form-textarea w-full px-2 py-2 border border-gray-100 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent mb-2 text-sm"
-                        rows="2" placeholder="记录投资总结"></textarea>
-                    </div>
-                    <button class="btn primary w-full py-2" @click="saveProsConsSummary">
-                      保存利好利空与总结
+                  </div>
+                  <div class="save-section mt-6">
+                    <button class="btn primary w-full py-2.5 rounded-lg font-medium hover:shadow-md transition-all duration-300"
+                            @click="saveProsConsSummary">
+                      保存利好利空分析
                     </button>
                   </div>
                 </div>
 
                 <!-- 估值逻辑记录卡片 -->
-                <div class="card p-4 border border-gray-200 rounded-xl shadow-md bg-white hover:shadow-lg transition-all duration-300 mb-6">
+                <div id="valuation-logic" class="card p-4 border border-gray-200 rounded-xl shadow-md bg-white hover:shadow-lg transition-all duration-300 mb-6">
                   <div class="card-header mb-1">
                     <h3 class="card-title text-sm font-semibold flex items-center gap-1.5 text-gray-800">
                       <i class="icon text-primary">💡</i> 估值逻辑
@@ -561,7 +591,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch, onUnmounted } from 'vue'
+import { ref, computed, onMounted, watch, onUnmounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import apiService from '../api/apiService.js'
 import Chart from 'chart.js/auto'
@@ -573,6 +603,47 @@ Chart.register(ChartDataLabels)
 const route = useRoute()
 const router = useRouter()
 
+// 滚动到顶部函数
+const scrollToTop = () => {
+  console.log('scrollToTop函数被调用');
+  if (typeof window !== 'undefined') {
+    console.log('window对象存在，执行滚动');
+    
+    // 使用多种方式确保滚动到顶部
+    try {
+      // 方式1：使用window.scrollTo
+      window.scrollTo({
+        top: 0,
+        left: 0,
+        behavior: 'auto' // 使用auto而不是smooth，确保立即滚动
+      });
+      console.log('方式1：window.scrollTo执行完成');
+      
+      // 方式2：设置document.documentElement.scrollTop
+      document.documentElement.scrollTop = 0;
+      console.log('方式2：document.documentElement.scrollTop设置完成');
+      
+      // 方式3：设置document.body.scrollTop
+      document.body.scrollTop = 0;
+      console.log('方式3：document.body.scrollTop设置完成');
+      
+      // 方式4：如果以上都失败，使用setTimeout强制滚动
+      setTimeout(() => {
+        window.scrollTo(0, 0);
+        document.documentElement.scrollTop = 0;
+        document.body.scrollTop = 0;
+        console.log('方式4：setTimeout强制滚动执行完成');
+      }, 100);
+      
+    } catch (error) {
+      console.error('滚动到顶部时发生错误：', error);
+    }
+    
+    console.log('滚动完成');
+  } else {
+    console.error('window 对象未定义');
+  }
+};
 
 const threeFactorError = ref('')
 const fiveFactorError = ref('')
@@ -628,6 +699,12 @@ onMounted(() => {
   
   // 初始化导航
   initNavigation()
+  
+  // 初始调整文本框高度
+  nextTick(() => {
+    autoResizeTextarea('prosPointsTextarea')
+    autoResizeTextarea('consPointsTextarea')
+  })
   
   // 获取浮动返回顶部按钮
   floatingBackToTopBtn.value = document.getElementById('floating-back-to-top')
@@ -1055,7 +1132,6 @@ const competitors = ref([]) // 竞争对手
 // 新增：利好利空与总结
 const prosPoints = ref('') // 利好点
 const consPoints = ref('') // 利空点
-const investmentSummary = ref('') // 投资总结
 
 // 新增：预测数据
 const maxUpwardRange = ref('') // 最大上涨幅度
@@ -1447,10 +1523,9 @@ const fetchStockData = async () => {
     expectedGrowthRate.value = data.tradingPlan?.expectedGrowthRate || ''
     expectedPoint.value = data.tradingPlan?.expectedPoint || ''
 
-    // 利好利空与总结数据
-    prosPoints.value = data.prosCons?.prosPoints || ''
-    consPoints.value = data.prosCons?.consPoints || ''
-    investmentSummary.value = data.prosCons?.investmentSummary || ''
+    // 利好利空数据处理：由fetchStockNotes()从笔记API加载，这里不做处理
+    // prosPoints.value = data.prosCons?.prosPoints || ''
+    // consPoints.value = data.prosCons?.consPoints || ''
 
     // 预测数据
     maxUpwardRange.value = data.prediction?.maxUpwardRange || ''
@@ -1459,9 +1534,6 @@ const fetchStockData = async () => {
 
     // 竞争对手数据
     competitors.value = data.competitors || []
-
-    // 获取关联笔记
-    await fetchStockNotes()
 
   } catch (err) {
     console.error('获取股票数据失败:', err)
@@ -1473,14 +1545,85 @@ const fetchStockData = async () => {
   }
 }
 
+// 存储现有的利好利空笔记ID
+const prosConsNoteId = ref(null)
+// 自定义指令：自动调整文本框高度
+const vAutoResize = {
+  mounted: (el) => {
+    // 设置初始高度
+    el.style.height = 'auto'
+    el.style.height = el.scrollHeight + 'px'
+    
+    // 监听输入事件
+    el.addEventListener('input', () => {
+      el.style.height = 'auto'
+      el.style.height = el.scrollHeight + 'px'
+    })
+    
+    // 监听窗口大小变化
+    window.addEventListener('resize', () => {
+      el.style.height = 'auto'
+      el.style.height = el.scrollHeight + 'px'
+    })
+  },
+  updated: (el) => {
+    // 当内容通过v-model更新时，也调整高度
+    el.style.height = 'auto'
+    el.style.height = el.scrollHeight + 'px'
+  },
+  unmounted: (el) => {
+    // 清理事件监听
+    window.removeEventListener('resize', () => {
+      el.style.height = 'auto'
+      el.style.height = el.scrollHeight + 'px'
+    })
+  }
+}
+
 // 获取关联笔记
 const fetchStockNotes = async () => {
   try {
     const notes = await apiService.getNotesByStockCode(stockCode.value)
-    stockNotes.value = notes || []
+    
+    // 过滤掉利好利空类型的笔记，只显示其他笔记
+    stockNotes.value = (notes || []).filter(note => !note.title.startsWith('[利好利空]'))
+    
+    // 查找利好利空类型的笔记并加载数据
+    const prosConsNote = notes.find(note => note.title.startsWith('[利好利空]'))
+    if (prosConsNote) {
+      try {
+        const prosConsData = JSON.parse(prosConsNote.content)
+        prosPoints.value = prosConsData.prosPoints || ''
+        consPoints.value = prosConsData.consPoints || ''
+        // 保存现有的利好利空笔记ID
+        prosConsNoteId.value = prosConsNote.id
+        
+        // 数据加载完成后立即调整文本框高度
+        nextTick(() => {
+          autoResizeTextarea('prosPointsTextarea')
+          autoResizeTextarea('consPointsTextarea')
+        })
+      } catch (parseError) {
+        console.error('解析利好利空数据失败:', parseError)
+      }
+    } else {
+      // 如果没有找到利好利空笔记，重置ID
+    prosConsNoteId.value = null
+    // 调整文本框高度
+    nextTick(() => {
+      autoResizeTextarea('prosPointsTextarea')
+      autoResizeTextarea('consPointsTextarea')
+    })
+    }
   } catch (err) {
     console.error('获取笔记失败:', err)
     stockNotes.value = []
+    prosConsNoteId.value = null
+    // 调整文本框高度
+    nextTick(() => {
+      autoResizeTextarea('prosPointsTextarea')
+      autoResizeTextarea('consPointsTextarea')
+    })
   }
 }
 
@@ -1536,58 +1679,44 @@ const saveProsConsSummary = async () => {
       stockCode: stockCode.value,
       prosPoints: prosPoints.value,
       consPoints: consPoints.value,
-      investmentSummary: investmentSummary.value
-    })
-    alert('利好利空与总结保存成功！')
+      investmentSummary: '' // 移除投资总结
+    }, prosConsNoteId.value) // 传递现有的利好利空笔记ID，避免重复请求
+    alert('利好利空分析保存成功！')
+    // 保存成功后，重新获取笔记数据以更新最新状态
+    await fetchStockNotes()
   } catch (err) {
-    console.error('保存利好利空与总结失败:', err)
+    console.error('保存利好利空分析失败:', err)
     alert('保存失败，请稍后重试')
   }
 }
 
 // 导航功能优化
 const initNavigation = () => {
-  // 为所有导航锚点添加平滑滚动
-  document.querySelectorAll('.nav-list a').forEach(item => {
-    item.addEventListener('click', function(e) {
-      const targetId = this.getAttribute('href');
-      
-      // 如果是返回顶部链接，使用window.scrollTo(0, 0)实现
-      if (targetId === '#top') {
-        e.preventDefault();
-        window.scrollTo({
-          top: 0,
-          behavior: 'smooth'
-        });
-      } else {
-        // 其他锚点使用scrollIntoView实现
-        e.preventDefault();
-        const targetElement = document.querySelector(targetId);
-        if (targetElement) {
-          targetElement.scrollIntoView({
-            behavior: 'smooth',
-            block: 'start'
-          });
-        }
-      }
-    });
+  // 为非#top的导航锚点添加平滑滚动
+  document.querySelectorAll('.nav-list a:not([href="#top"])').forEach(item => {
+    // 先移除可能存在的旧事件监听器
+    item.removeEventListener('click', handleNavClick);
+    item.addEventListener('click', handleNavClick);
   });
 
   // 初始化导航状态
   handleScroll();
 };
 
-// 滚动到顶部
-const scrollToTop = () => {
-  if (typeof window !== 'undefined') {
-    window.scrollTo({
-      top: 0,
-      behavior: 'smooth'
+// 导航点击处理函数
+const handleNavClick = function(e) {
+  e.preventDefault();
+  const targetId = this.getAttribute('href');
+  const targetElement = document.querySelector(targetId);
+  if (targetElement) {
+    targetElement.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start'
     });
-  } else {
-    console.error('window 对象未定义');
   }
 };
+
+// 滚动到顶部已移动到script setup内部
 
 // 监听滚动事件，控制浮动返回顶部按钮的显示/隐藏
 let lastScrollTop = 0;
@@ -1782,21 +1911,6 @@ onUnmounted(() => {
   padding: 1rem;
 }
 
-/* 加载动画样式 */
-.loading-spinner {
-  width: 40px;
-  height: 40px;
-  border: 3px solid var(--gray-200);
-  border-top: 3px solid var(--primary-color);
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
 /* 加载和错误状态（现代化样式） */
 .loading-container,
 .error-container {
@@ -1892,41 +2006,11 @@ onUnmounted(() => {
   box-shadow: 0 4px 10px rgba(102, 126, 234, 0.2);
 }
 
-.btn.secondary {
-  background-color: white;
-  color: #374151;
-  border-color: #d1d5db;
-}
-
-.btn.secondary:hover {
-  background-color: #f9fafb;
-  border-color: #9ca3af;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.btn.bg-primary\/10 {
-  background-color: rgba(37, 99, 235, 0.1);
-  color: #2563eb;
-  border-color: rgba(37, 99, 235, 0.2);
-}
-
-.btn.bg-primary\/10:hover {
-  background-color: rgba(37, 99, 235, 0.15);
-  border-color: rgba(37, 99, 235, 0.3);
-}
-
 .btn-xs {
   padding: 0.375rem 0.75rem;
   font-size: 0.75rem;
   min-height: 32px;
   border-radius: 6px;
-}
-
-.btn-sm {
-  padding: 0.5rem 1rem;
-  font-size: 0.8125rem;
-  min-height: 36px;
-  border-radius: 7px;
 }
 
 .btn-icon-round {
@@ -2149,10 +2233,7 @@ onUnmounted(() => {
   color: var(--text-primary);
 }
 
-/* 表格样式（紧凑） */
-.comparison-table {
-  overflow-x: auto;
-}
+
 
 /* 笔记相关样式（紧凑） */
 .notes-list {
@@ -2296,9 +2377,15 @@ onUnmounted(() => {
 }
 
 .form-textarea {
-  min-height: 80px;
-  resize: vertical;
-}
+    min-height: 80px;
+    resize: vertical;
+  }
+  
+  /* 为利好利空分析区域的文本框设置更大的字体 */
+  .pros-area .form-textarea,
+  .cons-area .form-textarea {
+    font-size: 1.25rem; /* text-xl 对应的大小 */
+  }
 
 .form-actions {
   display: flex;
@@ -2411,6 +2498,9 @@ onUnmounted(() => {
   padding: 1rem;
   box-shadow: var(--shadow-sm);
   border: 1px solid var(--gray-200);
+  position: relative;
+  height: 200px;
+  width: 100%;
 }
 
 .chart-subtitle {
@@ -2418,12 +2508,6 @@ onUnmounted(() => {
   font-weight: 600;
   color: var(--text-primary);
   margin-bottom: 0.5rem;
-}
-
-.chart-container {
-  position: relative;
-  height: 200px;
-  width: 100%;
 }
 
 /* 利好利空与总结样式 */
