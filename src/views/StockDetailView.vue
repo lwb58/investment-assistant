@@ -1,5 +1,7 @@
 <template>
   <div class="stock-detail-container">
+    <!-- 顶部锚点 -->
+    <div id="top"></div>
     <!-- 加载状态 -->
     <div v-if="loading" class="loading-container">
       <div class="loading-spinner"></div>
@@ -15,43 +17,55 @@
 
     <!-- 正常内容 -->
     <template v-else>
-      <!-- 股票核心信息栏（固定顶部，紧凑布局） -->
-      <div class="stock-header sticky top-0 z-10 bg-white/95 backdrop-blur-sm shadow-sm border-b border-gray-200">
-        <div
-          class="container mx-auto px-2 py-2 flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
-          <div class="flex items-center gap-2">
-            <button class="btn-icon-round" @click="goBack" title="返回">
-              ←
+      <!-- 浮动返回顶部按钮 -->
+      <button 
+        id="floating-back-to-top" 
+        class="fixed bottom-8 right-8 bg-primary text-white p-3 rounded-full shadow-lg hover:bg-primary/90 transition-all duration-300 hover:scale-110 z-500 cursor-pointer"
+        title="返回顶部"
+        @click="scrollToTop"
+      >
+        <i class="text-xl">🔝</i>
+      </button>
+      <!-- 股票核心信息栏（固定顶部，现代化设计） -->
+      <div class="stock-header sticky top-0 z-20 bg-gradient-to-r from-white to-gray-50/95 backdrop-blur-md shadow-lg border-b border-gray-200">
+        <div class="container mx-auto px-3 py-3 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+          <div class="flex items-center gap-3">
+            <button class="btn-icon-round hover:bg-gray-200 transition-all duration-300 p-2 rounded-full" @click="goBack" title="返回">
+              <i class="text-lg">←</i>
             </button>
             <div class="stock-basic">
-              <h1 class="stock-title flex items-center gap-1.5 text-lg md:text-xl font-semibold">
+              <h1 class="stock-title flex items-center gap-2 text-xl md:text-2xl font-bold">
                 {{ stockInfo.name }}
-                <span class="stock-code text-gray-500 text-xs md:text-sm font-normal">{{ stockInfo.code }}</span>
+                <span class="stock-code text-gray-500 text-sm md:text-base font-medium px-2 py-0.5 bg-gray-100 rounded-full">
+                  {{ stockInfo.code }}
+                </span>
               </h1>
-              <div class="stock-industry text-xs md:text-sm text-gray-500 mt-0.5">
-                行业：{{ stockInfo.industry || '未知行业' }}
+              <div class="stock-industry text-sm md:text-base text-gray-600 mt-1 flex items-center gap-1">
+                <i class="icon">🏢</i>
+                {{ stockInfo.industry || '未知行业' }}
               </div>
             </div>
           </div>
 
-          <div class="price-group flex items-center gap-3">
-            <div class="price-display">
-              <div class="current-price text-lg md:text-xl font-bold">
+          <div class="price-group flex items-center gap-4">
+            <div class="price-display text-center">
+              <div class="current-price text-2xl md:text-3xl font-bold tracking-tight">
                 {{ formatPrice(stockInfo.price) }}
               </div>
-              <div :class="['price-change flex items-center gap-1 mt-0.5 text-xs px-1.5 py-0.5 rounded-full',
-                stockInfo.changeRate > 0 ? 'bg-red-50 text-red-600' :
-                  stockInfo.changeRate < 0 ? 'bg-green-50 text-green-600' : 'bg-gray-50 text-gray-600']">
-                <span v-if="stockInfo.changeRate > 0">↗️</span>
-                <span v-else-if="stockInfo.changeRate < 0">↘️</span>
-                <span v-else>➡️</span>
+              <div :class="['price-change flex items-center justify-center gap-1.5 mt-1 text-sm px-3 py-1 rounded-full font-medium',
+                stockInfo.changeRate > 0 ? 'bg-red-50 text-red-600 hover:bg-red-100' :
+                  stockInfo.changeRate < 0 ? 'bg-green-50 text-green-600 hover:bg-green-100' : 'bg-gray-50 text-gray-600']" 
+                  class="transition-all duration-300">
+                <span v-if="stockInfo.changeRate > 0" class="text-lg">↗️</span>
+                <span v-else-if="stockInfo.changeRate < 0" class="text-lg">↘️</span>
+                <span v-else class="text-lg">➡️</span>
                 {{ stockInfo.changeRate > 0 ? '+' : '' }}{{ stockInfo.changeRate.toFixed(2) }}%
               </div>
             </div>
 
-            <!-- 新增笔记按钮（紧凑样式） -->
-            <button class="btn primary flex items-center gap-1" @click="openNoteModal('create')">
-              <i class="icon">✏️</i>
+            <!-- 新增笔记按钮（现代化样式） -->
+            <button class="btn primary flex items-center gap-2 px-4 py-2 rounded-lg shadow-md hover:shadow-lg transition-all duration-300 transform hover:-translate-y-0.5">
+              <i class="icon text-lg">✏️</i>
               新增笔记
             </button>
           </div>
@@ -63,42 +77,44 @@
         <div class="flex flex-col md:flex-row gap-2">
           <!-- 固定导航栏 -->
           <div class="md:w-1/6 lg:w-1/7">
-            <div class="sticky top-20 bg-white border border-gray-200 rounded-lg shadow-sm p-2">
-              <h3 class="nav-title text-sm font-semibold text-gray-800 mb-2 px-1">快速导航</h3>
-              <ul class="nav-list space-y-1">
+            <div class="sticky top-5 bg-white/95 border border-gray-200 rounded-xl shadow-lg p-3 backdrop-filter backdrop-blur-md">
+              <h3 class="nav-title text-sm font-semibold text-gray-800 mb-3 px-2 flex items-center gap-2">
+                <i class="icon text-xl">📋</i> 快速导航
+              </h3>
+              <ul class="nav-list space-y-2">
                 <li>
-                  <a href="#financial-trends" class="nav-item block px-2 py-1.5 text-xs rounded-md hover:bg-gray-100 transition-colors">
-                    <i class="icon mr-1.5">📊</i> 财务趋势
+                  <a href="#top" class="nav-item block px-3 py-2 text-sm rounded-lg hover:bg-primary/10 hover:text-primary transition-all duration-300 flex items-center gap-2" @click.prevent="scrollToTop">
+                    <i class="icon">🔝</i> 返回顶部
                   </a>
                 </li>
                 <li>
-                  <a href="#dupont-analysis" class="nav-item block px-2 py-1.5 text-xs rounded-md hover:bg-gray-100 transition-colors">
-                    <i class="icon mr-1.5">📈</i> 杜邦分析
+                  <a href="#financial-trends" class="nav-item block px-3 py-2 text-sm rounded-lg hover:bg-primary/10 hover:text-primary transition-all duration-300 flex items-center gap-2">
+                    <i class="icon">📊</i> 财务趋势
                   </a>
                 </li>
                 <li>
-                  <a href="#competitor-analysis" class="nav-item block px-2 py-1.5 text-xs rounded-md hover:bg-gray-100 transition-colors">
-                    <i class="icon mr-1.5">🏢</i> 竞争对手
+                  <a href="#dupont-analysis" class="nav-item block px-3 py-2 text-sm rounded-lg hover:bg-primary/10 hover:text-primary transition-all duration-300 flex items-center gap-2">
+                    <i class="icon">📈</i> 杜邦分析
                   </a>
                 </li>
                 <li>
-                  <a href="#financial-indicators" class="nav-item block px-2 py-1.5 text-xs rounded-md hover:bg-gray-100 transition-colors">
-                    <i class="icon mr-1.5">📋</i> 财务指标
+                  <a href="#competitor-analysis" class="nav-item block px-3 py-2 text-sm rounded-lg hover:bg-primary/10 hover:text-primary transition-all duration-300 flex items-center gap-2">
+                    <i class="icon">🏢</i> 竞争对手
                   </a>
                 </li>
                 <li>
-                  <a href="#investment-forecast" class="nav-item block px-2 py-1.5 text-xs rounded-md hover:bg-gray-100 transition-colors">
-                    <i class="icon mr-1.5">🎯</i> 投资预测
+                  <a href="#financial-indicators" class="nav-item block px-3 py-2 text-sm rounded-lg hover:bg-primary/10 hover:text-primary transition-all duration-300 flex items-center gap-2">
+                    <i class="icon">📋</i> 财务指标
                   </a>
                 </li>
                 <li>
-                  <a href="#related-notes" class="nav-item block px-2 py-1.5 text-xs rounded-md hover:bg-gray-100 transition-colors">
-                    <i class="icon mr-1.5">📝</i> 关联笔记
+                  <a href="#investment-forecast" class="nav-item block px-3 py-2 text-sm rounded-lg hover:bg-primary/10 hover:text-primary transition-all duration-300 flex items-center gap-2">
+                    <i class="icon">🎯</i> 投资预测
                   </a>
                 </li>
                 <li>
-                  <a href="#company-profile" class="nav-item block px-2 py-1.5 text-xs rounded-md hover:bg-gray-100 transition-colors">
-                    <i class="icon mr-1.5">ℹ️</i> 公司简介
+                  <a href="#related-notes" class="nav-item block px-3 py-2 text-sm rounded-lg hover:bg-primary/10 hover:text-primary transition-all duration-300 flex items-center gap-2">
+                    <i class="icon">📝</i> 关联笔记
                   </a>
                 </li>
               </ul>
@@ -107,86 +123,92 @@
           
           <!-- 主要内容区域 -->
           <div class="md:w-5/6 lg:w-6/7">
-            <!-- 快速指标卡片（紧凑网格） -->
-            <div
-              class="quick-metrics card mb-3 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 p-3 border border-gray-100 rounded-lg shadow-sm bg-white">
+            <!-- 快速指标卡片（现代化网格布局） -->
+            <div id="financial-indicators"
+              class="quick-metrics card mb-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 p-4 border border-gray-200 rounded-xl shadow-md bg-white hover:shadow-lg transition-all duration-300">
               <div
-                class="metric-item bg-gray-50 p-2 rounded-lg border border-gray-100 hover:bg-gray-100 transition-all duration-200">
-                <div class="metric-label text-xs text-gray-600 mb-0.5">总市值</div>
-                <div class="metric-value font-semibold text-gray-800 text-sm">{{ formatNumber(stockInfo.marketCap) }}亿</div>
+                class="metric-item bg-gradient-to-br from-white to-gray-50 p-3 rounded-lg border border-gray-200 hover:border-primary/30 hover:shadow-md transition-all duration-300 transform hover:-translate-y-1">
+                <div class="metric-label text-sm text-gray-600 mb-1 font-medium">总市值</div>
+                <div class="metric-value font-bold text-xl text-gray-800">{{ formatNumber(stockInfo.marketCap) }}亿</div>
               </div>
               <div
-                class="metric-item bg-gray-50 p-2 rounded-lg border border-gray-100 hover:bg-gray-100 transition-all duration-200">
-                <div class="metric-label text-xs text-gray-600 mb-0.5">市盈率(TTM)</div>
-                <div class="metric-value font-semibold text-gray-800 text-sm">{{ currentFinancialData.pe || '--' }}</div>
+                class="metric-item bg-gradient-to-br from-white to-gray-50 p-3 rounded-lg border border-gray-200 hover:border-primary/30 hover:shadow-md transition-all duration-300 transform hover:-translate-y-1">
+                <div class="metric-label text-sm text-gray-600 mb-1 font-medium">市盈率(TTM)</div>
+                <div class="metric-value font-bold text-xl text-gray-800">{{ currentFinancialData.pe || '--' }}</div>
               </div>
               <div
-                class="metric-item bg-gray-50 p-2 rounded-lg border border-gray-100 hover:bg-gray-100 transition-all duration-200">
-                <div class="metric-label text-xs text-gray-600 mb-0.5">净资产收益率</div>
-                <div class="metric-value font-semibold text-gray-800 text-sm">{{ currentFinancialData.roe || '--' }}%</div>
+                class="metric-item bg-gradient-to-br from-white to-gray-50 p-3 rounded-lg border border-gray-200 hover:border-primary/30 hover:shadow-md transition-all duration-300 transform hover:-translate-y-1">
+                <div class="metric-label text-sm text-gray-600 mb-1 font-medium">净资产收益率</div>
+                <div class="metric-value font-bold text-xl text-gray-800">{{ currentFinancialData.roe || '--' }}%</div>
               </div>
               <div
-                class="metric-item bg-gray-50 p-2 rounded-lg border border-gray-100 hover:bg-gray-100 transition-all duration-200">
-                <div class="metric-label text-xs text-gray-600 mb-0.5">所属行业</div>
-                <div class="metric-value font-semibold text-gray-800 text-sm">{{ stockInfo.industry || '--' }}</div>
+                class="metric-item bg-gradient-to-br from-white to-gray-50 p-3 rounded-lg border border-gray-200 hover:border-primary/30 hover:shadow-md transition-all duration-300 transform hover:-translate-y-1">
+                <div class="metric-label text-sm text-gray-600 mb-1 font-medium">所属行业</div>
+                <div class="metric-value font-bold text-xl text-gray-800">{{ stockInfo.industry || '--' }}</div>
               </div>
               <div
-                class="metric-item bg-gray-50 p-2 rounded-lg border border-gray-100 hover:bg-gray-100 transition-all duration-200">
-                <div class="metric-label text-xs text-gray-600 mb-0.5">总股本</div>
-                <div class="metric-value font-semibold text-gray-800 text-sm">{{ formatNumber(stockInfo.totalShares) }}亿股
+                class="metric-item bg-gradient-to-br from-white to-gray-50 p-3 rounded-lg border border-gray-200 hover:border-primary/30 hover:shadow-md transition-all duration-300 transform hover:-translate-y-1">
+                <div class="metric-label text-sm text-gray-600 mb-1 font-medium">总股本</div>
+                <div class="metric-value font-bold text-xl text-gray-800">{{ formatNumber(stockInfo.totalShares) }}亿股
                 </div>
               </div>
               <div
-                class="metric-item bg-gray-50 p-2 rounded-lg border border-gray-100 hover:bg-gray-100 transition-all duration-200">
-                <div class="metric-label text-xs text-gray-600 mb-0.5">流通股本</div>
-                <div class="metric-value font-semibold text-gray-800 text-sm">{{ formatNumber(stockInfo.floatShares) }}亿股
+                class="metric-item bg-gradient-to-br from-white to-gray-50 p-3 rounded-lg border border-gray-200 hover:border-primary/30 hover:shadow-md transition-all duration-300 transform hover:-translate-y-1">
+                <div class="metric-label text-sm text-gray-600 mb-1 font-medium">流通股本</div>
+                <div class="metric-value font-bold text-xl text-gray-800">{{ formatNumber(stockInfo.floatShares) }}亿股
                 </div>
               </div>
             </div>
 
-            <!-- 财务数据与趋势图表（顶部区域） -->
-            <div class="grid grid-cols-1 gap-2 mb-2">
+            <!-- 财务数据与趋势图表（现代化设计） -->
+            <div class="grid grid-cols-1 gap-4 mb-6">
               <!-- 财务趋势图表组 -->
-                <div id="financial-trends" class="card p-2 border border-gray-100 rounded-lg shadow-sm bg-white">
-                <div class="card-header mb-1">
-                  <h3 class="card-title text-sm font-semibold flex items-center gap-1.5 text-gray-800">
-                    <i class="icon text-primary">📊</i> 财务趋势（{{ financialYears.length }}年）
+              <div id="financial-trends" class="card p-5 border border-gray-200 rounded-xl shadow-lg bg-white hover:shadow-xl transition-all duration-300">
+                <div class="card-header mb-4">
+                  <h3 class="card-title text-xl font-bold flex items-center gap-2 text-gray-800">
+                    <i class="icon text-primary text-2xl">📊</i> 财务趋势（{{ financialYears.length }}年）
                   </h3>
                 </div>
 
-                <!-- 图表容器：上下紧凑布局 -->
-                <div class="chart-group space-y-3">
+                <!-- 图表容器：上下布局 -->
+                <div class="chart-group space-y-6">
                   <!-- 总营收趋势图 -->
-                  <div>
-                    <h4 class="chart-subtitle text-sm font-medium mb-1.5">总营收趋势（单位：亿元）</h4>
-                    <div class="chart-container h-48">
+                  <div class="chart-section bg-gradient-to-r from-white to-gray-50 p-4 rounded-lg border border-gray-200">
+                    <h4 class="chart-subtitle text-lg font-semibold mb-3 text-gray-700 flex items-center gap-1.5">
+                      <i class="icon">📈</i> 总营收趋势（单位：亿元）
+                    </h4>
+                    <div class="chart-container h-64 rounded-lg border border-gray-200 overflow-hidden bg-white">
                       <canvas id="revenueTrendChart"></canvas>
                     </div>
                   </div>
                   <!-- 归母净利润趋势图 -->
-                  <div>
-                    <h4 class="chart-subtitle text-sm font-medium mb-1.5">归母净利润趋势（单位：亿元）</h4>
-                    <div class="chart-container h-48">
+                  <div class="chart-section bg-gradient-to-r from-white to-gray-50 p-4 rounded-lg border border-gray-200">
+                    <h4 class="chart-subtitle text-lg font-semibold mb-3 text-gray-700 flex items-center gap-1.5">
+                      <i class="icon">💰</i> 归母净利润趋势（单位：亿元）
+                    </h4>
+                    <div class="chart-container h-64 rounded-lg border border-gray-200 overflow-hidden bg-white">
                       <canvas id="netProfitTrendChart"></canvas>
                     </div>
                   </div>
                   <!-- 扣非净利润趋势图 -->
-                  <div>
-                    <h4 class="chart-subtitle text-sm font-medium mb-1.5">扣非净利润趋势（单位：亿元）</h4>
-                    <div class="chart-container h-48">
+                  <div class="chart-section bg-gradient-to-r from-white to-gray-50 p-4 rounded-lg border border-gray-200">
+                    <h4 class="chart-subtitle text-lg font-semibold mb-3 text-gray-700 flex items-center gap-1.5">
+                      <i class="icon">📊</i> 扣非净利润趋势（单位：亿元）
+                    </h4>
+                    <div class="chart-container h-64 rounded-lg border border-gray-200 overflow-hidden bg-white">
                       <canvas id="nonProfitTrendChart"></canvas>
                     </div>
                   </div>
                 </div>
 
                 <!-- 图表说明 -->
-                <div class="chart-desc text-xs text-gray-500 mt-2">
-                  <p>数据来源：公司年度财务报告 | 自动适配{{ financialYears.length }}年数据</p>
+                <div class="chart-desc text-sm text-gray-600 mt-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                  <p class="flex items-center gap-1.5"><i class="icon">📋</i> 数据来源：公司年度财务报告 | 自动适配{{ financialYears.length }}年数据</p>
                 </div>
               </div>
             </div>
             <!-- 杜邦分析数据表格 -->
-            <div id="dupont-analysis" class="mt-6 p-4 border rounded-lg">
+            <div id="dupont-analysis" class="card p-4 border border-gray-200 rounded-xl shadow-md bg-white hover:shadow-lg transition-all duration-300 mb-6">
               <h3 class="text-lg font-semibold mb-3">杜邦分析数据</h3>
               <div v-if="dupontLoading" class="flex items-center justify-center py-8">
                 <div class="loading-spinner"></div>
@@ -223,7 +245,7 @@
             </div>
 
             <!-- 杜邦分析图表区域 -->
-            <div class="mt-6 p-4 border rounded-lg">
+            <div class="card p-4 border border-gray-200 rounded-xl shadow-md bg-white hover:shadow-lg transition-all duration-300 mb-6">
               <h3 class="text-lg font-semibold mb-3">杜邦分析法趋势</h3>
 
               <!-- 三因素分析 -->
@@ -270,7 +292,7 @@
               <!-- 左侧：占6列 -->
               <div class="space-y-2">
                 <!-- 关联笔记卡片 -->
-                <div class="card p-2 border border-gray-100 rounded-lg shadow-sm bg-white">
+                <div id="related-notes" class="card p-4 border border-gray-200 rounded-xl shadow-md bg-white hover:shadow-lg transition-all duration-300 mb-6">
                   <div class="card-header mb-1 flex justify-between items-center">
                     <h3 class="card-title text-sm font-semibold flex items-center gap-1.5 text-gray-800">
                       <i class="icon text-primary">📝</i> 关联笔记
@@ -307,7 +329,7 @@
                 </div>
 
                 <!-- 利好利空点和总结卡片 -->
-                <div class="card p-2 border border-gray-100 rounded-lg shadow-sm bg-white">
+                <div class="card p-4 border border-gray-200 rounded-xl shadow-md bg-white hover:shadow-lg transition-all duration-300 mb-6">
                   <div class="card-header mb-1">
                     <h3 class="card-title text-sm font-semibold flex items-center gap-1.5 text-gray-800">
                       <i class="icon text-primary">📊</i> 利好利空与总结
@@ -339,7 +361,7 @@
                 </div>
 
                 <!-- 估值逻辑记录卡片 -->
-                <div class="card p-2 border border-gray-100 rounded-lg shadow-sm bg-white">
+                <div class="card p-4 border border-gray-200 rounded-xl shadow-md bg-white hover:shadow-lg transition-all duration-300 mb-6">
                   <div class="card-header mb-1">
                     <h3 class="card-title text-sm font-semibold flex items-center gap-1.5 text-gray-800">
                       <i class="icon text-primary">💡</i> 估值逻辑
@@ -359,7 +381,7 @@
               <!-- 右侧：占6列 -->
               <div class="space-y-2">
                 <!-- 友商录入卡片 -->
-                <div id="competitor-analysis" class="card p-2 border border-gray-100 rounded-lg shadow-sm bg-white">
+                <div id="competitor-analysis" class="card p-4 border border-gray-200 rounded-xl shadow-md bg-white hover:shadow-lg transition-all duration-300 mb-6">
                   <div class="card-header mb-1">
                     <h3 class="card-title text-sm font-semibold flex items-center gap-1.5 text-gray-800">
                       <i class="icon text-primary">🤝</i> 友商录入
@@ -457,8 +479,10 @@
         </div>
       </teleport>
       
+
+      
       <!-- 投资预测与交易计划卡片（移动到页面底部） -->
-      <div id="investment-forecast" class="card p-2 border border-gray-100 rounded-lg shadow-sm bg-white mt-4">
+      <div id="investment-forecast" class="card p-4 border border-gray-200 rounded-xl shadow-md bg-white hover:shadow-lg transition-all duration-300 mb-6">
         <div class="card-header mb-1">
           <h3 class="card-title text-sm font-semibold flex items-center gap-1.5 text-gray-800">
             <i class="icon text-primary">📈</i> 投资预测与交易计划
@@ -567,6 +591,7 @@ const stockInfo = ref({
   changeRate: 0,
   industry: '',
   companyName: '',
+  companyProfile: '',
   listDate: '',
   totalShares: '0',
   floatShares: '0',
@@ -600,6 +625,24 @@ onMounted(() => {
   fetchStockNotes()
   // fetchValuationLogic()
   fetchDupontData() // 新增：加载杜邦分析数据
+  
+  // 初始化导航
+  initNavigation()
+  
+  // 获取浮动返回顶部按钮
+  floatingBackToTopBtn.value = document.getElementById('floating-back-to-top')
+  
+  // 初始隐藏按钮（仅在页面滚动位置大于100px时显示）
+  if (floatingBackToTopBtn.value) {
+    const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+    if (scrollTop <= 100) {
+      floatingBackToTopBtn.value.style.opacity = '0';
+      floatingBackToTopBtn.value.style.visibility = 'hidden';
+    }
+  }
+  
+  // 监听滚动事件
+  window.addEventListener('scroll', handleScroll)
   
   // 窗口大小变化时重新渲染图表
   window.addEventListener('resize', handleResize)
@@ -1381,6 +1424,7 @@ const fetchStockData = async () => {
       changeRate: data.coreQuotes.changeRate || 0,
       industry: data.baseInfo.industry || '未知行业',
       companyName: data.baseInfo.companyName || '未知公司',
+      companyProfile: data.baseInfo.companyProfile || '',
       listDate: data.baseInfo.listDate || '--',
       totalShares: data.baseInfo.totalShares || '0',
       floatShares: data.baseInfo.floatShares || '0',
@@ -1501,6 +1545,107 @@ const saveProsConsSummary = async () => {
   }
 }
 
+// 导航功能优化
+const initNavigation = () => {
+  // 为所有导航锚点添加平滑滚动
+  document.querySelectorAll('.nav-list a').forEach(item => {
+    item.addEventListener('click', function(e) {
+      const targetId = this.getAttribute('href');
+      
+      // 如果是返回顶部链接，使用window.scrollTo(0, 0)实现
+      if (targetId === '#top') {
+        e.preventDefault();
+        window.scrollTo({
+          top: 0,
+          behavior: 'smooth'
+        });
+      } else {
+        // 其他锚点使用scrollIntoView实现
+        e.preventDefault();
+        const targetElement = document.querySelector(targetId);
+        if (targetElement) {
+          targetElement.scrollIntoView({
+            behavior: 'smooth',
+            block: 'start'
+          });
+        }
+      }
+    });
+  });
+
+  // 初始化导航状态
+  handleScroll();
+};
+
+// 滚动到顶部
+const scrollToTop = () => {
+  if (typeof window !== 'undefined') {
+    window.scrollTo({
+      top: 0,
+      behavior: 'smooth'
+    });
+  } else {
+    console.error('window 对象未定义');
+  }
+};
+
+// 监听滚动事件，控制浮动返回顶部按钮的显示/隐藏
+let lastScrollTop = 0;
+const floatingBackToTopBtn = ref(null);
+
+
+
+const handleScroll = () => {
+  if (typeof window === 'undefined') return;
+  const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+  
+  // 处理浮动返回顶部按钮的显示/隐藏
+  if (floatingBackToTopBtn.value) {
+    // 确保按钮始终可见，便于测试
+    floatingBackToTopBtn.value.style.opacity = '1';
+    floatingBackToTopBtn.value.style.visibility = 'visible';
+    floatingBackToTopBtn.value.style.pointerEvents = 'auto'; // 确保按钮可以接收点击事件
+    floatingBackToTopBtn.value.style.zIndex = '9999'; // 确保按钮在最顶层
+  }
+  
+  // 更新导航激活状态
+  const sections = [
+    { id: '#top', offset: 0 },
+    { id: '#financial-trends', offset: 200 },
+    { id: '#dupont-analysis', offset: 200 },
+    { id: '#competitor-analysis', offset: 200 },
+    { id: '#financial-indicators', offset: 200 },
+    { id: '#investment-forecast', offset: 200 },
+    { id: '#related-notes', offset: 200 }
+  ];
+
+  let currentSection = '#top';
+  const scrollPosition = scrollTop + 100;
+
+  // 找到当前滚动位置对应的区域
+  for (const section of sections) {
+    const element = document.querySelector(section.id);
+    if (element) {
+      const sectionTop = element.offsetTop;
+      if (scrollPosition >= sectionTop) {
+        currentSection = section.id;
+      }
+    }
+  }
+
+  // 更新导航项的激活状态
+  document.querySelectorAll('.nav-item').forEach(item => {
+    const href = item.getAttribute('href');
+    if (href === currentSection) {
+      item.classList.add('bg-primary/20', 'text-primary', 'font-medium');
+    } else {
+      item.classList.remove('bg-primary/20', 'text-primary', 'font-medium');
+    }
+  });
+  
+  lastScrollTop = scrollTop;
+};
+
 // 添加友商
 const addCompetitor = async () => {
   try {
@@ -1591,25 +1736,58 @@ const formatDate = (dateStr) => {
   }
 }
 
-// 组件挂载时加载数据
-onMounted(() => {
-  if (stockCode.value) fetchStockData()
-})
 
-// 组件卸载时销毁图表
+
+// 组件卸载时清理资源
 onUnmounted(() => {
+  // 清理图表实例
   if (nonProfitChartInstance.value) nonProfitChartInstance.value.destroy()
   if (receivablesChartInstance.value) receivablesChartInstance.value.destroy()
+  if (threeFactorChartInstance.value) threeFactorChartInstance.value.destroy()
+  if (fiveFactorChartInstance.value) fiveFactorChartInstance.value.destroy()
+  
+  // 清理事件监听器
+  window.removeEventListener('scroll', handleScroll)
+  window.removeEventListener('resize', handleResize)
 })
 </script>
 
 <style scoped>
+/* 基础样式：现代化设计核心配置 */
+.stock-detail-container {
+  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  min-height: 100vh;
+  color: #111827;
+  font-size: 14px;
+  --primary-color: #667eea;
+  --primary-dark: #5a67d8;
+  --primary-light: #e9d8fd;
+  --secondary-color: #48bb78;
+  --accent-color: #ed8936;
+  --bg-card: #ffffff;
+  --bg-secondary: #f7fafc;
+  --gray-100: #f7fafc;
+  --gray-200: #edf2f7;
+  --gray-300: #e2e8f0;
+  --gray-400: #cbd5e0;
+  --text-primary: #2d3748;
+  --text-secondary: #4a5568;
+  --text-tertiary: #718096;
+  --border-radius: 12px;
+  --border-radius-sm: 6px;
+  --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  padding: 1rem;
+}
+
 /* 加载动画样式 */
 .loading-spinner {
-  width: 32px;
-  height: 32px;
-  border: 3px solid #f3f3f3;
-  border-top: 3px solid #165DFF;
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--gray-200);
+  border-top: 3px solid var(--primary-color);
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }
@@ -1618,44 +1796,22 @@ onUnmounted(() => {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
 }
-/* 基础样式：紧凑布局核心配置 */
-.stock-detail-container {
-  background-color: #f5f7fa;
-  min-height: 100vh;
-  color: #111827;
-  font-size: 14px;
-  --primary-color: #165dff;
-  --primary-dark: #0d47a1;
-  --primary-light: #e3f2fd;
-  --bg-card: #ffffff;
-  --bg-secondary: #fafbfc;
-  --gray-100: #f1f3f4;
-  --gray-200: #e5e7eb;
-  --gray-300: #d1d5db;
-  --gray-400: #9ca3af;
-  --text-primary: #1f2937;
-  --text-secondary: #4b5563;
-  --text-tertiary: #6b7280;
-  --border-radius: 8px;
-  --border-radius-sm: 4px;
-  --shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.03);
-  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.07);
-}
 
-/* 加载和错误状态（紧凑样式） */
+/* 加载和错误状态（现代化样式） */
 .loading-container,
 .error-container {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 300px;
+  height: 400px;
   background-color: white;
-  border-radius: 6px;
-  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  padding: 1.5rem;
+  border-radius: var(--border-radius);
+  box-shadow: var(--shadow-lg);
+  padding: 2rem;
   text-align: center;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .loading-spinner {
@@ -1702,36 +1858,38 @@ onUnmounted(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0.625rem 1.25rem;
-  border-radius: 8px;
+  padding: 0.625rem 1.5rem;
+  border-radius: var(--border-radius);
   font-size: 0.875rem;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
-  border: 1px solid transparent;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 2px solid transparent;
   gap: 0.5rem;
-  min-height: 40px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+  min-height: 42px;
+  box-shadow: var(--shadow);
   text-transform: none;
   letter-spacing: normal;
+  position: relative;
+  overflow: hidden;
 }
 
 .btn.primary {
-  background-color: #2563eb;
+  background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
   color: white;
-  border-color: #2563eb;
+  border-color: var(--primary-color);
 }
 
 .btn.primary:hover {
-  background-color: #1d4ed8;
-  border-color: #1d4ed8;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 8px rgba(37, 99, 235, 0.2);
+  background: linear-gradient(135deg, var(--primary-dark), #434190);
+  border-color: var(--primary-dark);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
 }
 
 .btn.primary:active {
   transform: translateY(0);
-  box-shadow: 0 2px 4px rgba(37, 99, 235, 0.15);
+  box-shadow: 0 4px 10px rgba(102, 126, 234, 0.2);
 }
 
 .btn.secondary {
@@ -1793,12 +1951,13 @@ onUnmounted(() => {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-/* 股票头部样式（现代化） */
+/* 股票头部样式（现代化，渐变背景） */
 .stock-header {
-  background-color: var(--bg-card);
-  padding: 1rem 1.25rem;
+  background: linear-gradient(135deg, var(--bg-card), var(--bg-secondary));
+  padding: 1.5rem 2rem;
   border-bottom: 1px solid var(--gray-200);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-md);
+  border-radius: var(--border-radius) var(--border-radius) 0 0;
 }
 
 .stock-title {
@@ -1849,20 +2008,22 @@ onUnmounted(() => {
   gap: 0.25rem;
 }
 
-/* 卡片样式（现代化精致） */
+/* 卡片样式（现代化精致，玻璃态效果） */
 .card {
-  background-color: var(--bg-card);
-  border: 1px solid var(--gray-200);
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: var(--border-radius);
-  box-shadow: var(--shadow-sm);
-  transition: all 0.2s ease;
+  box-shadow: var(--shadow-md);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
-  margin-bottom: 1rem;
+  margin-bottom: 1.5rem;
+  backdrop-filter: blur(10px);
 }
 
 .card:hover {
-  box-shadow: var(--shadow-md);
-  transform: translateY(-1px);
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-3px);
+  border-color: rgba(255, 255, 255, 0.4);
 }
 
 .card-header {
@@ -1886,12 +2047,12 @@ onUnmounted(() => {
   margin: 0;
 }
 
-/* 快速指标样式（现代化网格） */
+/* 快速指标样式（现代化网格，悬浮效果） */
 .quick-metrics {
   display: grid;
-  gap: 0.75rem;
+  gap: 1rem;
   grid-template-columns: repeat(2, 1fr);
-  margin-bottom: 1rem;
+  margin-bottom: 1.5rem;
 }
 
 @media (min-width: 640px) {
@@ -1902,24 +2063,42 @@ onUnmounted(() => {
 
 @media (min-width: 768px) {
   .quick-metrics {
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(6, 1fr);
   }
 }
 
 .metric-item {
-  background-color: var(--bg-card);
+  background: linear-gradient(135deg, var(--bg-card), var(--bg-secondary));
   border: 1px solid var(--gray-200);
   border-radius: var(--border-radius);
-  padding: 0.75rem;
-  transition: all 0.2s ease;
-  box-shadow: var(--shadow-sm);
+  padding: 1rem;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: var(--shadow);
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.metric-item::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--primary-color), var(--accent-color));
+  transform: scaleX(0);
+  transition: transform 0.3s ease;
 }
 
 .metric-item:hover {
-  background-color: var(--bg-card);
-  border-color: var(--gray-300);
-  box-shadow: var(--shadow-md);
-  transform: translateY(-1px);
+  border-color: var(--primary-color);
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-2px);
+}
+
+.metric-item:hover::before {
+  transform: scaleX(1);
 }
 
 .metric-label {
@@ -2148,30 +2327,31 @@ onUnmounted(() => {
   margin-bottom: 0.75rem;
 }
 
-/* 竞争对手样式（现代化） */
+/* 竞争对手样式（现代化，卡片式） */
 .competitor-list {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.75rem;
 }
 
 .competitor-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.5rem 0.75rem;
-  background-color: var(--bg-card);
+  padding: 1rem 1.25rem;
+  background: linear-gradient(135deg, var(--bg-card), var(--bg-secondary));
   border: 1px solid var(--gray-200);
   border-radius: var(--border-radius);
-  transition: all 0.2s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   cursor: pointer;
+  box-shadow: var(--shadow-sm);
 }
 
 .competitor-item:hover {
-  background-color: var(--bg-secondary);
+  background: linear-gradient(135deg, var(--primary-light), var(--bg-card));
   border-color: var(--primary-color);
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-sm);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
 }
 
 .competitor-info {
@@ -2218,11 +2398,19 @@ onUnmounted(() => {
   font-weight: 500;
 }
 
-/* 财务趋势图表样式（紧凑） */
+/* 财务趋势图表样式（现代化） */
 .chart-group {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 1.5rem;
+}
+
+.chart-container {
+  background: var(--bg-secondary);
+  border-radius: var(--border-radius);
+  padding: 1rem;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--gray-200);
 }
 
 .chart-subtitle {
