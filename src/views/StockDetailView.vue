@@ -603,45 +603,21 @@ Chart.register(ChartDataLabels)
 const route = useRoute()
 const router = useRouter()
 
+// 浮动返回顶部按钮引用
+const floatingBackToTopBtn = ref(null);
+
 // 滚动到顶部函数
 const scrollToTop = () => {
-  console.log('scrollToTop函数被调用');
   if (typeof window !== 'undefined') {
-    console.log('window对象存在，执行滚动');
+    // 优先使用page-content容器（真正的滚动容器）
+    const scrollContainer = document.querySelector('.page-content') || 
+                          document.querySelector('.app-container') || 
+                          window;
     
-    // 使用多种方式确保滚动到顶部
-    try {
-      // 方式1：使用window.scrollTo
-      window.scrollTo({
-        top: 0,
-        left: 0,
-        behavior: 'auto' // 使用auto而不是smooth，确保立即滚动
-      });
-      console.log('方式1：window.scrollTo执行完成');
-      
-      // 方式2：设置document.documentElement.scrollTop
-      document.documentElement.scrollTop = 0;
-      console.log('方式2：document.documentElement.scrollTop设置完成');
-      
-      // 方式3：设置document.body.scrollTop
-      document.body.scrollTop = 0;
-      console.log('方式3：document.body.scrollTop设置完成');
-      
-      // 方式4：如果以上都失败，使用setTimeout强制滚动
-      setTimeout(() => {
-        window.scrollTo(0, 0);
-        document.documentElement.scrollTop = 0;
-        document.body.scrollTop = 0;
-        console.log('方式4：setTimeout强制滚动执行完成');
-      }, 100);
-      
-    } catch (error) {
-      console.error('滚动到顶部时发生错误：', error);
-    }
-    
-    console.log('滚动完成');
-  } else {
-    console.error('window 对象未定义');
+    scrollContainer.scrollTo({
+      top: 0,
+      behavior: 'smooth'
+    });
   }
 };
 
@@ -738,6 +714,7 @@ const handleResize = () => {
 // 组件卸载时清理
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
+  window.removeEventListener('scroll', handleScroll) // 清理滚动事件监听器
   
   // 销毁图表实例
   if (threeFactorChartInstance.value) {
@@ -1720,7 +1697,6 @@ const handleNavClick = function(e) {
 
 // 监听滚动事件，控制浮动返回顶部按钮的显示/隐藏
 let lastScrollTop = 0;
-const floatingBackToTopBtn = ref(null);
 
 
 
