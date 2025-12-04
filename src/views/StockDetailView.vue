@@ -671,7 +671,6 @@ onMounted(() => {
   fetchStockData()
   fetchStockNotes()
   // fetchValuationLogic()
-  fetchDupontData() // 新增：加载杜邦分析数据
   
   // 初始化导航
   initNavigation()
@@ -1168,26 +1167,32 @@ const error = ref(null)
 // 获取股票代码
 const stockCode = computed(() => route.params.code)
 
-// 初始化财务趋势图表（自适应3-5年数据）
+// 初始化财务趋势图表（自适应季度数据）
 const initFinancialCharts = () => {
   if (!Chart || financialYears.value.length === 0) return
 
   // 准备基础数据
-  const labels = [...financialYears.value].reverse() // 最新年份在右侧
-  const nonProfitData = labels.map(year => {
-    const value = parseFloat(financialData.value[year]?.nonNetProfit || '0')
+  const reversedDates = [...financialYears.value].reverse() // 最新报告期在右侧
+  const labels = reversedDates.map(date => {
+    // 将日期格式化为友好的显示格式（如"2025-Q3"或"2025"）
+    const [year, month] = date.split('-')
+    const quarter = Math.ceil(parseInt(month) / 3)
+    return `${year}-Q${quarter}`
+  })
+  const nonProfitData = reversedDates.map(date => {
+    const value = parseFloat(financialData.value[date]?.nonNetProfit || '0')
     return isNaN(value) ? 0 : value
   })
-  const receivablesData = labels.map(year => {
-    const value = parseFloat(financialData.value[year]?.receivables || '0')
+  const receivablesData = reversedDates.map(date => {
+    const value = parseFloat(financialData.value[date]?.receivables || '0')
     return isNaN(value) ? 0 : value
   })
-  const revenueData = labels.map(year => {
-    const value = parseFloat(financialData.value[year]?.totalRevenue || '0')
+  const revenueData = reversedDates.map(date => {
+    const value = parseFloat(financialData.value[date]?.totalRevenue || '0')
     return isNaN(value) ? 0 : value
   })
-  const netProfitData = labels.map(year => {
-    const value = parseFloat(financialData.value[year]?.netProfitAttribution || '0')
+  const netProfitData = reversedDates.map(date => {
+    const value = parseFloat(financialData.value[date]?.netProfitAttribution || '0')
     return isNaN(value) ? 0 : value
   })
 
@@ -1465,52 +1470,103 @@ const fetchStockData = async () => {
   error.value = null
 
   try {
-    // 单接口获取所有数据
-    const data = await apiService.getStockDetail(stockCode.value)
-    if (!data) throw new Error('数据返回为空')
+    // 获取股票基本信息
+    const stockDetailData = await apiService.getStockDetail(stockCode.value)
+    if (!stockDetailData) throw new Error('股票数据返回为空')
+
+    // 获取杜邦分析数据
+    await fetchDupontData()
 
     // 基础信息赋值
     stockInfo.value = {
-      code: data.baseInfo.stockCode || stockCode.value,
-      name: data.baseInfo.stockName || '未知股票',
-      price: data.coreQuotes.currentPrice || '0.00',
-      changeRate: data.coreQuotes.changeRate || 0,
-      industry: data.baseInfo.industry || '未知行业',
-      companyName: data.baseInfo.companyName || '未知公司',
-      companyProfile: data.baseInfo.companyProfile || '',
-      listDate: data.baseInfo.listDate || '--',
-      totalShares: data.baseInfo.totalShares || '0',
-      floatShares: data.baseInfo.floatShares || '0',
-      marketCap: data.baseInfo.marketCap || '0',
-      topShareholders: data.topShareholders || [],
-      competitors: data.competitors || [] // 竞争对手数据
+      code: stockDetailData.baseInfo.stockCode || stockCode.value,
+      name: stockDetailData.baseInfo.stockName || '未知股票',
+      price: stockDetailData.coreQuotes.currentPrice || '0.00',
+      changeRate: stockDetailData.coreQuotes.changeRate || 0,
+      industry: stockDetailData.baseInfo.industry || '未知行业',
+      companyName: stockDetailData.baseInfo.companyName || '未知公司',
+      companyProfile: stockDetailData.baseInfo.companyProfile || '',
+      listDate: stockDetailData.baseInfo.listDate || '--',
+      totalShares: stockDetailData.baseInfo.totalShares || '0',
+      floatShares: stockDetailData.baseInfo.floatShares || '0',
+      marketCap: stockDetailData.baseInfo.marketCap || '0',
+      topShareholders: stockDetailData.topShareholders || [],
+      competitors: stockDetailData.competitors || [] // 竞争对手数据
     }
 
     // 财务数据处理（自适应3-5年）
-    const financeData = data.financialData || {}
-    financialData.value = financeData
-    // 提取年份并按降序排序（最新年份在前）
-    financialYears.value = Object.keys(financeData).sort((a, b) => b - a)
+    let financeData = stockDetailData.financialData || {}
+    
+    // 处理财务数据 - 即使stockDetailData.financialData存在，也从杜邦分析数据中提取最新的财务指标
+    // 这样可以确保数据的完整性和一致性
+    if (dupontData.value && dupontData.value.full_data) {
+      // 首先，使用stockDetailData.financialData作为基础数据
+      const newFinanceData = { ...financeData }
+      
+      // 处理杜邦分析数据中的财务指标
+      dupontData.value.full_data.forEach(item => {
+        // 使用完整的报告期作为键（格式如"2025-09-30"）
+        const reportPeriod = item['报告期']
+        
+        // 如果该报告期不存在，则创建一个新的报告期对象
+        if (!newFinanceData[reportPeriod]) {
+          newFinanceData[reportPeriod] = {}
+        }
+        
+        // 提取并转换财务指标
+        // 总营收（单位：万元转亿元）
+        const revenue = item['营业总收入'] ? parseFloat(item['营业总收入'].replace(/,/g, '')) / 10000 : 0
+        if (revenue > 0) {
+          newFinanceData[reportPeriod].totalRevenue = revenue
+        }
+        
+        // 净利润（单位：万元转亿元）
+        const netProfit = item['净利润'] ? parseFloat(item['净利润'].replace(/,/g, '')) / 10000 : 0
+        if (netProfit > 0) {
+          newFinanceData[reportPeriod].netProfit = netProfit
+        }
+        
+        // 归属母公司股东净利润（单位：万元转亿元）
+        const netProfitAttr = item['归属母公司股东净利润'] ? parseFloat(item['归属母公司股东净利润'].replace(/,/g, '')) / 10000 : 0
+        if (netProfitAttr > 0) {
+          newFinanceData[reportPeriod].netProfitAttribution = netProfitAttr
+        }
+        
+        // 扣非净利润（使用净利润作为近似值，因为杜邦分析数据中没有直接提供）
+        const nonNetProfit = item['净利润'] ? parseFloat(item['净利润'].replace(/,/g, '')) / 10000 : 0
+        if (nonNetProfit > 0) {
+          newFinanceData[reportPeriod].nonNetProfit = nonNetProfit
+        }
+        
+        // 应收账款（杜邦分析数据中没有直接提供，暂时设为0）
+        newFinanceData[reportPeriod].receivables = 0
+      })
+      
+      // 使用新的财务数据
+      financialData.value = newFinanceData
+    }
+    // 提取报告期并按日期降序排序（最新报告期在前）
+      financialYears.value = Object.keys(financialData.value).sort((a, b) => new Date(b) - new Date(a))
 
     // 估值与交易计划数据（从接口获取已保存的数据）
-    valuationLogic.value = data.valuationLogic || ''
-    buyPoint.value = data.tradingPlan?.buyPoint || ''
-    maxLossPoint.value = data.tradingPlan?.maxLossPoint || ''
-    maxLossRate.value = data.tradingPlan?.maxLossRate || ''
-    expectedGrowthRate.value = data.tradingPlan?.expectedGrowthRate || ''
-    expectedPoint.value = data.tradingPlan?.expectedPoint || ''
+    valuationLogic.value = stockDetailData.valuationLogic || ''
+    buyPoint.value = stockDetailData.tradingPlan?.buyPoint || ''
+    maxLossPoint.value = stockDetailData.tradingPlan?.maxLossPoint || ''
+    maxLossRate.value = stockDetailData.tradingPlan?.maxLossRate || ''
+    expectedGrowthRate.value = stockDetailData.tradingPlan?.expectedGrowthRate || ''
+    expectedPoint.value = stockDetailData.tradingPlan?.expectedPoint || ''
 
     // 利好利空数据处理：由fetchStockNotes()从笔记API加载，这里不做处理
     // prosPoints.value = data.prosCons?.prosPoints || ''
     // consPoints.value = data.prosCons?.consPoints || ''
 
     // 预测数据
-    maxUpwardRange.value = data.prediction?.maxUpwardRange || ''
-    maxDownwardRange.value = data.prediction?.maxDownwardRange || ''
-    investmentDuration.value = data.prediction?.investmentDuration || ''
+    maxUpwardRange.value = stockDetailData.prediction?.maxUpwardRange || ''
+    maxDownwardRange.value = stockDetailData.prediction?.maxDownwardRange || ''
+    investmentDuration.value = stockDetailData.prediction?.investmentDuration || ''
 
     // 竞争对手数据
-    competitors.value = data.competitors || []
+    competitors.value = stockDetailData.competitors || []
 
   } catch (err) {
     console.error('获取股票数据失败:', err)
