@@ -119,6 +119,7 @@ class StockDetailResponse(BaseModel):
     baseInfo: Dict[str, Union[str, float]]  # 基础信息
     coreQuotes: Dict[str, Union[str, float, int]]  # 实时行情
     financialData: Dict[str, StockFinancialData]  # 年度财务数据（key: 年份）
+    mllsj: Dict[str, Dict[str, str]]  # 毛利率和净利率季度数据
     topShareholders: List[StockShareholder]  # 十大股东
     dataValidity: Dict[str, Union[bool, str]]  # 数据有效性
 
@@ -1011,11 +1012,24 @@ def get_stock_detail(stock_code: str):
             if tencent_data["changeRate"] >= 0:
                 base_info_data["coreQuotes"]["changeRate"] = tencent_data["changeRate"]
         
+        # 处理财务数据，将mllsj从financialData中分离出来，避免模型验证错误
+        processed_financial_data = {}
+        mllsj_data = {}
+        
+        for key, value in financial_data.items():
+            if key == "mllsj":
+                # 保存mllsj数据
+                mllsj_data = value
+            else:
+                # 只保留符合StockFinancialData模型的数据（年份数据）
+                processed_financial_data[key] = value
+        
         return {
             "baseInfo": base_info,
             "coreQuotes": base_info_data["coreQuotes"],
             "tencentData": base_info_data.get("tencentData", {}),  # 包含完整的腾讯财经数据
-            "financialData": financial_data,  # 这里返回的是指定接口的财务数据
+            "financialData": processed_financial_data,  # 这里返回的是符合模型要求的财务数据
+            "mllsj": mllsj_data,  # 将mllsj作为单独字段返回
             "topShareholders": [],  # 已移除十大股东数据
             "dataValidity": {
                 "isValid": True,

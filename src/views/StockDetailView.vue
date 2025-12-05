@@ -201,6 +201,15 @@
                       <canvas id="netProfitTrendChart"></canvas>
                     </div>
                   </div>
+                  <!-- 毛利率和净利率趋势图 -->
+                  <div class="chart-section bg-gradient-to-r from-white to-gray-50 p-4 rounded-lg border border-gray-200">
+                    <h4 class="chart-subtitle text-lg font-semibold mb-3 text-gray-700 flex items-center gap-1.5">
+                      <i class="icon">📊</i> 毛利率(%)和净利率(%)趋势
+                    </h4>
+                    <div class="chart-container h-64 rounded-lg border border-gray-200 overflow-hidden bg-white">
+                      <canvas id="mllsjTrendChart"></canvas>
+                    </div>
+                  </div>
                   <!-- ROE趋势图 -->
                   <div class="chart-section bg-gradient-to-r from-white to-gray-50 p-4 rounded-lg border border-gray-200">
                     <h4 class="chart-subtitle text-lg font-semibold mb-3 text-gray-700 flex items-center gap-1.5">
@@ -735,6 +744,9 @@ onUnmounted(() => {
   if (fiveFactorChartInstance.value) {
     fiveFactorChartInstance.value.destroy()
   }
+  if (mllsjChartInstance.value) {
+    mllsjChartInstance.value.destroy()
+  }
 })
 
 // 获取杜邦分析数据
@@ -1162,6 +1174,10 @@ const nonProfitChartInstance = ref(null)
 const receivablesChartInstance = ref(null)
 const revenueChartInstance = ref(null)
 const netProfitChartInstance = ref(null)
+const mllsjChartInstance = ref(null)
+
+// 毛利率和净利率数据
+const mllsjData = ref(null)
 
 // 笔记相关
 const stockNotes = ref([])
@@ -1182,6 +1198,120 @@ const stockCode = computed(() => {
   console.log('路由参数:', route.params)
   return route.params.code
 })
+
+// 初始化毛利率和净利率趋势图
+const initMllsjChart = () => {
+  if (!Chart || !mllsjData.value) return
+  
+  const ctx = document.getElementById('mllsjTrendChart')
+  if (!ctx) return
+  
+  // 销毁现有图表实例
+  if (mllsjChartInstance.value) {
+    mllsjChartInstance.value.destroy()
+  }
+  
+  // 准备数据 - 从旧到最新排序
+  const sortedData = Object.entries(mllsjData.value)
+    .map(([date, data]) => ({ date, ...data }))
+    .sort((a, b) => new Date(a.date.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3')) - new Date(b.date.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3')))
+  
+  const labels = sortedData.map(item => {
+    const date = item.date
+    const year = date.substring(0, 4)
+    const month = date.substring(4, 6)
+    const quarter = Math.ceil(parseInt(month) / 3)
+    return `${year}-Q${quarter}`
+  })
+  
+  // 提取毛利率数据（去掉%号并转换为数字）
+  const mllData = sortedData.map(item => {
+    const value = parseFloat(item.mll || 0)
+    return isNaN(value) ? 0 : parseFloat(value.toFixed(2))
+  })
+  
+  // 提取净利率数据
+  const xsjllData = sortedData.map(item => {
+    const value = parseFloat(item.xsjll || 0)
+    return isNaN(value) ? 0 : parseFloat(value.toFixed(2))
+  })
+  
+  // 创建图表
+  mllsjChartInstance.value = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: '毛利率 (%)',
+          data: mllData,
+          borderColor: '#165DFF',
+          backgroundColor: 'rgba(22, 93, 255, 0.1)',
+          borderWidth: 2,
+          pointBackgroundColor: '#165DFF',
+          pointRadius: 4,
+          tension: 0.3
+        },
+        {
+          label: '净利率 (%)',
+          data: xsjllData,
+          borderColor: '#52C41A',
+          backgroundColor: 'rgba(82, 196, 26, 0.1)',
+          borderWidth: 2,
+          pointBackgroundColor: '#52C41A',
+          pointRadius: 4,
+          tension: 0.3
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'top',
+          labels: {
+            font: { size: 12 },
+            boxWidth: 15
+          }
+        },
+        tooltip: {
+          padding: 10,
+          mode: 'index',
+          intersect: false
+        }
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: {
+            font: { size: 11 },
+            maxRotation: 45,
+            minRotation: 45
+          }
+        },
+        y: {
+          beginAtZero: true,
+          grid: { color: 'rgba(0, 0, 0, 0.05)' },
+          ticks: {
+            font: { size: 11 },
+            callback: (value) => `${value}%`
+          },
+          title: {
+            display: true,
+            text: '百分比 (%)',
+            font: { size: 12 }
+          }
+        }
+      },
+      interaction: {
+        mode: 'nearest',
+        axis: 'x',
+        intersect: false
+      }
+    }
+  })
+}
 
 // 初始化财务趋势图表（自适应季度数据）
 const initFinancialCharts = () => {
@@ -1282,6 +1412,9 @@ const initFinancialCharts = () => {
     })
   }
 
+  // 初始化毛利率和净利率图表
+  initMllsjChart()
+  
   // 总营收图表
   const revenueCtx = document.getElementById('revenueTrendChart')
   if (revenueCtx) {
@@ -1613,6 +1746,9 @@ const fetchStockData = async () => {
 
     // 竞争对手数据
     competitors.value = stockDetailData.value.competitors || []
+    
+    // 毛利率和净利率季度数据
+    mllsjData.value = stockDetailData.value.mllsj || {}
 
   } catch (err) {
     console.error('获取股票数据失败:', err)

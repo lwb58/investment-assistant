@@ -268,7 +268,7 @@ class DataSource:
         # 拼接 paperCode（market+股票代码，如 sh601669）
         paper_code = f"{market}{stock_code}"
         # 报表类型（lrb=利润表，核心财务数据来源）
-        report_type = "lrb"  # lrb-利润表、zcfz-资产负债表、xjll-现金流量表
+        report_type = "gjzb"  # lrb-利润表、zcfz-资产负债表、xjll-现金流量表
         financial_data = {}
         
         try:
@@ -394,10 +394,38 @@ class DataSource:
                 elif total_profit is not None and financial_data[latest_year]["netProfit"] == "0.00":
                     financial_data[latest_year]["netProfit"] = f"{total_profit:.2f}"  # 如果没有所得税费用，直接使用利润总额
                 
-            logger.info(f"财务数据获取成功：{stock_code} | 营收：{financial_data[latest_year]['revenue']}")
             # 使用提取的年份作为键，保持向后兼容
             financial_data[latest_year] = financial_data[latest_year]
+             # 毛利率和净利率数据（字典结构，键为季度日期）
+            gross_data = {}
             
+            # 遍历所有季度报表数据
+            for date_key, report_info in report_list.items():
+                
+                # 获取季度数据
+                if isinstance(report_info, dict):
+                    report_items = report_info.get("data", [])
+                    
+                    # 初始化当前季度的毛利率和净利率数据
+                    if date_key not in gross_data:
+                        gross_data[date_key] = {"mll": "0.0", "xsjll": "0.0"}
+                    
+                    # 提取毛利率和净利率
+                    for item in report_items:
+                        item_title = item.get("item_title", "")
+                        item_value = item.get("item_value", "0.0")
+                          
+                        # 处理毛利率（可能是"毛利率"或"销售毛利率"）
+                        if "毛利率" in item_title:
+                            gross_data[date_key]["mll"] = item_value
+                        # 处理净利率（可能是"净利率"或"销售净利率"）
+                        elif "净利率" in item_title:
+                            gross_data[date_key]["xsjll"] = item_value
+            
+            # 将处理后的毛利率和净利率数据添加到财务数据中
+            if gross_data:
+                financial_data['mllsj'] = gross_data
+
         except json.JSONDecodeError as e:
             logger.error(f"财务数据JSON解析失败：{stock_code} | 错误：{str(e)}")
             financial_data["2022"] = DataSource._get_default_finance_data()
