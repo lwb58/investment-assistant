@@ -401,14 +401,20 @@
                     </h3>
                   </div>
                   <div class="valuation-container">
-                    <textarea v-model="valuationLogic"
-                      class="form-textarea w-full px-2 py-2 border border-gray-100 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent mb-2 text-sm"
-                      rows="3" placeholder="记录估值逻辑（行业中枢、增长预期等）"></textarea>
+                    <v-md-editor
+                      v-model="valuationLogic"
+                      :placeholder="'记录估值逻辑（支持Markdown语法，可直接粘贴图片）'"
+                      height="300px"
+                      :autofocus="false"
+                      class="mb-2"
+                    ></v-md-editor>
                     <button class="btn primary w-full py-2" @click="saveValuationLogic">
                       保存估值逻辑
                     </button>
                   </div>
                 </div>
+
+
               </div>
 
               <!-- 右侧：占6列 -->
@@ -1107,7 +1113,6 @@ const initFiveFactorChart = () => {
 
 // 新增：估值与交易计划相关状态
 const valuationLogic = ref('') // 估值逻辑
-const investmentForecast = ref('') // 投资预测
 const tradingPlan = ref('') // 交易计划
 const buyPoint = ref('') // 买入点
 const maxLossRate = ref('') // 最大亏损跌幅
@@ -1707,7 +1712,6 @@ const fetchValuationLogic = async () => {
     const data = await apiService.getStockValuation(stockCode.value)
     if (data) {
       valuationLogic.value = data.valuationContent || ''
-      investmentForecast.value = data.investmentForecast || ''
       tradingPlan.value = data.tradingPlan || ''
       
       // 解析交易计划数据并设置到对应的响应式变量中
@@ -1736,7 +1740,6 @@ const saveValuationLogic = async () => {
       stockCode: stockCode.value,
       stockName: stockInfo.value.name,
       valuationContent: valuationLogic.value,
-      investmentForecast: investmentForecast.value,
       tradingPlan: tradingPlan.value
     })
     await fetchValuationLogic() // 刷新数据
@@ -1765,7 +1768,6 @@ const saveInvestmentPlan = async () => {
       stockCode: stockCode.value,
       stockName: stockInfo.value.name,
       valuationContent: valuationLogic.value,
-      investmentForecast: investmentForecast.value,
       tradingPlan: JSON.stringify(tradingPlan)
     })
 
@@ -2489,6 +2491,25 @@ onUnmounted(() => {
   .pros-area .form-textarea,
   .cons-area .form-textarea {
     font-size: 1.25rem; /* text-xl 对应的大小 */
+  }
+  
+  /* Markdown编辑器样式优化 */
+  .v-md-editor {
+    margin-bottom: 10px;
+  }
+  
+  .v-md-editor .v-md-editor-toolbar {
+    background-color: #f5f5f5;
+    border-bottom: 1px solid #e5e5e5;
+  }
+  
+  .v-md-editor .v-md-editor-content {
+    border: 1px solid #e5e5e5;
+    border-radius: 4px;
+  }
+  
+  .v-md-editor .v-md-editor-preview {
+    background-color: #ffffff;
   }
 
 .form-actions {

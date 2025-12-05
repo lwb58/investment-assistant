@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@kangc/v-md-editor": "^2.3.18",
     "axios": "^1.13.2",
     "chart.js": "^4.5.1",
     "chartjs-plugin-datalabels": "^2.2.0",
