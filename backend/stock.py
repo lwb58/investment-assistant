@@ -103,6 +103,17 @@ class StockShareholder(BaseModel):
     type: str  # 股东类型
     percentage: str  # 持股比例（%）
 
+# 估值逻辑相关模型
+class ValuationLogicItem(BaseModel):
+    id: Optional[str] = None
+    stockCode: str
+    stockName: str
+    valuationContent: str
+    investmentForecast: Optional[str] = ""
+    tradingPlan: Optional[str] = ""
+    createTime: Optional[str] = None
+    updateTime: Optional[str] = None
+
 class StockDetailResponse(BaseModel):
     """股票详情响应模型"""
     baseInfo: Dict[str, Union[str, float]]  # 基础信息
@@ -1086,4 +1097,58 @@ def delete_stock(stock_id: str):
     
     logger.info(f"成功删除股票: {stock_id}")
     return {"detail": "股票删除成功"}
+
+# -------------- 估值逻辑API --------------
+@stock_router.get("/valuation/{stock_code}", response_model=Optional[ValuationLogicItem])
+def get_stock_valuation(stock_code: str):
+    """获取特定股票的估值逻辑数据"""
+    try:
+        valuation_data = db.get_valuation_by_stock_code(stock_code)
+        return valuation_data
+    except Exception as e:
+        logger.error(f"获取估值逻辑数据失败: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="获取估值逻辑数据失败")
+
+@stock_router.post("/valuation", response_model=ValuationLogicItem)
+def save_stock_valuation(valuation: ValuationLogicItem):
+    """保存或更新股票估值逻辑数据"""
+    try:
+        # 检查是否已存在
+        existing_valuation = db.get_valuation_by_stock_code(valuation.stockCode)
+        
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        if existing_valuation:
+            # 更新现有记录
+            update_data = {
+                "stockName": valuation.stockName,
+                "valuationContent": valuation.valuationContent,
+                "investmentForecast": valuation.investmentForecast or "",
+                "tradingPlan": valuation.tradingPlan or ""
+            }
+            updated_valuation = db.update_valuation(existing_valuation["id"], update_data)
+            if not updated_valuation:
+                raise HTTPException(status_code=500, detail="更新估值逻辑数据失败")
+            logger.info(f"成功更新股票估值逻辑: {valuation.stockCode}")
+            return updated_valuation
+        else:
+            # 创建新记录
+            new_valuation = {
+                "id": str(datetime.now().timestamp()).replace('.', '')[-10:],
+                "stockCode": valuation.stockCode,
+                "stockName": valuation.stockName,
+                "valuationContent": valuation.valuationContent,
+                "investmentForecast": valuation.investmentForecast or "",
+                "tradingPlan": valuation.tradingPlan or "",
+                "createTime": current_time,
+                "updateTime": current_time
+            }
+            saved_valuation = db.create_valuation(new_valuation)
+            logger.info(f"成功创建股票估值逻辑: {valuation.stockCode}")
+            return saved_valuation
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"保存估值逻辑数据失败: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="保存估值逻辑数据失败")
 

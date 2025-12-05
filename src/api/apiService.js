@@ -278,6 +278,26 @@ async updateStock(stockId, updateData) {  // 参数名从stockCode改为stockId
       throw error;
     }
   }
+  
+  /**
+   * 获取股票估值逻辑数据
+   * @param {string} stockCode - 股票代码
+   * @returns {Promise<Object>} 估值逻辑数据
+   */
+  async getStockValuation(stockCode) {
+    return this.request('GET', `/stocks/valuation/${stockCode}`);
+  }
+  
+  /**
+   * 保存股票估值逻辑数据
+   * @param {Object} valuationData - 估值逻辑数据
+   * @returns {Promise<Object>} 保存结果
+   */
+  async saveStockValuation(valuationData) {
+    return this.request('POST', `/stocks/valuation`, {
+      body: JSON.stringify(valuationData)
+    });
+  }
 }
 
 // 导出单例实例

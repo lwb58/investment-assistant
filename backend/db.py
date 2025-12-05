@@ -116,6 +116,26 @@ def init_database(notes_storage: List[Dict[str, Any]] = None, stock_storage: Lis
         logger.error(f"初始化cost_positions表失败: {str(e)}")
         conn.rollback()
     
+    # 创建估值逻辑表
+    try:
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS valuation_logic (
+                id TEXT PRIMARY KEY,
+                stock_code TEXT NOT NULL,
+                stock_name TEXT NOT NULL,
+                valuation_content TEXT NOT NULL,
+                investment_forecast TEXT DEFAULT '',
+                trading_plan TEXT DEFAULT '',
+                create_time TEXT NOT NULL,
+                update_time TEXT NOT NULL
+            )
+        ''')
+        conn.commit()
+        logger.info("valuation_logic表结构初始化成功")
+    except Exception as e:
+        logger.error(f"初始化valuation_logic表失败: {str(e)}")
+        conn.rollback()
+    
     # 实现数据迁移逻辑
     try:
         # 迁移笔记数据
@@ -284,6 +304,94 @@ def delete_note(note_id: str) -> bool:
     conn.close()
     
     return True
+
+# 估值逻辑相关操作
+def get_valuation_by_stock_code(stock_code: str) -> Optional[Dict[str, Any]]:
+    """根据股票代码获取估值逻辑数据"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM valuation_logic WHERE stock_code = ?", (stock_code,))
+    row = cursor.fetchone()
+    conn.close()
+    
+    if not row:
+        return None
+    
+    row_dict = dict(row)
+    return {
+        "id": row_dict["id"],
+        "stockCode": row_dict["stock_code"],
+        "stockName": row_dict["stock_name"],
+        "valuationContent": row_dict["valuation_content"],
+        "investmentForecast": row_dict["investment_forecast"],
+        "tradingPlan": row_dict["trading_plan"],
+        "createTime": row_dict["create_time"],
+        "updateTime": row_dict["update_time"]
+    }
+
+def create_valuation(valuation_data: Dict[str, Any]) -> Dict[str, Any]:
+    """创建估值逻辑数据"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute(
+        "INSERT INTO valuation_logic (id, stock_code, stock_name, valuation_content, investment_forecast, trading_plan, create_time, update_time) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (valuation_data["id"], valuation_data["stockCode"], valuation_data["stockName"], 
+         valuation_data["valuationContent"], valuation_data["investmentForecast"], 
+         valuation_data["tradingPlan"], valuation_data["createTime"], valuation_data["updateTime"])
+    )
+    conn.commit()
+    conn.close()
+    
+    return valuation_data
+
+def update_valuation(valuation_id: str, valuation_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """更新估值逻辑数据"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # 检查记录是否存在
+    cursor.execute("SELECT * FROM valuation_logic WHERE id = ?", (valuation_id,))
+    row = cursor.fetchone()
+    if not row:
+        conn.close()
+        return None
+    
+    # 更新记录
+    update_fields = []
+    update_values = []
+    
+    if "stockName" in valuation_data:
+        update_fields.append("stock_name = ?")
+        update_values.append(valuation_data["stockName"])
+    
+    if "valuationContent" in valuation_data:
+        update_fields.append("valuation_content = ?")
+        update_values.append(valuation_data["valuationContent"])
+    
+    if "investmentForecast" in valuation_data:
+        update_fields.append("investment_forecast = ?")
+        update_values.append(valuation_data["investmentForecast"])
+    
+    if "tradingPlan" in valuation_data:
+        update_fields.append("trading_plan = ?")
+        update_values.append(valuation_data["tradingPlan"])
+    
+    # 强制更新时间
+    update_fields.append("update_time = ?")
+    update_values.append(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    
+    # 添加WHERE条件
+    update_values.append(valuation_id)
+    
+    # 执行更新
+    sql = f"UPDATE valuation_logic SET {', '.join(update_fields)} WHERE id = ?"
+    cursor.execute(sql, update_values)
+    conn.commit()
+    conn.close()
+    
+    return get_valuation_by_stock_code(dict(row)["stock_code"])
 
 # 股票相关操作
 def get_all_stocks(search: Optional[str] = None) -> List[Dict[str, Any]]:

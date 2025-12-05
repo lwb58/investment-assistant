@@ -564,20 +564,7 @@
                 placeholder="自动计算" readonly>
             </div>
           </div>
-          <div class="grid grid-cols-2 gap-2">
-            <div class="form-group">
-              <label class="form-label block text-xs font-medium text-gray-600 mb-0.5">最大上涨幅度（%）</label>
-              <input v-model="maxUpwardRange" type="number" step="0.1"
-                class="form-input w-full px-2 py-2 border border-gray-100 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent text-sm"
-                placeholder="预期最大涨幅">
-            </div>
-            <div class="form-group">
-              <label class="form-label block text-xs font-medium text-gray-600 mb-0.5">最大下跌幅度（%）</label>
-              <input v-model="maxDownwardRange" type="number" step="0.1"
-                class="form-input w-full px-2 py-2 border border-gray-100 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent text-sm"
-                placeholder="预期最大跌幅">
-            </div>
-          </div>
+
           <div class="form-group">
             <label class="form-label block text-xs font-medium text-gray-600 mb-0.5">投资时长（月）</label>
             <input v-model="investmentDuration" type="number" step="1"
@@ -1120,6 +1107,8 @@ const initFiveFactorChart = () => {
 
 // 新增：估值与交易计划相关状态
 const valuationLogic = ref('') // 估值逻辑
+const investmentForecast = ref('') // 投资预测
+const tradingPlan = ref('') // 交易计划
 const buyPoint = ref('') // 买入点
 const maxLossRate = ref('') // 最大亏损跌幅
 const expectedGrowthRate = ref('') // 预期涨幅
@@ -1130,8 +1119,7 @@ const prosPoints = ref('') // 利好点
 const consPoints = ref('') // 利空点
 
 // 新增：预测数据
-const maxUpwardRange = ref('') // 最大上涨幅度
-const maxDownwardRange = ref('') // 最大下跌幅度
+
 const investmentDuration = ref('') // 投资时长
 
 // 友商录入
@@ -1611,22 +1599,12 @@ const fetchStockData = async () => {
       }
     }
 
-    // 估值与交易计划数据（从接口获取已保存的数据）
-    valuationLogic.value = stockDetailData.value.valuationLogic || ''
-    buyPoint.value = stockDetailData.value.tradingPlan?.buyPoint || ''
-    maxLossPoint.value = stockDetailData.value.tradingPlan?.maxLossPoint || ''
-    maxLossRate.value = stockDetailData.value.tradingPlan?.maxLossRate || ''
-    expectedGrowthRate.value = stockDetailData.value.tradingPlan?.expectedGrowthRate || ''
-    expectedPoint.value = stockDetailData.value.tradingPlan?.expectedPoint || ''
+    // 从新的估值逻辑API获取数据
+    fetchValuationLogic()
 
     // 利好利空数据处理：由fetchStockNotes()从笔记API加载，这里不做处理
     // prosPoints.value = data.prosCons?.prosPoints || ''
     // consPoints.value = data.prosCons?.consPoints || ''
-
-    // 预测数据
-    maxUpwardRange.value = stockDetailData.value.prediction?.maxUpwardRange || ''
-    maxDownwardRange.value = stockDetailData.value.prediction?.maxDownwardRange || ''
-    investmentDuration.value = stockDetailData.value.prediction?.investmentDuration || ''
 
     // 竞争对手数据
     competitors.value = stockDetailData.value.competitors || []
@@ -1723,13 +1701,45 @@ const fetchStockNotes = async () => {
   }
 }
 
+// 获取估值逻辑数据
+const fetchValuationLogic = async () => {
+  try {
+    const data = await apiService.getStockValuation(stockCode.value)
+    if (data) {
+      valuationLogic.value = data.valuationContent || ''
+      investmentForecast.value = data.investmentForecast || ''
+      tradingPlan.value = data.tradingPlan || ''
+      
+      // 解析交易计划数据并设置到对应的响应式变量中
+      if (data.tradingPlan) {
+        try {
+          const parsedTradingPlan = JSON.parse(data.tradingPlan)
+          buyPoint.value = parsedTradingPlan.buyPoint || ''
+          maxLossRate.value = parsedTradingPlan.maxLossRate || ''
+          expectedGrowthRate.value = parsedTradingPlan.expectedGrowthRate || ''
+          investmentDuration.value = parsedTradingPlan.investmentDuration || ''
+          // 注意：maxLossPoint和expectedPoint是计算属性，会自动根据其他变量计算
+        } catch (parseError) {
+          console.error('解析交易计划数据失败:', parseError)
+        }
+      }
+    }
+  } catch (err) {
+    console.error('获取估值逻辑数据失败:', err)
+  }
+}
+
 // 保存估值逻辑
 const saveValuationLogic = async () => {
   try {
     await apiService.saveStockValuation({
       stockCode: stockCode.value,
-      valuationLogic: valuationLogic.value
+      stockName: stockInfo.value.name,
+      valuationContent: valuationLogic.value,
+      investmentForecast: investmentForecast.value,
+      tradingPlan: tradingPlan.value
     })
+    await fetchValuationLogic() // 刷新数据
     alert('估值逻辑保存成功！')
   } catch (err) {
     console.error('保存估值逻辑失败:', err)
@@ -1740,27 +1750,26 @@ const saveValuationLogic = async () => {
 // 保存投资计划（合并交易计划和预测数据）
 const saveInvestmentPlan = async () => {
   try {
-    // 保存交易计划
+    // 构建完整的交易计划对象
     const tradingPlan = {
       buyPoint: buyPoint.value,
       maxLossPoint: maxLossPoint.value,
       maxLossRate: maxLossRate.value,
       expectedGrowthRate: expectedGrowthRate.value,
-      expectedPoint: expectedPoint.value
-    }
-    await apiService.saveStockTradingPlan({
-      stockCode: stockCode.value,
-      tradingPlan
-    })
-
-    // 保存预测数据
-    await apiService.savePrediction({
-      stockCode: stockCode.value,
-      maxUpwardRange: maxUpwardRange.value,
-      maxDownwardRange: maxDownwardRange.value,
+      expectedPoint: expectedPoint.value,
       investmentDuration: investmentDuration.value
+    }
+    
+    // 使用现有的saveStockValuation方法保存交易计划
+    await apiService.saveStockValuation({
+      stockCode: stockCode.value,
+      stockName: stockInfo.value.name,
+      valuationContent: valuationLogic.value,
+      investmentForecast: investmentForecast.value,
+      tradingPlan: JSON.stringify(tradingPlan)
     })
 
+    await fetchValuationLogic() // 刷新数据
     alert('投资计划保存成功！')
   } catch (err) {
     console.error('保存投资计划失败:', err)
