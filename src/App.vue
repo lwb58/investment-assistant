@@ -86,9 +86,7 @@
       <div class="page-content">
         <router-view v-slot="{ Component }">
           <transition name="fade" mode="out-in">
-            <keep-alive>
-              <component :is="Component" v-if="Component" />
-            </keep-alive>
+            <component :is="Component" v-if="Component" />
           </transition>
         </router-view>
       </div>

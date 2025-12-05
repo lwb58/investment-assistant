@@ -1,12 +1,12 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
-// 动态导入组件
-const StockListView = () => import('../views/StockListView.vue')
-const StockDetailView = () => import('../views/StockDetailView.vue')
-const ReviewNotesView = () => import('../views/ReviewNotesView.vue')
-const MarketOverviewView = () => import('../views/MarketOverviewView.vue')
-const SettingsView = () => import('../views/SettingsView.vue')
-const PositionAnalysisView = () => import('../views/PositionAnalysisView.vue')
+// 直接导入组件
+import StockListView from '../views/StockListView.vue'
+import StockDetailView from '../views/StockDetailView.vue'
+import ReviewNotesView from '../views/ReviewNotesView.vue'
+import MarketOverviewView from '../views/MarketOverviewView.vue'
+import SettingsView from '../views/SettingsView.vue'
+import PositionAnalysisView from '../views/PositionAnalysisView.vue'
 
 const routes = [
   {
