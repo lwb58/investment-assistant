@@ -444,28 +444,28 @@
                   <div class="modal-content w-4/5 max-w-4xl max-h-[90vh] overflow-y-auto" @click.stop>
                     <div class="modal-header flex justify-between items-center mb-4">
                       <h3 class="text-lg font-semibold">编辑估值逻辑</h3>
-                      <button class="close-btn" @click="isEditingValuation = false">×</button>
+                      <button class="close-btn" @click="() => { isEditingValuation = false; handleEditorDestroyed(); }">×</button>
                     </div>
                     <div class="valuation-edit-container">
-                      <div class="toolbar-container mb-2">
+                      <div v-if="isEditingValuation" class="toolbar-container mb-2">
                         <Toolbar
-                          :editor="isEditingValuation ? editorRef : null"
+                          :editor="editorRef"
                           :mode="editorConfig.mode"
                           ref="toolbarRef"
                         />
                       </div>
-                      <div class="editor-container h-[400px] border border-gray-200 rounded">
+                      <div v-if="isEditingValuation" class="editor-container h-[400px] border border-gray-200 rounded">
                         <Editor
                           v-model="editedValuationLogic"
                           :defaultConfig="editorConfig"
                           :mode="editorConfig.mode"
                           @onCreated="handleEditorCreated"
-                          @onDestroyed="editor => editorRef = null"
+                          @onDestroyed="handleEditorDestroyed"
                           @onChange="editor => editedValuationLogic = editor.getHtml()"
                         />
                       </div>
                       <div class="flex justify-end gap-2 mt-4">
-                        <button class="btn secondary" @click="isEditingValuation = false">
+                        <button class="btn secondary" @click="() => { isEditingValuation = false; handleEditorDestroyed(); }">
                           取消
                         </button>
                         <button class="btn primary" @click="saveValuationLogic">
@@ -700,6 +700,17 @@ const handleEditorCreated = (editor) => {
   console.log('编辑器创建完成');
   editorRef.value = editor;
   // 编辑器创建完成，不需要动态设置菜单配置
+};
+
+// 编辑器销毁时的回调函数
+const handleEditorDestroyed = () => {
+  console.log('编辑器销毁完成');
+  if (editorRef.value) {
+    editorRef.value = null;
+  }
+  if (toolbarRef.value) {
+    toolbarRef.value = null;
+  }
 };
 
 const threeFactorError = ref('')
@@ -1225,7 +1236,7 @@ const editorConfig = ref({
       'fontSize', 'fontFamily',
       'bulletedList', 'numberedList',
       'todo', 'redo', 'undo',
-      // 图片相关功能
+      // 图片相关功能 - 保留插入图片（用于本地上传）和删除图片功能
       'insertImage', 'deleteImage',
       // 完整的表格功能配置，包括表头相关操作
       'insertTable', 'deleteTable', 'insertTableRow', 'deleteTableRow', 'insertTableCol', 'deleteTableCol', 'tableHeader', 'tableFullWidth', 'insertCode', 'codeBlock'
@@ -1245,6 +1256,8 @@ const editorConfig = ref({
       maxFileSize: 10 * 1024 * 1024, // 10MB
       // 支持的图片类型
       accept: ['image/jpg', 'image/jpeg', 'image/png', 'image/gif', 'image/webp'],
+      // 禁用网络图片添加功能，避免"Cannot find textarea instance by editor"错误
+      showLinkImage: false,
       // 上传前的钩子函数
       onBeforeUpload: function(file) {
         console.log('onBeforeUpload被调用', file.name);
