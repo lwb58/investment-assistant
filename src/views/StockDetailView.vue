@@ -404,22 +404,65 @@
 
                 <!-- 估值逻辑记录卡片 -->
                 <div id="valuation-logic" class="card p-4 border border-gray-200 rounded-xl shadow-md bg-white hover:shadow-lg transition-all duration-300 mb-6">
-                  <div class="card-header mb-1">
+                  <div class="card-header mb-2 flex justify-between items-center">
                     <h3 class="card-title text-sm font-semibold flex items-center gap-1.5 text-gray-800">
                       <i class="icon text-primary">💡</i> 估值逻辑
                     </h3>
+                    <div class="flex gap-2">
+                      <button 
+                        v-if="valuationLogic"
+                        class="btn secondary text-xs py-1 px-3"
+                        @click="showValuationDetail = true"
+                      >
+                        详情
+                      </button>
+                      <button class="btn primary text-xs py-1 px-3" @click="openValuationEdit">
+                        编辑
+                      </button>
+                    </div>
                   </div>
                   <div class="valuation-container">
-                    <v-md-editor
-                      v-model="valuationLogic"
-                      :placeholder="'记录估值逻辑（支持Markdown语法，可直接粘贴图片）'"
-                      height="300px"
-                      :autofocus="false"
-                      class="mb-2"
-                    ></v-md-editor>
-                    <button class="btn primary w-full py-2" @click="saveValuationLogic">
-                      保存估值逻辑
-                    </button>
+                    <!-- 直接展示部分内容 -->
+                    <div v-if="valuationLogic" class="markdown-preview text-sm mb-2" v-html="parseMarkdown(valuationLogic.substring(0, 300) + (valuationLogic.length > 300 ? '...' : ''))"></div>
+                    <div v-else class="text-gray-400 text-sm">暂无估值逻辑</div>
+                  </div>
+                </div>
+
+                <!-- 估值逻辑详情弹窗 -->
+                <div v-if="showValuationDetail" class="modal-backdrop" @click="showValuationDetail = false">
+                  <div class="modal-content w-4/5 max-w-4xl max-h-[90vh] overflow-y-auto" @click.stop>
+                    <div class="modal-header flex justify-between items-center mb-4">
+                      <h3 class="text-lg font-semibold">估值逻辑详情</h3>
+                      <button class="close-btn" @click="showValuationDetail = false">×</button>
+                    </div>
+                    <div class="markdown-preview" v-html="parseMarkdown(valuationLogic)"></div>
+                  </div>
+                </div>
+
+                <!-- 估值逻辑编辑弹窗 -->
+                <div v-if="showValuationEdit" class="modal-backdrop" @click="showValuationEdit = false">
+                  <div class="modal-content w-4/5 max-w-4xl" @click.stop>
+                    <div class="modal-header flex justify-between items-center mb-4">
+                      <h3 class="text-lg font-semibold">编辑估值逻辑</h3>
+                      <button class="close-btn" @click="showValuationEdit = false">×</button>
+                    </div>
+                    <div class="valuation-edit-container">
+                      <v-md-editor
+                        v-model="editedValuation"
+                        :placeholder="'记录估值逻辑（支持Markdown语法，可直接粘贴图片）'"
+                        height="400px"
+                        :autofocus="true"
+                        class="mb-4"
+                      ></v-md-editor>
+                      <div class="flex justify-end gap-2">
+                        <button class="btn secondary" @click="showValuationEdit = false">
+                          取消
+                        </button>
+                        <button class="btn primary" @click="saveEditedValuation">
+                          保存
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -1126,6 +1169,10 @@ const initFiveFactorChart = () => {
 // 新增：估值与交易计划相关状态
 const valuationLogic = ref('') // 估值逻辑
 const tradingPlan = ref('') // 交易计划
+const showValuationDetail = ref(false) // 控制估值逻辑详情弹窗显示
+const showValuationEdit = ref(false) // 控制估值逻辑编辑弹窗显示
+const isEditingValuation = ref(false) // 是否处于编辑模式
+const editedValuation = ref('') // 编辑弹窗中的估值逻辑内容
 const buyPoint = ref('') // 买入点
 const maxLossRate = ref('') // 最大亏损跌幅
 const expectedGrowthRate = ref('') // 预期涨幅
@@ -1869,6 +1916,30 @@ const fetchValuationLogic = async () => {
   }
 }
 
+// 打开估值逻辑编辑弹窗
+const openValuationEdit = () => {
+  editedValuation.value = valuationLogic.value
+  showValuationEdit.value = true
+}
+
+// 保存编辑后的估值逻辑
+const saveEditedValuation = async () => {
+  try {
+    await apiService.saveStockValuation({
+      stockCode: stockCode.value,
+      stockName: stockInfo.value.name,
+      valuationContent: editedValuation.value,
+      tradingPlan: tradingPlan.value
+    })
+    await fetchValuationLogic() // 刷新数据
+    showValuationEdit.value = false
+    alert('估值逻辑保存成功！')
+  } catch (err) {
+    console.error('保存估值逻辑失败:', err)
+    alert('保存失败，请稍后重试')
+  }
+}
+
 // 保存估值逻辑
 const saveValuationLogic = async () => {
   try {
@@ -1884,6 +1955,26 @@ const saveValuationLogic = async () => {
     console.error('保存估值逻辑失败:', err)
     alert('保存失败，请稍后重试')
   }
+}
+
+// 解析Markdown为HTML（简化实现，实际项目中可能需要更完善的Markdown解析）
+const parseMarkdown = (text) => {
+  if (!text) return ''
+  // 简单替换换行和加粗
+  let html = text
+  // 换行
+  html = html.replace(/\n/g, '<br>')
+  // 加粗
+  html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+  // 斜体
+  html = html.replace(/\*(.*?)\*/g, '<em>$1</em>')
+  // 标题
+  html = html.replace(/^# (.*$)/gm, '<h1>$1</h1>')
+  html = html.replace(/^## (.*$)/gm, '<h2>$1</h2>')
+  html = html.replace(/^### (.*$)/gm, '<h3>$1</h3>')
+  // 列表
+  html = html.replace(/^- (.*$)/gm, '<li>$1</li>')
+  return html
 }
 
 // 保存投资计划（合并交易计划和预测数据）
@@ -2777,4 +2868,117 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 0.75rem;
 }
-</style>
+<style scoped>
+  /* 模态框样式 */
+  .modal-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+  }
+
+  .modal-content {
+    background-color: white;
+    border-radius: var(--border-radius-base);
+    padding: var(--spacing-xl);
+    box-shadow: var(--shadow-medium);
+    position: relative;
+  }
+
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-lg);
+    padding-bottom: var(--spacing-md);
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .close-btn {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: var(--text-tertiary);
+    padding: 0;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: var(--transition-base);
+  }
+
+  .close-btn:hover {
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+  }
+
+  /* Markdown预览样式 */
+  .markdown-preview {
+    line-height: 1.6;
+  }
+
+  .markdown-preview h1 {
+    font-size: 24px;
+    font-weight: 700;
+    margin: 1.5rem 0 1rem;
+    color: var(--text-primary);
+  }
+
+  .markdown-preview h2 {
+    font-size: 20px;
+    font-weight: 600;
+    margin: 1.25rem 0 0.75rem;
+    color: var(--text-primary);
+  }
+
+  .markdown-preview h3 {
+    font-size: 18px;
+    font-weight: 600;
+    margin: 1rem 0 0.5rem;
+    color: var(--text-primary);
+  }
+
+  .markdown-preview p {
+    margin: 0.5rem 0;
+  }
+
+  .markdown-preview strong {
+    font-weight: 600;
+  }
+
+  .markdown-preview em {
+    font-style: italic;
+  }
+
+  .markdown-preview ul, .markdown-preview ol {
+    margin: 0.5rem 0 0.5rem 1.5rem;
+  }
+
+  .markdown-preview li {
+    margin: 0.25rem 0;
+  }
+
+  .markdown-preview br {
+    display: block;
+    margin: 0.5rem 0;
+  }
+
+  /* 估值逻辑编辑弹窗样式 */
+  .valuation-edit-container {
+    width: 100%;
+  }
+
+  .valuation-edit-container .vm-editor {
+    border-radius: var(--border-radius-small);
+    overflow: hidden;
+  }
+  </style>
