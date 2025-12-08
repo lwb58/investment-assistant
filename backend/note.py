@@ -1,9 +1,12 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, File, UploadFile
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from datetime import datetime
 from uuid import uuid4
-from typing import Optional, List
+import os
+import shutil
 import logging
+from typing import Optional, List
 import db
 
 logger = logging.getLogger(__name__)
@@ -120,3 +123,49 @@ def get_notes_by_stock(stock_code: str):
     except Exception as e:
         logger.error(f"获取股票关联笔记失败: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="股票关联笔记获取失败")
+
+@note_router.post("/upload/image")
+async def upload_image(file: UploadFile = File(...), stock_code: str = None):
+    """上传图片，按股票代码分类保存"""
+    try:
+        # 确保picture目录存在
+        base_dir = "d:\\yypt\\xingziyuan\\investment-assistant\\backend\\picture"
+        if not os.path.exists(base_dir):
+            os.makedirs(base_dir)
+        
+        # 如果提供了股票代码，创建股票代码目录
+        if stock_code:
+            # 校验股票代码格式
+            if len(stock_code) != 6 or not stock_code.isdigit():
+                raise HTTPException(status_code=400, detail="股票代码必须是6位数字")
+            
+            stock_dir = os.path.join(base_dir, stock_code)
+            if not os.path.exists(stock_dir):
+                os.makedirs(stock_dir)
+            
+            # 构建保存路径
+            file_path = os.path.join(stock_dir, file.filename)
+            # 构建相对路径（用于前端显示）
+            relative_path = f"/backend/picture/{stock_code}/{file.filename}"
+        else:
+            # 没有股票代码时直接保存在picture目录
+            file_path = os.path.join(base_dir, file.filename)
+            relative_path = f"/backend/picture/{file.filename}"
+        
+        # 保存文件
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        
+        logger.info(f"图片上传成功: {relative_path}")
+        
+        # 返回相对路径和文件名
+        return JSONResponse(
+            content={
+                "url": relative_path,
+                "filename": file.filename
+            },
+            status_code=200
+        )
+    except Exception as e:
+        logger.error(f"图片上传失败: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"图片上传失败: {str(e)}")

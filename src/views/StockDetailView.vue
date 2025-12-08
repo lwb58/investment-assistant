@@ -440,31 +440,43 @@
                 </div>
 
                 <!-- 估值逻辑编辑弹窗 -->
-                <div v-if="showValuationEdit" class="modal-backdrop" @click="showValuationEdit = false">
-                  <div class="modal-content w-4/5 max-w-4xl" @click.stop>
+                <div v-if="isEditingValuation" class="modal-backdrop" @click="isEditingValuation = false">
+                  <div class="modal-content w-4/5 max-w-4xl max-h-[90vh] overflow-y-auto" @click.stop>
                     <div class="modal-header flex justify-between items-center mb-4">
                       <h3 class="text-lg font-semibold">编辑估值逻辑</h3>
-                      <button class="close-btn" @click="showValuationEdit = false">×</button>
+                      <button class="close-btn" @click="isEditingValuation = false">×</button>
                     </div>
                     <div class="valuation-edit-container">
-                      <v-md-editor
-                        v-model="editedValuation"
-                        :placeholder="'记录估值逻辑（支持Markdown语法，可直接粘贴图片）'"
-                        height="400px"
-                        :autofocus="true"
-                        class="mb-4"
-                      ></v-md-editor>
-                      <div class="flex justify-end gap-2">
-                        <button class="btn secondary" @click="showValuationEdit = false">
+                      <div class="toolbar-container mb-2">
+                        <Toolbar
+                          :editor="isEditingValuation ? editorRef : null"
+                          :mode="editorConfig.mode"
+                          ref="toolbarRef"
+                        />
+                      </div>
+                      <div class="editor-container h-[400px] border border-gray-200 rounded">
+                        <Editor
+                          v-model="editedValuationLogic"
+                          :defaultConfig="editorConfig"
+                          :mode="editorConfig.mode"
+                          @onCreated="handleEditorCreated"
+                          @onDestroyed="editor => editorRef = null"
+                          @onChange="editor => editedValuationLogic = editor.getHtml()"
+                        />
+                      </div>
+                      <div class="flex justify-end gap-2 mt-4">
+                        <button class="btn secondary" @click="isEditingValuation = false">
                           取消
                         </button>
-                        <button class="btn primary" @click="saveEditedValuation">
+                        <button class="btn primary" @click="saveValuationLogic">
                           保存
                         </button>
                       </div>
                     </div>
                   </div>
                 </div>
+
+
 
 
               </div>
@@ -644,6 +656,7 @@ import { useRoute, useRouter } from 'vue-router'
 import apiService from '../api/apiService.js'
 import Chart from 'chart.js/auto'
 import ChartDataLabels from 'chartjs-plugin-datalabels'
+import { Editor, Toolbar } from '@wangeditor/editor-for-vue'
 
 // 注册数据标签插件
 Chart.register(ChartDataLabels)
@@ -667,6 +680,26 @@ const scrollToTop = () => {
       behavior: 'smooth'
     });
   }
+};
+
+// 自动调整文本框高度函数
+const autoResizeTextarea = (textareaId) => {
+  const textarea = document.getElementById(textareaId);
+  if (textarea) {
+    // 重置高度以确保准确计算
+    textarea.style.height = 'auto';
+    // 设置高度为内容高度
+    textarea.style.height = `${textarea.scrollHeight}px`;
+    // 确保文本区域可以垂直滚动
+    textarea.style.overflowY = 'hidden';
+  }
+};
+
+// 编辑器创建完成后的回调函数
+const handleEditorCreated = (editor) => {
+  console.log('编辑器创建完成');
+  editorRef.value = editor;
+  // 编辑器创建完成，不需要动态设置菜单配置
 };
 
 const threeFactorError = ref('')
@@ -1170,13 +1203,148 @@ const initFiveFactorChart = () => {
 const valuationLogic = ref('') // 估值逻辑
 const tradingPlan = ref('') // 交易计划
 const showValuationDetail = ref(false) // 控制估值逻辑详情弹窗显示
-const showValuationEdit = ref(false) // 控制估值逻辑编辑弹窗显示
 const isEditingValuation = ref(false) // 是否处于编辑模式
-const editedValuation = ref('') // 编辑弹窗中的估值逻辑内容
 const buyPoint = ref('') // 买入点
 const maxLossRate = ref('') // 最大亏损跌幅
 const expectedGrowthRate = ref('') // 预期涨幅
 const competitors = ref([]) // 竞争对手
+
+// WangEditor相关状态
+const editorRef = ref(null) // 编辑器实例引用
+const toolbarRef = ref(null) // 工具栏实例引用
+const editedValuationLogic = ref('') // 编辑中的估值逻辑内容
+const editorConfig = ref({
+  placeholder: '记录估值逻辑（支持Markdown语法，可直接粘贴图片）',
+  autoFocus: false,
+  mode: 'default',
+  toolbarConfig: {
+    // 使用扁平数组格式的toolbarKeys
+    toolbarKeys: [
+      'bold', 'italic', 'underline', 'strikeThrough',
+      'color', 'bgColor',
+      'fontSize', 'fontFamily',
+      'bulletedList', 'numberedList',
+      'todo', 'redo', 'undo',
+      // 图片相关功能
+      'insertImage', 'deleteImage',
+      // 完整的表格功能配置，包括表头相关操作
+      'insertTable', 'deleteTable', 'insertTableRow', 'deleteTableRow', 'insertTableCol', 'deleteTableCol', 'tableHeader', 'tableFullWidth', 'insertCode', 'codeBlock'
+    ]
+  },
+  // 完整的图片上传配置
+  MENU_CONF: {
+    // 在WangEditor v5中，图片上传配置使用uploadImage而不是insertImage
+    uploadImage: {
+      // 必须设置server选项，避免"Cannot get upload server address"错误
+      server: 'http://localhost:8000/api/notes/upload/image',
+      // 支持粘贴图片
+      allowPasteImage: true,
+      // 支持拖拽上传
+      allowDropImage: true,
+      // 图片最大尺寸
+      maxFileSize: 10 * 1024 * 1024, // 10MB
+      // 支持的图片类型
+      accept: ['image/jpg', 'image/jpeg', 'image/png', 'image/gif', 'image/webp'],
+      // 上传前的钩子函数
+      onBeforeUpload: function(file) {
+        console.log('onBeforeUpload被调用', file.name);
+        return true; // 返回true表示允许上传
+      },
+      // 处理粘贴图片的钩子函数
+      onPaste: async function(fileOrFiles) {
+        console.log('onPaste被调用', fileOrFiles);
+        
+        // 处理单个文件
+        const handleFile = async (file) => {
+          try {
+            // 创建FormData对象
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('stock_code', stockCode.value);
+            
+            // 调用后端API上传图片
+            const response = await fetch('http://localhost:8000/api/notes/upload/image', {
+              method: 'POST',
+              body: formData
+            });
+            
+            if (!response.ok) {
+              throw new Error('粘贴图片上传失败');
+            }
+            
+            // 获取响应数据
+            const data = await response.json();
+            console.log('粘贴图片上传成功，返回数据:', data);
+            
+            // 返回图片URL和文件名
+            return {
+              url: data.url,
+              alt: data.filename,
+              href: ''
+            };
+          } catch (error) {
+            console.error('粘贴图片上传失败:', error);
+            // 上传失败时返回临时URL
+            const tempUrl = URL.createObjectURL(file);
+            return {
+              url: tempUrl,
+              alt: file.name,
+              href: ''
+            };
+          }
+        };
+        
+        // 如果是单个文件
+        if (fileOrFiles instanceof File) {
+          return handleFile(fileOrFiles);
+        }
+        
+        // 如果是文件数组
+        if (Array.isArray(fileOrFiles)) {
+          // 只处理第一个文件
+          if (fileOrFiles.length > 0) {
+            return handleFile(fileOrFiles[0]);
+          }
+        }
+        
+        return false;
+      },
+      // 上传图片的自定义函数
+      customUpload: async function(file, insertFn) {
+        console.log('customUpload被调用', file.name);
+        try {
+          // 创建FormData对象
+          const formData = new FormData();
+          formData.append('file', file);
+          formData.append('stock_code', stockCode.value);
+          
+          // 调用后端API上传图片
+          const response = await fetch('http://localhost:8000/api/notes/upload/image', {
+            method: 'POST',
+            body: formData
+          });
+          
+          if (!response.ok) {
+            throw new Error('图片上传失败');
+          }
+          
+          // 获取响应数据
+          const data = await response.json();
+          console.log('图片上传成功，返回数据:', data);
+          
+          // 使用后端返回的相对路径插入图片
+          insertFn(data.url, data.filename);
+        } catch (error) {
+          console.error('图片上传失败:', error);
+          // 上传失败时使用临时URL作为备选
+          const tempUrl = URL.createObjectURL(file);
+          insertFn(tempUrl, file.name);
+        }
+      }
+    }
+  },
+  maxLength: 10000
+})
 
 // 新增：利好利空与总结
 const prosPoints = ref('') // 利好点
@@ -1918,26 +2086,15 @@ const fetchValuationLogic = async () => {
 
 // 打开估值逻辑编辑弹窗
 const openValuationEdit = () => {
-  editedValuation.value = valuationLogic.value
-  showValuationEdit.value = true
-}
-
-// 保存编辑后的估值逻辑
-const saveEditedValuation = async () => {
-  try {
-    await apiService.saveStockValuation({
-      stockCode: stockCode.value,
-      stockName: stockInfo.value.name,
-      valuationContent: editedValuation.value,
-      tradingPlan: tradingPlan.value
-    })
-    await fetchValuationLogic() // 刷新数据
-    showValuationEdit.value = false
-    alert('估值逻辑保存成功！')
-  } catch (err) {
-    console.error('保存估值逻辑失败:', err)
-    alert('保存失败，请稍后重试')
-  }
+  editedValuationLogic.value = valuationLogic.value || ''
+  isEditingValuation.value = true
+  // 延迟一下，等编辑器挂载完成后再设置内容
+  nextTick(() => {
+    // 确保弹窗仍然打开且编辑器实例存在
+    if (isEditingValuation.value && editorRef.value) {
+      editorRef.value.setHtml(editedValuationLogic.value)
+    }
+  })
 }
 
 // 保存估值逻辑
@@ -1946,10 +2103,11 @@ const saveValuationLogic = async () => {
     await apiService.saveStockValuation({
       stockCode: stockCode.value,
       stockName: stockInfo.value.name,
-      valuationContent: valuationLogic.value,
+      valuationContent: editedValuationLogic.value,
       tradingPlan: tradingPlan.value
     })
     await fetchValuationLogic() // 刷新数据
+    isEditingValuation.value = false
     alert('估值逻辑保存成功！')
   } catch (err) {
     console.error('保存估值逻辑失败:', err)
@@ -2159,7 +2317,7 @@ const saveNote = async () => {
       stockName: stockInfo.value.name
     }
     noteModalType.value === 'create'
-      ? await apiService.createNote(noteData)
+      ? await apiService.addNote(noteData)
       : await apiService.updateNote(noteForm.value.id, noteData)
     await fetchStockNotes()
     closeNoteModal()
@@ -2720,24 +2878,7 @@ onUnmounted(() => {
     font-size: 1.25rem; /* text-xl 对应的大小 */
   }
   
-  /* Markdown编辑器样式优化 */
-  .v-md-editor {
-    margin-bottom: 10px;
-  }
-  
-  .v-md-editor .v-md-editor-toolbar {
-    background-color: #f5f5f5;
-    border-bottom: 1px solid #e5e5e5;
-  }
-  
-  .v-md-editor .v-md-editor-content {
-    border: 1px solid #e5e5e5;
-    border-radius: 4px;
-  }
-  
-  .v-md-editor .v-md-editor-preview {
-    background-color: #ffffff;
-  }
+
 
 .form-actions {
   display: flex;
