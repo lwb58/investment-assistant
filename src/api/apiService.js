@@ -92,17 +92,7 @@ async updateStock(stockId, updateData) {  // 参数名从stockCode改为stockId
     return this.request('DELETE', `/stocks/${stockId}`);
   }
   
-  /**
-   * 搜索股票
-   * @param {string} keyword - 搜索关键词（股票代码或名称）
-   * @returns {Promise<Array>} 搜索结果列表
-   */
-  async searchStocks(keyword) {
-    if (!keyword || keyword.trim().length < 1) {
-      return [];
-    }
-    return this.request('GET', `/stocks/search/${encodeURIComponent(keyword)}`);
-  }
+
   
   /**
    * 获取股票实时行情
@@ -124,36 +114,11 @@ async updateStock(stockId, updateData) {  // 参数名从stockCode改为stockId
     return this.request('GET', `/stocks/${stockCode}/detail`);
   }
 
-  /**
-   * 获取股票财务数据
-   * @param {string} stockCode - 股票代码
-   * @param {string} year - 年份
-   * @returns {Promise<Object>} 财务数据
-   */
-  async getStockFinancial(stockCode, year) {
-    return this.request('GET', `/stocks/${stockCode}/financial/${year}`);
-  }
+
 
   // =============== 复盘笔记相关API ===============
 
-  /**
-   * 获取复盘笔记列表
-   * @param {string} search - 搜索关键词（可选）
-   * @returns {Promise<Array>} 笔记列表
-   */
-  async getNotes(search = '') {
-    const query = search ? `?search=${encodeURIComponent(search)}` : '';
-    return this.request('GET', `/notes${query}`);
-  }
 
-  /**
-   * 获取笔记详情
-   * @param {number} noteId - 笔记ID
-   * @returns {Promise<Object>} 笔记详情
-   */
-  async getNoteById(noteId) {
-    return this.request('GET', `/notes/${noteId}`);
-  }
 
   /**
    * 根据股票代码获取相关笔记
@@ -215,14 +180,7 @@ async updateStock(stockId, updateData) {  // 参数名从stockCode改为stockId
     return this.request('DELETE', `/notes/${noteId}`);
   }
 
-  /**
-   * 获取市场概况数据
-   * @returns {Promise<Object>} 市场概况数据
-   */
-  async getMarketOverview() {
-    // 调用实际后端接口（已实现）
-    return this.request('GET', `/market/overview`);
-  }
+
 
   /**
    * 获取股票杜邦分析数据
