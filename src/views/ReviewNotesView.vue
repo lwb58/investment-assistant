@@ -220,10 +220,11 @@
     </el-dialog>
 
     <!-- 添加/编辑笔记弹窗 -->
+    <!-- 添加/编辑笔记弹窗 - 增加宽度百分比, 更好适应不同屏幕 -->
     <el-dialog
       v-model="showNoteModal"
       :title="editingNote ? '编辑笔记' : '新建笔记'"
-      width="85%" <!-- 增加宽度百分比, 更好适应不同屏幕 -->
+      width="85%"
       :fullscreen="false"
       append-to-body
     >
@@ -254,17 +255,11 @@
         </el-form-item>
         <el-form-item label="内容" prop="content">
           <div class="rich-text-editor">
-            <el-input
-              ref="contentInput"
+            <markdown-editor
               v-model="noteForm.content"
-              type="textarea"
-              :rows="15"
+              height="400px"
               placeholder="请输入笔记内容，可直接粘贴图片（粘贴后图片将直接显示在文本中）"
-              maxlength="5000"
-              show-word-limit
-              @paste="handlePaste"
             />
-            <!-- 图片将直接在文本中展示，不再需要单独的预览区域 -->
           </div>
         </el-form-item>
       </el-form>
@@ -297,9 +292,13 @@
 <script>
 import apiService from '../api/apiService';
 import { ElMessage } from 'element-plus';
+import MarkdownEditor from '../components/MarkdownEditor.vue';
 
 export default {
   name: 'ReviewNotesView',
+  components: {
+    MarkdownEditor
+  },
   data() {
     return {
       notes: [],
@@ -376,15 +375,6 @@ export default {
     truncateText(text, maxLength) {
       if (!text) return '';
       return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
-    },
-    resetForm() {
-      this.noteForm = {
-        title: '',
-        content: ''
-      };
-      if (this.$refs.noteForm) {
-        this.$refs.noteForm.resetFields();
-      }
     },
     viewNote(note) {
       this.selectedNote = { ...note };
@@ -473,61 +463,7 @@ export default {
       // 表格行点击时查看详情
       this.viewNote(row);
     },
-    handlePaste(event) {
-      const items = (event.clipboardData || event.originalEvent.clipboardData).items;
-      for (let index = 0; index < items.length; index++) {
-        if (items[index].kind === 'file') {
-          const file = items[index].getAsFile();
-          if (file && file.type.indexOf('image/') !== -1) {
-            // 阻止默认粘贴行为
-            event.preventDefault();
-            this.processImageFile(file);
-          }
-        }
-      }
-    },
-    processImageFile(file) {
-      // 检查图片大小（限制5MB）
-      if (file.size > 5 * 1024 * 1024) {
-        ElMessage.warning('图片大小不能超过5MB');
-        return;
-      }
-      
-      // 创建一个图片对象
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const dataUrl = e.target.result;
-        
-        // 在文本中直接插入换行和图片的Base64数据（使用特殊标记以便在渲染时处理）
-        // 插入换行+图片+换行，确保图片在单独行显示
-        const imgData = `\n[图片:${dataUrl}]\n`;
-        this.insertAtCursor(this.$refs.contentInput.$refs.textarea, imgData);
-        
-        ElMessage.success('图片粘贴成功，已直接插入到文本中');
-      };
-      reader.readAsDataURL(file);
-    },
-    insertAtCursor(textarea, text) {
-      // 获取当前光标位置
-      const startPos = textarea.selectionStart;
-      const endPos = textarea.selectionEnd;
-      const scrollTop = textarea.scrollTop;
-      
-      // 插入文本
-      textarea.value = textarea.value.substring(0, startPos) +
-        text +
-        textarea.value.substring(endPos, textarea.value.length);
-      
-      // 更新v-model绑定的值
-      this.noteForm.content = textarea.value;
-      
-      // 恢复光标位置
-      textarea.focus();
-      textarea.selectionStart = textarea.selectionEnd = startPos + text.length;
-      textarea.scrollTop = scrollTop;
-    },
-    // 移除图片预览相关功能，因为图片现在直接显示在文本中
-    // 用户可以通过直接编辑文本内容来删除图片
+    // MarkdownEditor组件已经内置了图片粘贴功能，不再需要单独处理
   getStockLabel(stockCode) {
       const stock = this.availableStocks.find(s => s.value === stockCode);
       return stock ? stock.label : stockCode;
@@ -535,16 +471,27 @@ export default {
     renderNoteContent(content) {
       if (!content) return '';
       
-      // 将换行符转换为<br>
-      let rendered = content.replace(/\n/g, '<br>');
-      
+      // 简单替换换行和加粗
+      let html = content;
+      // 换行
+      html = html.replace(/\n/g, '<br>');
+      // 加粗
+      html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+      // 斜体
+      html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
+      // 标题
+      html = html.replace(/^# (.*$)/gm, '<h1>$1</h1>');
+      html = html.replace(/^## (.*$)/gm, '<h2>$1</h2>');
+      html = html.replace(/^### (.*$)/gm, '<h3>$1</h3>');
+      // 列表
+      html = html.replace(/^- (.*$)/gm, '<li>$1</li>');
       // 替换图片标记为图片标签 - 现在直接使用Base64数据
-      rendered = rendered.replace(/\[图片:([^\]]+)\]/g, (match, imgData) => {
+      html = html.replace(/\[图片:([^\]]+)\]/g, (match, imgData) => {
         // 直接使用Base64数据作为图片源
         return `<img src="${imgData}" class="content-image" alt="笔记图片" />`;
       });
       
-      return rendered;
+      return html;
     },
     handleSearch() {
       this.filteredNotes = this.notes.filter(note => {
