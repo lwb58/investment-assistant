@@ -131,6 +131,50 @@ const handleEditorDestroyed = () => {
   emit('onDestroyed')
 }
 
+// 点击空白处关闭下拉框 - 最终优化版
+const handleClickOutside = (event) => {
+  // 只在编辑器已创建时处理
+  if (!editorRef.value) return
+  
+  // 检查点击目标是否在编辑器内部
+  const editorElement = document.querySelector('.markdown-editor')
+  if (editorElement && editorElement.contains(event.target)) {
+    return // 点击在编辑器内部，不处理
+  }
+  
+  // 查找所有打开的面板
+  const allPanels = document.querySelectorAll('.w-e-panel-container')
+  const visiblePanels = Array.from(allPanels).filter(panel => 
+    panel.offsetParent !== null // 检查元素是否可见
+  )
+  
+  // 如果有可见面板，关闭它们
+  visiblePanels.forEach(panel => {
+    // 使用CSS类控制显示/隐藏，而不是直接操作style
+    panel.style.display = 'none'
+  })
+  
+  // 移除所有激活的工具栏按钮
+  const activeButtons = document.querySelectorAll('.w-e-active')
+  activeButtons.forEach(button => {
+    button.classList.remove('w-e-active')
+  })
+}
+
+// 组件挂载时添加点击事件监听
+onMounted(() => {
+  // 使用冒泡阶段监听，避免影响其他事件
+  document.addEventListener('click', handleClickOutside)
+})
+
+// 组件卸载时移除事件监听
+onUnmounted(() => {
+  document.removeEventListener('click', handleClickOutside)
+  if (editorRef.value) {
+    editorRef.value.destroy()
+  }
+})
+
 // 设置内容
 const setContent = (content) => {
   if (editorRef.value) {
@@ -151,12 +195,7 @@ defineExpose({
   getContent
 })
 
-// 组件卸载时销毁编辑器
-onUnmounted(() => {
-  if (editorRef.value) {
-    editorRef.value.destroy()
-  }
-})
+// 组件卸载时销毁编辑器已合并到上面的onUnmounted钩子中
 </script>
 
 <style scoped>
