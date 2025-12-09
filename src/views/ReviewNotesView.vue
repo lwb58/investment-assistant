@@ -237,21 +237,48 @@
         <el-form-item label="标题" prop="title">
           <el-input v-model="noteForm.title" placeholder="请输入笔记标题" maxlength="50" show-word-limit />
         </el-form-item>
-        <el-form-item label="关联股票">
-          <el-select
-            v-model="noteForm.relatedStock"
-            placeholder="选择关联股票"
-            filterable
-            clearable
-            allow-create
-          >
-            <el-option
-              v-for="stock in availableStocks"
-              :key="stock.value"
-              :label="stock.label"
-              :value="stock.value"
-            />
-          </el-select>
+        <el-form-item label="关联股票" prop="relatedStock">
+          <div class="stock-search-container">
+            <!-- 已选择的股票标签 -->
+            <div class="selected-stocks">
+              <el-tag
+                v-for="code in noteForm.relatedStock"
+                :key="code"
+                closable
+                @close="removeStock(code)"
+                class="stock-tag"
+              >
+                {{ getStockLabel(code) }}
+              </el-tag>
+            </div>
+            
+            <!-- 搜索输入框 -->
+            <div class="search-input-wrapper" ref="searchInputWrapper">
+              <el-input
+                v-model="searchKeyword"
+                placeholder="输入股票代码或名称搜索"
+                @input="handleStockSearch"
+                @focus="handleStockSearch"
+                @blur="closeSearchResults"
+                clearable
+                style="width: 100%"
+              />
+              
+              <!-- 搜索结果下拉框 -->
+              <div v-if="showSearchResults && searchResults.length > 0" class="search-results">
+                <div
+                  v-for="stock in searchResults"
+                  :key="stock.stockCode"
+                  class="search-result-item"
+                  @mousedown.prevent="selectSearchResult(stock)"
+                >
+                  <span class="stock-code">{{ stock.stockCode }}</span>
+                  <span class="stock-name">{{ stock.stockName }}</span>
+                  <span v-if="stock.industry" class="stock-industry">{{ stock.industry }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </el-form-item>
         <el-form-item label="内容" prop="content">
           <div class="rich-text-editor">
@@ -324,7 +351,7 @@ export default {
       noteForm: {
         title: '',
         content: '',
-        relatedStock: ''
+        relatedStock: []
       },
       noteFormRules: {
         title: [
@@ -335,7 +362,9 @@ export default {
           { required: true, message: '请输入笔记内容', trigger: 'blur' },
           { min: 1, max: 5000, message: '内容长度在 1 到 5000 个字符', trigger: 'blur' }
         ]
-      }
+      },
+      // 已选择股票的完整信息
+      selectedStocksInfo: []
     };
   },
   mounted() {
@@ -384,20 +413,55 @@ export default {
       this.showNoteDetail = false;
       this.selectedNote = null;
     },
-    editNote(note) {
-      this.editingNote = note;
-      this.noteForm = {
-        title: note.title,
-        content: note.content
-      };
-      this.showNoteModal = true;
-      // 如果打开了详情弹窗，先关闭
-      this.closeNoteDetail();
-    },
+
     editCurrentNote() {
       if (this.selectedNote) {
         this.editNote(this.selectedNote);
       }
+    },
+    // 股票搜索方法
+    async handleStockSearch() {
+      try {
+        if (!this.searchKeyword.trim()) {
+          this.searchResults = [];
+          this.showSearchResults = false;
+          return;
+        }
+        
+        const results = await apiService.getStocks(this.searchKeyword.trim());
+        this.searchResults = results;
+        this.showSearchResults = true;
+      } catch (error) {
+        console.error('股票搜索失败:', error);
+        ElMessage.error('股票搜索失败');
+      }
+    },
+    // 选择搜索结果
+    selectSearchResult(stock) {
+      // 检查是否已选择该股票
+      if (!this.noteForm.relatedStock.includes(stock.stockCode)) {
+        this.noteForm.relatedStock.push(stock.stockCode);
+        // 存储股票的完整信息
+        this.selectedStocksInfo.push(stock);
+      }
+      this.searchKeyword = '';
+      this.searchResults = [];
+      this.showSearchResults = false;
+    },
+    // 移除选中的股票
+    removeStock(stockCode) {
+      const index = this.noteForm.relatedStock.indexOf(stockCode);
+      if (index > -1) {
+        this.noteForm.relatedStock.splice(index, 1);
+        // 同时移除股票的完整信息
+        this.selectedStocksInfo = this.selectedStocksInfo.filter(stock => stock.stockCode !== stockCode);
+      }
+    },
+    // 关闭搜索结果
+    closeSearchResults() {
+      setTimeout(() => {
+        this.showSearchResults = false;
+      }, 200);
     },
     cancelAddEdit() {
       this.showNoteModal = false;
@@ -412,7 +476,7 @@ export default {
         
         const noteData = {
           ...this.noteForm,
-          stockCode: this.noteForm.relatedStock || '',
+          stockCode: this.noteForm.relatedStock.join(',') || '',
           stockName: '' // 可以根据需要设置股票名称
         };
         
@@ -465,8 +529,20 @@ export default {
     },
     // MarkdownEditor组件已经内置了图片粘贴功能，不再需要单独处理
   getStockLabel(stockCode) {
-      const stock = this.availableStocks.find(s => s.value === stockCode);
-      return stock ? stock.label : stockCode;
+      // 先从已选择的股票信息中查找
+      const selectedStock = this.selectedStocksInfo.find(s => s.stockCode === stockCode);
+      if (selectedStock) {
+        return selectedStock.stockName;
+      }
+      
+      // 再从可用股票列表中查找
+      const availableStock = this.availableStocks.find(s => s.value === stockCode);
+      if (availableStock) {
+        return availableStock.label;
+      }
+      
+      // 如果都找不到，返回股票代码
+      return stockCode;
     },
     renderNoteContent(content) {
       if (!content) return '';
@@ -512,8 +588,46 @@ export default {
       this.noteForm = {
         title: note.title,
         content: note.content,
-        relatedStock: note.relatedStock || ''
+        relatedStock: note.stockCode ? note.stockCode.split(',') : []
       };
+      
+      // 初始化已选择股票的完整信息
+      this.selectedStocksInfo = [];
+      if (note.stockCode) {
+        const stockCodes = note.stockCode.split(',');
+        // 尝试从API获取股票完整信息
+        stockCodes.forEach(async (code) => {
+          try {
+            // 先从本地availableStocks查找
+            const localStock = this.availableStocks.find(s => s.value === code);
+            if (localStock) {
+              this.selectedStocksInfo.push({
+                stockCode: code,
+                stockName: localStock.label
+              });
+            } else {
+              // 从API获取
+              const results = await apiService.getStocks(code);
+              if (results.length > 0) {
+                this.selectedStocksInfo.push(results[0]);
+              } else {
+                // 找不到则使用代码作为名称
+                this.selectedStocksInfo.push({
+                  stockCode: code,
+                  stockName: code
+                });
+              }
+            }
+          } catch (error) {
+            console.error(`获取股票${code}信息失败:`, error);
+            // 失败时使用代码作为名称
+            this.selectedStocksInfo.push({
+              stockCode: code,
+              stockName: code
+            });
+          }
+        });
+      }
       
       // 解析内容中的图片标记并恢复图片
       this.uploadedImages = [];
@@ -527,8 +641,13 @@ export default {
       this.noteForm = {
         title: '',
         content: '',
-        relatedStock: ''
+        relatedStock: []
       };
+      // 重置已选择股票的完整信息
+      this.selectedStocksInfo = [];
+      this.searchKeyword = '';
+      this.searchResults = [];
+      this.showSearchResults = false;
       if (this.$refs.noteForm) {
         this.$refs.noteForm.resetFields();
       }
@@ -1109,6 +1228,70 @@ export default {
 .loading-container {
   text-align: center;
   padding: 60px 20px;
+}
+
+/* 股票搜索组件样式 */
+.stock-search-container {
+  width: 100%;
+  position: relative;
+}
+
+.selected-stocks {
+  margin-bottom: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.stock-tag {
+  margin-right: 8px;
+}
+
+.search-input-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.search-results {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  max-height: 200px;
+  overflow-y: auto;
+  background-color: white;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  z-index: 1000;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+}
+
+.search-result-item {
+  padding: 10px 15px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.search-result-item:hover {
+  background-color: #f5f7fa;
+}
+
+.stock-code {
+  font-weight: 600;
+  color: #303133;
+}
+
+.stock-name {
+  color: #606266;
+}
+
+.stock-industry {
+  margin-left: auto;
+  font-size: 12px;
+  color: #909399;
 }
 
 /* 响应式设计 */

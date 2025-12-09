@@ -117,7 +117,9 @@ def get_notes_by_stock(stock_code: str):
         stock_notes = []
         for note in all_notes:
             note_dict = note if isinstance(note, dict) else note.dict()
-            if note_dict.get('stockCode') == stock_code:
+            note_stock_code = note_dict.get('stockCode') or ''
+            # 检查笔记的stockCode是否包含指定的股票代码（支持多选情况）
+            if note_stock_code == stock_code or f",{stock_code}," in f",{note_stock_code},":
                 stock_notes.append(note)
         return stock_notes
     except Exception as e:
