@@ -89,11 +89,11 @@
         </div>
         <p class="note-content">{{ truncateText(note.content, 100) }}</p>
         <div class="note-footer">
-          <span v-if="note.relatedStock" class="stock-tag">
+          <span v-if="note.stockCode" class="stock-tag">
             <i class="el-icon-finished"></i>
-            {{ getStockLabel(note.relatedStock) }}
+            {{ getStockLabel(note.stockCode) }}
           </span>
-          <span class="update-time">{{ formatDate(note.update_time) }}</span>
+          <span class="update-time">{{ formatDate(note.updateTime) }}</span>
         </div>
       </div>
       
@@ -106,7 +106,7 @@
     <!-- 笔记列表 - 表格视图 -->
     <div class="notes-table-container" v-else-if="viewMode === 'list'" v-loading="loading">
       <el-table
-        :data="notes"
+        :data="filteredNotes"
         style="width: 100%"
         @row-click="handleTableRowClick"
       >
@@ -126,29 +126,43 @@
           min-width="300"
         >
           <template #default="scope">
-            <span class="note-content-text">{{ truncateText(scope.row.content, 100) }}</span>
+            <span class="note-content-text">
+              <!-- 直接处理原始内容，确保没有HTML标签 -->
+              {{ truncateText(scope.row.content, 100) }}
+            </span>
           </template>
         </el-table-column>
         <el-table-column
-          prop="relatedStock"
           label="关联股票"
-          width="120"
+          width="200"
         >
           <template #default="scope">
-            <el-tag v-if="scope.row.relatedStock" size="small" type="primary" effect="plain">
-              {{ getStockLabel(scope.row.relatedStock) }}
-            </el-tag>
+            <div v-if="scope.row.stockCode" class="stock-tags">
+              <el-tag v-for="code in scope.row.stockCode.split(',')" :key="code" size="small" type="primary" effect="plain" class="mr-1 mb-1">
+                {{ getStockLabel(code) }}
+              </el-tag>
+            </div>
             <span v-else class="text-gray-400">无</span>
           </template>
         </el-table-column>
         <el-table-column
-          prop="update_time"
+          prop="createTime"
+          label="创建时间"
+          width="160"
+          sortable
+        >
+          <template #default="scope">
+            <span>{{ formatDate(scope.row.createTime) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column
+          prop="updateTime"
           label="更新时间"
           width="160"
           sortable
         >
           <template #default="scope">
-            <span>{{ formatDate(scope.row.update_time) }}</span>
+            <span>{{ formatDate(scope.row.updateTime) }}</span>
           </template>
         </el-table-column>
         <el-table-column
@@ -157,28 +171,32 @@
           fixed="right"
         >
           <template #default="scope">
-            <el-button
-              type="text"
-              size="small"
-              @click.stop="viewNote(scope.row)"
-            >
-              查看
-            </el-button>
-            <el-button
-              type="text"
-              size="small"
-              @click.stop="editNote(scope.row)"
-            >
-              编辑
-            </el-button>
-            <el-button
-              type="text"
-              size="small"
-              @click.stop="confirmDelete(scope.row)"
-              class="delete-btn"
-            >
-              删除
-            </el-button>
+            <div class="table-actions">
+              <el-button
+                type="primary"
+                size="small"
+                round
+                @click.stop="viewNote(scope.row)"
+              >
+                查看
+              </el-button>
+              <el-button
+                type="success"
+                size="small"
+                round
+                @click.stop="editNote(scope.row)"
+              >
+                编辑
+              </el-button>
+              <el-button
+                type="danger"
+                size="small"
+                round
+                @click.stop="confirmDelete(scope.row)"
+              >
+                删除
+              </el-button>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -198,14 +216,21 @@
     >
       <div class="note-detail">
         <div class="note-meta">
-          <span>创建时间: {{ formatDate(selectedNote?.create_time) }}</span>
-          <span>更新时间: {{ formatDate(selectedNote?.update_time) }}</span>
+          <span>创建时间: {{ formatDate(selectedNote?.createTime) }}</span>
+          <span>更新时间: {{ formatDate(selectedNote?.updateTime) }}</span>
         </div>
         <div class="note-content-detail">
-          <div v-if="selectedNote?.relatedStock" class="related-stock-info">
-            <el-tag size="small" effect="plain" type="primary">
+          <div v-if="selectedNote?.stockCode" class="related-stock-info">
+            <el-tag
+              v-for="stockCode in selectedNote.stockCode.split(',')"
+              :key="stockCode"
+              size="small"
+              effect="plain"
+              type="primary"
+              class="mr-1 mb-1"
+            >
               <i class="el-icon-finished"></i>
-              关联股票: {{ getStockLabel(selectedNote.relatedStock) }}
+              {{ getStockLabel(stockCode) }}
             </el-tag>
           </div>
           <div class="note-content-rendered" v-html="renderNoteContent(selectedNote?.content || '')"></div>
@@ -331,7 +356,7 @@ export default {
       notes: [],
       filteredNotes: [],
       loading: false,
-      viewMode: 'card', // 默认使用卡片视图
+      viewMode: 'list', // 默认使用列表视图
       searchKeyword: '',
       selectedStock: '',
       availableStocks: [
@@ -403,7 +428,22 @@ export default {
     },
     truncateText(text, maxLength) {
       if (!text) return '';
-      return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
+      // 去除HTML标签 - 更彻底的实现
+      let plainText = text;
+      // 首先移除所有HTML标签，包括自闭合标签
+      plainText = plainText.replace(/<[^>]*>/g, '');
+      // 然后移除可能的HTML实体
+      plainText = plainText.replace(/&nbsp;/g, ' ');
+      plainText = plainText.replace(/&lt;/g, '<');
+      plainText = plainText.replace(/&gt;/g, '>');
+      plainText = plainText.replace(/&amp;/g, '&');
+      plainText = plainText.replace(/&quot;/g, '"');
+      plainText = plainText.replace(/&#39;/g, "'");
+      
+      // 去除多余的空白字符
+      plainText = plainText.replace(/\s+/g, ' ').trim();
+      
+      return plainText.length > maxLength ? plainText.substring(0, maxLength) + '...' : plainText;
     },
     viewNote(note) {
       this.selectedNote = { ...note };
@@ -474,10 +514,17 @@ export default {
           await this.$refs.noteForm.validate();
         }
         
+        // 构建股票名称字符串，与股票代码顺序对应
+        const stockNames = this.noteForm.relatedStock.map(code => {
+          // 优先从selectedStocksInfo中获取完整的股票名称
+          const stockInfo = this.selectedStocksInfo.find(stock => stock.stockCode === code);
+          return stockInfo ? stockInfo.stockName : '';
+        }).join(',');
+        
         const noteData = {
           ...this.noteForm,
           stockCode: this.noteForm.relatedStock.join(',') || '',
-          stockName: '' // 可以根据需要设置股票名称
+          stockName: stockNames || ''
         };
         
         if (this.editingNote) {
@@ -528,17 +575,38 @@ export default {
       this.viewNote(row);
     },
     // MarkdownEditor组件已经内置了图片粘贴功能，不再需要单独处理
-  getStockLabel(stockCode) {
-      // 先从已选择的股票信息中查找
-      const selectedStock = this.selectedStocksInfo.find(s => s.stockCode === stockCode);
-      if (selectedStock) {
-        return selectedStock.stockName;
+    getStockLabel(stockCode) {
+      // 首先处理多个股票代码的情况
+      if (stockCode && stockCode.includes(',')) {
+        // 如果传入的是多个股票代码，返回第一个的名称
+        return this.getStockLabel(stockCode.split(',')[0]);
       }
       
-      // 再从可用股票列表中查找
+      // 首先检查当前笔记的stockName是否包含该股票的名称（支持多个股票的情况）
+      const currentNote = this.notes.find(note => 
+        note.stockCode && 
+        note.stockCode.split(',').includes(stockCode)
+      );
+      if (currentNote && currentNote.stockName) {
+        // 将stockName按逗号分割，与stockCode的顺序对应
+        const stockCodes = currentNote.stockCode.split(',');
+        const stockNames = currentNote.stockName.split(',');
+        const index = stockCodes.indexOf(stockCode);
+        if (index !== -1 && index < stockNames.length && stockNames[index]) {
+          return stockNames[index];
+        }
+      }
+      
+      // 先从可用股票列表中查找
       const availableStock = this.availableStocks.find(s => s.value === stockCode);
       if (availableStock) {
         return availableStock.label;
+      }
+      
+      // 再从已选择的股票信息中查找
+      const selectedStock = this.selectedStocksInfo.find(s => s.stockCode === stockCode);
+      if (selectedStock) {
+        return selectedStock.stockName;
       }
       
       // 如果都找不到，返回股票代码
@@ -574,11 +642,13 @@ export default {
         // 关键词搜索
         const keywordMatch = !this.searchKeyword || 
           note.title.toLowerCase().includes(this.searchKeyword.toLowerCase()) || 
-          note.content.toLowerCase().includes(this.searchKeyword.toLowerCase());
+          note.content.toLowerCase().includes(this.searchKeyword.toLowerCase()) ||
+          (note.stockCode && note.stockCode.toLowerCase().includes(this.searchKeyword.toLowerCase())) ||
+          (note.stockName && note.stockName.toLowerCase().includes(this.searchKeyword.toLowerCase()));
           
         // 股票筛选
         const stockMatch = !this.selectedStock || 
-          (note.relatedStock && note.relatedStock.includes(this.selectedStock));
+          (note.stockCode && note.stockCode.split(',').includes(this.selectedStock));
           
         return keywordMatch && stockMatch;
       });
@@ -896,6 +966,38 @@ export default {
   padding: 24px;
   border: 1px solid #f0f0f0;
   overflow: hidden;
+}
+
+.table-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 0;
+}
+
+.notes-table-container .table-actions .el-button {
+  padding: 4px 8px !important;
+  font-size: 11px !important;
+  border-radius: 4px !important;
+  min-width: 50px;
+  height: 26px !important;
+  line-height: 14px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transition: all 0.2s ease;
+}
+
+.notes-table-container .table-actions .el-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+.stock-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 
 .note-title-text {
