@@ -53,12 +53,13 @@ def init_database(notes_storage: List[Dict[str, Any]] = None, stock_storage: Lis
                     content TEXT NOT NULL,
                     stock_code TEXT DEFAULT '',
                     stock_name TEXT DEFAULT '',
+                    type TEXT DEFAULT 'note',  -- note: 普通笔记, pros_cons: 利好利空分析
                     create_time TEXT NOT NULL,
                     update_time TEXT NOT NULL
                 )
             ''')
         else:
-            # 如果表已存在但缺少股票相关字段，添加这些字段
+            # 如果表已存在但缺少必要字段，添加这些字段
             cursor.execute("PRAGMA table_info(notes)")
             columns = [column[1] for column in cursor.fetchall()]
             
@@ -68,6 +69,9 @@ def init_database(notes_storage: List[Dict[str, Any]] = None, stock_storage: Lis
             if 'stock_name' not in columns:
                 logger.info("添加stock_name字段到notes表")
                 cursor.execute("ALTER TABLE notes ADD COLUMN stock_name TEXT DEFAULT ''")
+            if 'type' not in columns:
+                logger.info("添加type字段到notes表")
+                cursor.execute("ALTER TABLE notes ADD COLUMN type TEXT DEFAULT 'note'")
         
         conn.commit()
         logger.info("notes表结构初始化成功")
@@ -178,11 +182,20 @@ def init_database(notes_storage: List[Dict[str, Any]] = None, stock_storage: Lis
         logger.info("数据库初始化完成")
 
 # 笔记相关操作
-def get_all_notes() -> List[Dict[str, Any]]:
-    """获取所有笔记"""
+def get_all_notes(stock_code: Optional[str] = None, note_type: Optional[str] = None) -> List[Dict[str, Any]]:
+    """获取所有笔记，可按股票代码和类型筛选"""
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM notes ORDER BY create_time DESC")
+    
+    if stock_code and note_type:
+        cursor.execute("SELECT * FROM notes WHERE stock_code = ? AND type = ? ORDER BY create_time DESC", (stock_code, note_type))
+    elif stock_code:
+        cursor.execute("SELECT * FROM notes WHERE stock_code = ? ORDER BY create_time DESC", (stock_code,))
+    elif note_type:
+        cursor.execute("SELECT * FROM notes WHERE type = ? ORDER BY create_time DESC", (note_type,))
+    else:
+        cursor.execute("SELECT * FROM notes ORDER BY create_time DESC")
+    
     rows = cursor.fetchall()
     conn.close()
     
@@ -196,6 +209,7 @@ def get_all_notes() -> List[Dict[str, Any]]:
             "content": row_dict["content"],
             "stockCode": row_dict["stock_code"],
             "stockName": row_dict["stock_name"],
+            "type": row_dict["type"],  # 添加type字段
             "createTime": row_dict["create_time"],
             "updateTime": row_dict["update_time"]
         })
@@ -221,6 +235,7 @@ def get_note_by_id(note_id: str) -> Optional[Dict[str, Any]]:
         "content": row_dict["content"],
         "stockCode": row_dict["stock_code"],
         "stockName": row_dict["stock_name"],
+        "type": row_dict["type"],  # 添加type字段
         "createTime": row_dict["create_time"],
         "updateTime": row_dict["update_time"]
     }
@@ -233,18 +248,27 @@ def create_note(note_data: Dict[str, Any]) -> Dict[str, Any]:
     # 支持驼峰命名法和下划线命名法的字段
     stock_code = note_data.get("stock_code", note_data.get("stockCode", ""))
     stock_name = note_data.get("stock_name", note_data.get("stockName", ""))
+    note_type = note_data.get("type", "note")  # 默认值为"note"
     create_time = note_data.get("create_time", note_data.get("createTime", datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
     update_time = note_data.get("update_time", note_data.get("updateTime", datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
     
     cursor.execute(
-        "INSERT INTO notes (id, title, content, stock_code, stock_name, create_time, update_time) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO notes (id, title, content, stock_code, stock_name, type, create_time, update_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         (note_data["id"], note_data["title"], note_data["content"], 
-         stock_code, stock_name, create_time, update_time)
+         stock_code, stock_name, note_type, create_time, update_time)
     )
     conn.commit()
     conn.close()
     
-    return note_data
+    # 返回的数据中包含type字段
+    return {
+        **note_data,
+        "type": note_type,
+        "stockCode": stock_code,
+        "stockName": stock_name,
+        "createTime": create_time,
+        "updateTime": update_time
+    }
 
 def update_note(note_id: str, update_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """更新笔记"""
@@ -275,6 +299,10 @@ def update_note(note_id: str, update_data: Dict[str, Any]) -> Optional[Dict[str,
         stock_name = update_data.get("stock_name", update_data.get("stockName", ""))
         update_fields.append("stock_name = ?")
         update_values.append(stock_name)
+    # 支持type字段的更新
+    if "type" in update_data:
+        update_fields.append("type = ?")
+        update_values.append(update_data["type"])
     
     # 总是更新update_time
     update_fields.append("update_time = ?")

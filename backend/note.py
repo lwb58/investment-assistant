@@ -20,12 +20,14 @@ class NoteCreate(BaseModel):
     content: str
     stockCode: Optional[str] = None  # 关联股票代码
     stockName: Optional[str] = None  # 关联股票名称
+    type: str = "note"  # 默认值为"note"
 
 class NoteUpdate(BaseModel):
     title: Optional[str] = None
     content: Optional[str] = None
     stockCode: Optional[str] = None  # 关联股票代码
     stockName: Optional[str] = None  # 关联股票名称
+    type: Optional[str] = None
 
 class NoteItem(BaseModel):
     id: str
@@ -35,14 +37,15 @@ class NoteItem(BaseModel):
     updateTime: str
     stockCode: Optional[str] = None  # 保留字段
     stockName: Optional[str] = None  # 保留字段
+    type: str  # 添加type字段
 
 # -------------- API接口 --------------
 @note_router.get("", response_model=List[NoteItem])
-def get_all_notes():
-    """获取所有笔记（纯同步）"""
+def get_all_notes(stock_code: Optional[str] = None, note_type: Optional[str] = None):
+    """获取所有笔记，支持按股票代码和笔记类型过滤"""
     try:
         logger.info("调用get_all_notes接口")
-        notes = db.get_all_notes()
+        notes = db.get_all_notes(stock_code, note_type)
         logger.info(f"成功获取{len(notes)}条笔记")
         return notes
     except Exception as e:
@@ -59,13 +62,14 @@ def get_note(note_id: str):
 
 @note_router.post("", response_model=NoteItem)
 def create_note(note: NoteCreate):
-    """创建笔记（支持关联股票）"""
+    """创建笔记（支持关联股票和笔记类型）"""
     new_note = {
         "id": str(uuid4()),
         "title": note.title,
         "content": note.content,
         "stockCode": note.stockCode or "",
         "stockName": note.stockName or "",
+        "type": note.type or "note",  # 确保type字段被传递
         "createTime": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "updateTime": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }

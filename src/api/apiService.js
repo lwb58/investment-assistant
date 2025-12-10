@@ -156,7 +156,8 @@ async updateStock(stockId, updateData) {  // 参数名从stockCode改为stockId
   
   // 获取复盘笔记列表（兼容现有代码）
   async getReviewNotes() {
-    return this.request('GET', `/notes`);
+    // 复盘笔记模块只获取普通笔记，不包含利好利空分析
+    return this.request('GET', `/notes?note_type=note`);
   }
 
   /**
@@ -232,7 +233,8 @@ async updateStock(stockId, updateData) {  // 参数名从stockCode改为stockId
           consPoints: data.consPoints
         }),
         stockCode: data.stockCode,
-        stockName: ''
+        stockName: '',
+        type: 'pros_cons'  // 指定笔记类型为利好利空分析
       };
       
       // 如果提供了现有笔记ID，则直接更新
