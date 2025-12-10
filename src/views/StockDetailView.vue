@@ -548,9 +548,7 @@
                 </div>
                 <div class="form-group mb-2.5">
                   <label class="form-label block text-sm font-medium text-gray-700 mb-0.5">笔记内容</label>
-                  <textarea v-model="noteForm.content"
-                    class="form-textarea w-full px-2.5 py-1.5 border border-gray-200 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent text-sm"
-                    rows="6" placeholder="输入笔记内容（分析、操作计划等）" required></textarea>
+                  <MarkdownEditor v-model="noteForm.content" placeholder="输入笔记内容（分析、操作计划等）" />
                 </div>
                 <div class="form-group mb-2.5">
                   <label class="form-label block text-sm font-medium text-gray-700 mb-0.5">关联股票</label>

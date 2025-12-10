@@ -254,7 +254,7 @@
       append-to-body
     >
       <el-form
-        ref="noteForm"
+        ref="noteFormRef"
         :model="noteForm"
         :rules="noteFormRules"
         label-width="80px"
@@ -341,393 +341,418 @@
   </div>
 </template>
 
-<script>
+<script setup>
+import { ref, onMounted, reactive } from 'vue';
 import apiService from '../api/apiService';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElForm } from 'element-plus';
 import MarkdownEditor from '../components/MarkdownEditor.vue';
 
-export default {
-  name: 'ReviewNotesView',
-  components: {
-    MarkdownEditor
-  },
-  data() {
-    return {
-      notes: [],
-      filteredNotes: [],
-      loading: false,
-      viewMode: 'list', // 默认使用列表视图
-      searchKeyword: '',
-      selectedStock: '',
-      availableStocks: [
-        { value: '600000', label: '浦发银行' },
-        { value: '600036', label: '招商银行' },
-        { value: '601318', label: '中国平安' },
-        { value: '600519', label: '贵州茅台' },
-        { value: '000001', label: '平安银行' },
-        { value: '300750', label: '宁德时代' }
-      ],
-      showNoteDetail: false,
-      showNoteModal: false,
-      showDeleteConfirm: false,
-      editingNote: null,
-      selectedNote: null,
-      selectedNoteForDelete: null,
-      noteForm: {
-        title: '',
-        content: '',
-        relatedStock: []
-      },
-      noteFormRules: {
-        title: [
-          { required: true, message: '请输入笔记标题', trigger: 'blur' },
-          { min: 1, max: 50, message: '标题长度在 1 到 50 个字符', trigger: 'blur' }
-        ],
-        content: [
-          { required: true, message: '请输入笔记内容', trigger: 'blur' },
-          { min: 1, max: 5000, message: '内容长度在 1 到 5000 个字符', trigger: 'blur' }
-        ]
-      },
-      // 已选择股票的完整信息
-      selectedStocksInfo: [],
-      // 搜索结果相关
-      showSearchResults: false,
-      searchResults: []
-    };
-  },
-  mounted() {
-    this.fetchNotes();
-  },
-  methods: {
-    async fetchNotes() {
-      this.loading = true;
-      try {
-        // 使用apiService中的getReviewNotes方法获取笔记列表
-        const response = await apiService.getReviewNotes();
-        this.notes = response;
-        // 初始化筛选列表
-        this.filteredNotes = [...this.notes];
-        // 应用搜索条件
-        if (this.searchKeyword || this.selectedStock) {
-          this.handleSearch();
-        }
-      } catch (error) {
-        console.error('获取笔记列表失败:', error);
-        ElMessage.error('获取笔记列表失败');
-      } finally {
-        this.loading = false;
-      }
-    },
-    formatDate(dateString) {
-      if (!dateString) return '';
-      const date = new Date(dateString);
-      return date.toLocaleString('zh-CN', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit'
-      });
-    },
-    truncateText(text, maxLength) {
-      if (!text) return '';
-      // 去除HTML标签 - 更彻底的实现
-      let plainText = text;
-      // 首先移除所有HTML标签，包括自闭合标签
-      plainText = plainText.replace(/<[^>]*>/g, '');
-      // 然后移除可能的HTML实体
-      plainText = plainText.replace(/&nbsp;/g, ' ');
-      plainText = plainText.replace(/&lt;/g, '<');
-      plainText = plainText.replace(/&gt;/g, '>');
-      plainText = plainText.replace(/&amp;/g, '&');
-      plainText = plainText.replace(/&quot;/g, '"');
-      plainText = plainText.replace(/&#39;/g, "'");
-      
-      // 去除多余的空白字符
-      plainText = plainText.replace(/\s+/g, ' ').trim();
-      
-      return plainText.length > maxLength ? plainText.substring(0, maxLength) + '...' : plainText;
-    },
-    viewNote(note) {
-      this.selectedNote = { ...note };
-      this.showNoteDetail = true;
-    },
-    closeNoteDetail() {
-      this.showNoteDetail = false;
-      this.selectedNote = null;
-    },
+// 组件名称
+const name = 'ReviewNotesView';
 
-    editCurrentNote() {
-      if (this.selectedNote) {
-        this.editNote(this.selectedNote);
-      }
-    },
-    // 股票搜索方法
-    async handleStockSearch() {
+// 响应式状态
+const notes = ref([]);
+const filteredNotes = ref([]);
+const loading = ref(false);
+const viewMode = ref('list'); // 默认使用列表视图
+const searchKeyword = ref('');
+const selectedStock = ref('');
+const availableStocks = [
+  { value: '600000', label: '浦发银行' },
+  { value: '600036', label: '招商银行' },
+  { value: '601318', label: '中国平安' },
+  { value: '600519', label: '贵州茅台' },
+  { value: '000001', label: '平安银行' },
+  { value: '300750', label: '宁德时代' }
+];
+const showNoteDetail = ref(false);
+const showNoteModal = ref(false);
+const showDeleteConfirm = ref(false);
+const editingNote = ref(null);
+const selectedNote = ref(null);
+const selectedNoteForDelete = ref(null);
+const noteForm = reactive({
+  title: '',
+  content: '',
+  relatedStock: []
+});
+const noteFormRef = ref(null);
+const noteFormRules = {
+  title: [
+    { required: true, message: '请输入笔记标题', trigger: 'blur' },
+    { min: 1, max: 50, message: '标题长度在 1 到 50 个字符', trigger: 'blur' }
+  ],
+  content: [
+    { required: true, message: '请输入笔记内容', trigger: 'blur' },
+    { min: 1, max: 5000, message: '内容长度在 1 到 5000 个字符', trigger: 'blur' }
+  ]
+};
+// 已选择股票的完整信息
+const selectedStocksInfo = ref([]);
+// 搜索结果相关
+const showSearchResults = ref(false);
+const searchResults = ref([]);
+
+// 获取笔记列表
+async function fetchNotes() {
+  loading.value = true;
+  try {
+    // 使用apiService中的getReviewNotes方法获取笔记列表
+    const response = await apiService.getReviewNotes();
+    notes.value = response;
+    // 初始化筛选列表
+    filteredNotes.value = [...notes.value];
+    // 应用搜索条件
+    if (searchKeyword.value || selectedStock.value) {
+      handleSearch();
+    }
+  } catch (error) {
+    console.error('获取笔记列表失败:', error);
+    ElMessage.error('获取笔记列表失败');
+  } finally {
+    loading.value = false;
+  }
+}
+
+// 格式化日期
+function formatDate(dateString) {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  return date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
+// 文本截断
+function truncateText(text, maxLength) {
+  if (!text) return '';
+  // 去除HTML标签 - 更彻底的实现
+  let plainText = text;
+  // 首先移除所有HTML标签，包括自闭合标签
+  plainText = plainText.replace(/<[^>]*>/g, '');
+  // 然后移除可能的HTML实体
+  plainText = plainText.replace(/&nbsp;/g, ' ');
+  plainText = plainText.replace(/&lt;/g, '<');
+  plainText = plainText.replace(/&gt;/g, '>');
+  plainText = plainText.replace(/&amp;/g, '&');
+  plainText = plainText.replace(/&quot;/g, '"');
+  plainText = plainText.replace(/&#39;/g, "'");
+  
+  // 去除多余的空白字符
+  plainText = plainText.replace(/\s+/g, ' ').trim();
+  
+  return plainText.length > maxLength ? plainText.substring(0, maxLength) + '...' : plainText;
+}
+
+// 查看笔记
+function viewNote(note) {
+  selectedNote.value = { ...note };
+  showNoteDetail.value = true;
+}
+
+// 关闭笔记详情
+function closeNoteDetail() {
+  showNoteDetail.value = false;
+  selectedNote.value = null;
+}
+
+// 编辑当前笔记
+function editCurrentNote() {
+  if (selectedNote.value) {
+    editNote(selectedNote.value);
+  }
+}
+
+// 股票搜索方法
+async function handleStockSearch() {
+  try {
+    if (!searchKeyword.value.trim()) {
+      searchResults.value = [];
+      showSearchResults.value = false;
+      return;
+    }
+    
+    const results = await apiService.getStocks(searchKeyword.value.trim());
+    searchResults.value = results;
+    showSearchResults.value = true;
+  } catch (error) {
+    console.error('股票搜索失败:', error);
+    ElMessage.error('股票搜索失败');
+  }
+}
+
+// 选择搜索结果
+function selectSearchResult(stock) {
+  // 检查是否已选择该股票
+  if (!noteForm.relatedStock.includes(stock.stockCode)) {
+    noteForm.relatedStock.push(stock.stockCode);
+    // 存储股票的完整信息
+    selectedStocksInfo.value.push(stock);
+  }
+  searchKeyword.value = '';
+  searchResults.value = [];
+  showSearchResults.value = false;
+}
+
+// 移除选中的股票
+function removeStock(stockCode) {
+  const index = noteForm.relatedStock.indexOf(stockCode);
+  if (index > -1) {
+    noteForm.relatedStock.splice(index, 1);
+    // 同时移除股票的完整信息
+    selectedStocksInfo.value = selectedStocksInfo.value.filter(stock => stock.stockCode !== stockCode);
+  }
+}
+
+// 关闭搜索结果
+function closeSearchResults() {
+  setTimeout(() => {
+    showSearchResults.value = false;
+  }, 200);
+}
+
+// 取消添加/编辑
+function cancelAddEdit() {
+  showNoteModal.value = false;
+  editingNote.value = null;
+  resetForm();
+}
+
+// 保存笔记
+async function saveNote() {
+  try {
+    if (noteFormRef.value) {
+      await noteFormRef.value.validate();
+    }
+    
+    // 构建股票名称字符串，与股票代码顺序对应
+    const stockNames = noteForm.relatedStock.map(code => {
+      // 优先从selectedStocksInfo中获取完整的股票名称
+      const stockInfo = selectedStocksInfo.value.find(stock => stock.stockCode === code);
+      return stockInfo ? stockInfo.stockName : '';
+    }).join(',');
+    
+    const noteData = {
+      ...noteForm,
+      stockCode: noteForm.relatedStock.join(',') || '',
+      stockName: stockNames || ''
+    };
+    
+    if (editingNote.value) {
+      // 更新笔记
+      await apiService.updateReviewNote(editingNote.value.id, noteData);
+      ElMessage.success('更新成功');
+    } else {
+      // 添加新笔记
+      await apiService.createReviewNote(noteData);
+      ElMessage.success('创建成功');
+    }
+    
+    showNoteModal.value = false;
+    editingNote.value = null;
+    resetForm();
+    
+    // 重新获取笔记列表
+    fetchNotes();
+  } catch (error) {
+    console.error('保存失败:', error);
+    if (error.response && error.response.status === 400) {
+      ElMessage.error(error.response.data.detail || '保存失败');
+    } else {
+      ElMessage.error('保存失败，请重试');
+    }
+  }
+}
+
+// 确认删除
+function confirmDelete(note) {
+  selectedNoteForDelete.value = note;
+  showDeleteConfirm.value = true;
+}
+
+// 删除笔记
+async function deleteNote() {
+  try {
+    await apiService.deleteNote(selectedNoteForDelete.value.id);
+    ElMessage.success('删除成功');
+    showDeleteConfirm.value = false;
+    selectedNoteForDelete.value = null;
+    
+    // 重新获取笔记列表
+    fetchNotes();
+  } catch (error) {
+    console.error('删除失败:', error);
+    ElMessage.error('删除失败，请重试');
+  }
+}
+
+// 表格行点击
+function handleTableRowClick(row) {
+  // 表格行点击时查看详情
+  viewNote(row);
+}
+
+// 获取股票名称
+function getStockLabel(stockCode) {
+  // 首先处理多个股票代码的情况
+  if (stockCode && stockCode.includes(',')) {
+    // 如果传入的是多个股票代码，返回第一个的名称
+    return getStockLabel(stockCode.split(',')[0]);
+  }
+  
+  // 首先检查当前笔记的stockName是否包含该股票的名称（支持多个股票的情况）
+  const currentNote = notes.value.find(note => 
+    note.stockCode && 
+    note.stockCode.split(',').includes(stockCode)
+  );
+  if (currentNote && currentNote.stockName) {
+    // 将stockName按逗号分割，与stockCode的顺序对应
+    const stockCodes = currentNote.stockCode.split(',');
+    const stockNames = currentNote.stockName.split(',');
+    const index = stockCodes.indexOf(stockCode);
+    if (index !== -1 && index < stockNames.length && stockNames[index]) {
+      return stockNames[index];
+    }
+  }
+  
+  // 先从可用股票列表中查找
+  const availableStock = availableStocks.find(s => s.value === stockCode);
+  if (availableStock) {
+    return availableStock.label;
+  }
+  
+  // 再从已选择的股票信息中查找
+  const selectedStock = selectedStocksInfo.value.find(s => s.stockCode === stockCode);
+  if (selectedStock) {
+    return selectedStock.stockName;
+  }
+  
+  // 如果都找不到，返回股票代码
+  return stockCode;
+}
+
+// 渲染笔记内容
+function renderNoteContent(content) {
+  if (!content) return '';
+  
+  // 简单替换换行和加粗
+  let html = content;
+  // 换行
+  html = html.replace(/\n/g, '<br>');
+  // 加粗
+  html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  // 斜体
+  html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
+  // 标题
+  html = html.replace(/^# (.*$)/gm, '<h1>$1</h1>');
+  html = html.replace(/^## (.*$)/gm, '<h2>$1</h2>');
+  html = html.replace(/^### (.*$)/gm, '<h3>$1</h3>');
+  // 列表
+  html = html.replace(/^- (.*$)/gm, '<li>$1</li>');
+  // 替换图片标记为图片标签 - 现在直接使用Base64数据
+  html = html.replace(/\[图片:([^\]]+)\]/g, (match, imgData) => {
+    // 直接使用Base64数据作为图片源
+    return `<img src="${imgData}" class="content-image" alt="笔记图片" />`;
+  });
+  
+  return html;
+}
+
+// 处理搜索
+function handleSearch() {
+  filteredNotes.value = notes.value.filter(note => {
+    // 关键词搜索
+    const keywordMatch = !searchKeyword.value || 
+      note.title.toLowerCase().includes(searchKeyword.value.toLowerCase()) || 
+      note.content.toLowerCase().includes(searchKeyword.value.toLowerCase()) ||
+      (note.stockCode && note.stockCode.toLowerCase().includes(searchKeyword.value.toLowerCase())) ||
+      (note.stockName && note.stockName.toLowerCase().includes(searchKeyword.value.toLowerCase()));
+      
+    // 股票筛选
+    const stockMatch = !selectedStock.value || 
+      (note.stockCode && note.stockCode.split(',').includes(selectedStock.value));
+      
+    return keywordMatch && stockMatch;
+  });
+}
+
+// 编辑笔记
+function editNote(note) {
+  editingNote.value = note;
+  noteForm.title = note.title;
+  noteForm.content = note.content;
+  noteForm.relatedStock = note.stockCode ? note.stockCode.split(',') : [];
+  
+  // 初始化已选择股票的完整信息
+  selectedStocksInfo.value = [];
+  if (note.stockCode) {
+    const stockCodes = note.stockCode.split(',');
+    // 尝试从API获取股票完整信息
+    stockCodes.forEach(async (code) => {
       try {
-        if (!this.searchKeyword.trim()) {
-          this.searchResults = [];
-          this.showSearchResults = false;
-          return;
-        }
-        
-        const results = await apiService.getStocks(this.searchKeyword.trim());
-        this.searchResults = results;
-        this.showSearchResults = true;
-      } catch (error) {
-        console.error('股票搜索失败:', error);
-        ElMessage.error('股票搜索失败');
-      }
-    },
-    // 选择搜索结果
-    selectSearchResult(stock) {
-      // 检查是否已选择该股票
-      if (!this.noteForm.relatedStock.includes(stock.stockCode)) {
-        this.noteForm.relatedStock.push(stock.stockCode);
-        // 存储股票的完整信息
-        this.selectedStocksInfo.push(stock);
-      }
-      this.searchKeyword = '';
-      this.searchResults = [];
-      this.showSearchResults = false;
-    },
-    // 移除选中的股票
-    removeStock(stockCode) {
-      const index = this.noteForm.relatedStock.indexOf(stockCode);
-      if (index > -1) {
-        this.noteForm.relatedStock.splice(index, 1);
-        // 同时移除股票的完整信息
-        this.selectedStocksInfo = this.selectedStocksInfo.filter(stock => stock.stockCode !== stockCode);
-      }
-    },
-    // 关闭搜索结果
-    closeSearchResults() {
-      setTimeout(() => {
-        this.showSearchResults = false;
-      }, 200);
-    },
-    cancelAddEdit() {
-      this.showNoteModal = false;
-      this.editingNote = null;
-      this.resetForm();
-    },
-    async saveNote() {
-      try {
-        if (this.$refs.noteForm) {
-          await this.$refs.noteForm.validate();
-        }
-        
-        // 构建股票名称字符串，与股票代码顺序对应
-        const stockNames = this.noteForm.relatedStock.map(code => {
-          // 优先从selectedStocksInfo中获取完整的股票名称
-          const stockInfo = this.selectedStocksInfo.find(stock => stock.stockCode === code);
-          return stockInfo ? stockInfo.stockName : '';
-        }).join(',');
-        
-        const noteData = {
-          ...this.noteForm,
-          stockCode: this.noteForm.relatedStock.join(',') || '',
-          stockName: stockNames || ''
-        };
-        
-        if (this.editingNote) {
-          // 更新笔记
-          await apiService.updateReviewNote(this.editingNote.id, noteData);
-          ElMessage.success('更新成功');
+        // 先从本地availableStocks查找
+        const localStock = availableStocks.find(s => s.value === code);
+        if (localStock) {
+          selectedStocksInfo.value.push({
+            stockCode: code,
+            stockName: localStock.label
+          });
         } else {
-          // 添加新笔记
-          await apiService.createReviewNote(noteData);
-          ElMessage.success('创建成功');
-        }
-        
-        this.showNoteModal = false;
-        this.editingNote = null;
-        this.resetForm();
-        
-        // 重新获取笔记列表
-        this.fetchNotes();
-      } catch (error) {
-        console.error('保存失败:', error);
-        if (error.response && error.response.status === 400) {
-          ElMessage.error(error.response.data.detail || '保存失败');
-        } else {
-          ElMessage.error('保存失败，请重试');
-        }
-      }
-    },
-    confirmDelete(note) {
-      this.selectedNoteForDelete = note;
-      this.showDeleteConfirm = true;
-    },
-    async deleteNote() {
-      try {
-        await apiService.deleteNote(this.selectedNoteForDelete.id);
-        ElMessage.success('删除成功');
-        this.showDeleteConfirm = false;
-        this.selectedNoteForDelete = null;
-        
-        // 重新获取笔记列表
-        this.fetchNotes();
-      } catch (error) {
-        console.error('删除失败:', error);
-        ElMessage.error('删除失败，请重试');
-      }
-    },
-    handleTableRowClick(row) {
-      // 表格行点击时查看详情
-      this.viewNote(row);
-    },
-    // MarkdownEditor组件已经内置了图片粘贴功能，不再需要单独处理
-    getStockLabel(stockCode) {
-      // 首先处理多个股票代码的情况
-      if (stockCode && stockCode.includes(',')) {
-        // 如果传入的是多个股票代码，返回第一个的名称
-        return this.getStockLabel(stockCode.split(',')[0]);
-      }
-      
-      // 首先检查当前笔记的stockName是否包含该股票的名称（支持多个股票的情况）
-      const currentNote = this.notes.find(note => 
-        note.stockCode && 
-        note.stockCode.split(',').includes(stockCode)
-      );
-      if (currentNote && currentNote.stockName) {
-        // 将stockName按逗号分割，与stockCode的顺序对应
-        const stockCodes = currentNote.stockCode.split(',');
-        const stockNames = currentNote.stockName.split(',');
-        const index = stockCodes.indexOf(stockCode);
-        if (index !== -1 && index < stockNames.length && stockNames[index]) {
-          return stockNames[index];
-        }
-      }
-      
-      // 先从可用股票列表中查找
-      const availableStock = this.availableStocks.find(s => s.value === stockCode);
-      if (availableStock) {
-        return availableStock.label;
-      }
-      
-      // 再从已选择的股票信息中查找
-      const selectedStock = this.selectedStocksInfo.find(s => s.stockCode === stockCode);
-      if (selectedStock) {
-        return selectedStock.stockName;
-      }
-      
-      // 如果都找不到，返回股票代码
-      return stockCode;
-    },
-    renderNoteContent(content) {
-      if (!content) return '';
-      
-      // 简单替换换行和加粗
-      let html = content;
-      // 换行
-      html = html.replace(/\n/g, '<br>');
-      // 加粗
-      html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-      // 斜体
-      html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
-      // 标题
-      html = html.replace(/^# (.*$)/gm, '<h1>$1</h1>');
-      html = html.replace(/^## (.*$)/gm, '<h2>$1</h2>');
-      html = html.replace(/^### (.*$)/gm, '<h3>$1</h3>');
-      // 列表
-      html = html.replace(/^- (.*$)/gm, '<li>$1</li>');
-      // 替换图片标记为图片标签 - 现在直接使用Base64数据
-      html = html.replace(/\[图片:([^\]]+)\]/g, (match, imgData) => {
-        // 直接使用Base64数据作为图片源
-        return `<img src="${imgData}" class="content-image" alt="笔记图片" />`;
-      });
-      
-      return html;
-    },
-    handleSearch() {
-      this.filteredNotes = this.notes.filter(note => {
-        // 关键词搜索
-        const keywordMatch = !this.searchKeyword || 
-          note.title.toLowerCase().includes(this.searchKeyword.toLowerCase()) || 
-          note.content.toLowerCase().includes(this.searchKeyword.toLowerCase()) ||
-          (note.stockCode && note.stockCode.toLowerCase().includes(this.searchKeyword.toLowerCase())) ||
-          (note.stockName && note.stockName.toLowerCase().includes(this.searchKeyword.toLowerCase()));
-          
-        // 股票筛选
-        const stockMatch = !this.selectedStock || 
-          (note.stockCode && note.stockCode.split(',').includes(this.selectedStock));
-          
-        return keywordMatch && stockMatch;
-      });
-    },
-    editNote(note) {
-      this.editingNote = note;
-      this.noteForm = {
-        title: note.title,
-        content: note.content,
-        relatedStock: note.stockCode ? note.stockCode.split(',') : []
-      };
-      
-      // 初始化已选择股票的完整信息
-      this.selectedStocksInfo = [];
-      if (note.stockCode) {
-        const stockCodes = note.stockCode.split(',');
-        // 尝试从API获取股票完整信息
-        stockCodes.forEach(async (code) => {
-          try {
-            // 先从本地availableStocks查找
-            const localStock = this.availableStocks.find(s => s.value === code);
-            if (localStock) {
-              this.selectedStocksInfo.push({
-                stockCode: code,
-                stockName: localStock.label
-              });
-            } else {
-              // 从API获取
-              const results = await apiService.getStocks(code);
-              if (results.length > 0) {
-                this.selectedStocksInfo.push(results[0]);
-              } else {
-                // 找不到则使用代码作为名称
-                this.selectedStocksInfo.push({
-                  stockCode: code,
-                  stockName: code
-                });
-              }
-            }
-          } catch (error) {
-            console.error(`获取股票${code}信息失败:`, error);
-            // 失败时使用代码作为名称
-            this.selectedStocksInfo.push({
+          // 从API获取
+          const results = await apiService.getStocks(code);
+          if (results.length > 0) {
+            selectedStocksInfo.value.push(results[0]);
+          } else {
+            // 找不到则使用代码作为名称
+            selectedStocksInfo.value.push({
               stockCode: code,
               stockName: code
             });
           }
+        }
+      } catch (error) {
+        console.error(`获取股票${code}信息失败:`, error);
+        // 失败时使用代码作为名称
+        selectedStocksInfo.value.push({
+          stockCode: code,
+          stockName: code
         });
       }
-      
-      // 解析内容中的图片标记并恢复图片
-      this.uploadedImages = [];
-      // 移除hasImages相关逻辑，因为图片直接存储在content中
-      
-      this.showNoteModal = true;
-      // 如果打开了详情弹窗，先关闭
-      this.closeNoteDetail();
-    },
-    resetForm() {
-      this.noteForm = {
-        title: '',
-        content: '',
-        relatedStock: []
-      };
-      // 重置已选择股票的完整信息
-      this.selectedStocksInfo = [];
-      this.searchKeyword = '';
-      this.searchResults = [];
-      this.showSearchResults = false;
-      if (this.$refs.noteForm) {
-        this.$refs.noteForm.resetFields();
-      }
-      // 不再需要维护单独的图片列表
-    },
+    });
   }
-};
+  
+  // 解析内容中的图片标记并恢复图片
+  // 移除hasImages相关逻辑，因为图片直接存储在content中
+  
+  showNoteModal.value = true;
+  // 如果打开了详情弹窗，先关闭
+  closeNoteDetail();
+}
+
+// 重置表单
+function resetForm() {
+  noteForm.title = '';
+  noteForm.content = '';
+  noteForm.relatedStock = [];
+  // 重置已选择股票的完整信息
+  selectedStocksInfo.value = [];
+  searchKeyword.value = '';
+  searchResults.value = [];
+  showSearchResults.value = false;
+  if (noteFormRef.value) {
+    noteFormRef.value.resetFields();
+  }
+  // 不再需要维护单独的图片列表
+}
+
+// 组件挂载时获取笔记列表
+onMounted(() => {
+  fetchNotes();
+});
 </script>
 
 <style scoped>
