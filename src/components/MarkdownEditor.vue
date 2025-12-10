@@ -89,11 +89,8 @@ const editorConfig = ref({
           }
           
           const data = await response.json()
-          if (data.success) {
-            insertFn(data.url, file.name, data.url)
-          } else {
-            throw new Error(data.message || '上传失败')
-          }
+          // 后端返回格式为 {url, filename}，直接使用
+          insertFn(data.url, file.name, data.url)
         } catch (error) {
           console.error('图片上传失败:', error)
           // 创建临时URL以便在编辑器中显示

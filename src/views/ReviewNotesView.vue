@@ -389,7 +389,10 @@ export default {
         ]
       },
       // 已选择股票的完整信息
-      selectedStocksInfo: []
+      selectedStocksInfo: [],
+      // 搜索结果相关
+      showSearchResults: false,
+      searchResults: []
     };
   },
   mounted() {
