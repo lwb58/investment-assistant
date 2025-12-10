@@ -22,6 +22,7 @@
 import { ref, shallowRef, watch, onBeforeUnmount } from 'vue'
 import { Editor, Toolbar } from '@wangeditor/editor-for-vue'
 import '@wangeditor/editor/dist/css/style.css'
+import apiService from '../api/apiService'
 
 // Props
 const props = defineProps({
@@ -56,7 +57,43 @@ const toolbarConfig = {
 
 // 编辑器配置
 const editorConfig = {
-  placeholder: props.placeholder
+  placeholder: props.placeholder,
+  // 允许粘贴图片
+  pasteIgnoreImg: false,
+  // 图片上传和粘贴配置
+  MENU_CONF: {
+    // 工具栏上传图片配置
+    uploadImage: {
+      // 自定义上传方法
+      customUpload: async (file, insertFn) => {
+        // 调用后端上传接口
+        const url = await uploadImageToBackend(file)
+        // 插入图片
+        insertFn(url, file.name, url)
+      }
+    },
+    // 粘贴图片配置
+    pasteImage: {
+      // 自定义粘贴处理
+      customUpload: async (file, insertFn) => {
+        // 调用后端上传接口
+        const url = await uploadImageToBackend(file)
+        // 插入图片
+        insertFn(url, file.name, url)
+      }
+    }
+  }
+}
+
+// 调用后端上传图片接口
+const uploadImageToBackend = async (file) => {
+  try {
+    const data = await apiService.uploadImage(file)
+    return data.url
+  } catch (error) {
+    console.error('上传图片失败:', error)
+    return null
+  }
 }
 
 // 编辑器模式

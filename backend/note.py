@@ -127,32 +127,29 @@ def get_notes_by_stock(stock_code: str):
         raise HTTPException(status_code=500, detail="股票关联笔记获取失败")
 
 @note_router.post("/upload/image")
-async def upload_image(file: UploadFile = File(...), stock_code: str = None):
-    """上传图片，按股票代码分类保存"""
+async def upload_image(file: UploadFile = File(...)):
+    """上传图片，按日期分目录保存"""
     try:
-        # 确保picture目录存在
+        # 确保backend/picture目录存在
         base_dir = "d:\\yypt\\xingziyuan\\investment-assistant\\backend\\picture"
         if not os.path.exists(base_dir):
             os.makedirs(base_dir)
         
-        # 如果提供了股票代码，创建股票代码目录
-        if stock_code:
-            # 校验股票代码格式
-            if len(stock_code) != 6 or not stock_code.isdigit():
-                raise HTTPException(status_code=400, detail="股票代码必须是6位数字")
-            
-            stock_dir = os.path.join(base_dir, stock_code)
-            if not os.path.exists(stock_dir):
-                os.makedirs(stock_dir)
-            
-            # 构建保存路径
-            file_path = os.path.join(stock_dir, file.filename)
-            # 构建相对路径（用于前端显示）
-            relative_path = f"/backend/picture/{stock_code}/{file.filename}"
-        else:
-            # 没有股票代码时直接保存在picture目录
-            file_path = os.path.join(base_dir, file.filename)
-            relative_path = f"/backend/picture/{file.filename}"
+        # 获取当前日期，创建日期目录 (YYYY-MM-DD格式)
+        current_date = datetime.now().strftime("%Y-%m-%d")
+        date_dir = os.path.join(base_dir, current_date)
+        if not os.path.exists(date_dir):
+            os.makedirs(date_dir)
+        
+        # 生成唯一文件名，避免重复
+        file_extension = os.path.splitext(file.filename)[1]
+        unique_filename = f"{uuid4().hex}{file_extension}"
+        
+        # 构建保存路径
+        file_path = os.path.join(date_dir, unique_filename)
+        
+        # 构建相对路径（用于数据库存储和前端显示）
+        relative_path = f"/backend/picture/{current_date}/{unique_filename}"
         
         # 保存文件
         with open(file_path, "wb") as buffer:
@@ -164,7 +161,7 @@ async def upload_image(file: UploadFile = File(...), stock_code: str = None):
         return JSONResponse(
             content={
                 "url": relative_path,
-                "filename": file.filename
+                "filename": unique_filename
             },
             status_code=200
         )

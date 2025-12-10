@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Markdown编辑器图片上传测试</title>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+    .test-section {
+      margin-bottom: 30px;
+      padding: 20px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+    }
+    h1, h2 {
+      color: #333;
+    }
+    .markdown-editor {
+      border: 1px solid #e8e8e8;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.09);
+      background: #fff;
+    }
+    .toolbar {
+      border-bottom: 1px solid #e8e8e8;
+      padding: 8px;
+      background: #fafafa;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+    .toolbar button {
+      padding: 6px 12px;
+      background: #fff;
+      border: 1px solid #d9d9d9;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: all 0.3s;
+    }
+    .toolbar button:hover {
+      background: #e6f7ff;
+      border-color: #91d5ff;
+    }
+    .editor {
+      min-height: 300px;
+      padding: 16px;
+      font-size: 16px;
+      line-height: 1.6;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    }
+    .result-section {
+      margin-top: 20px;
+      padding: 15px;
+      background-color: #f8f9fa;
+      border-radius: 5px;
+    }
+    .content-display {
+      white-space: pre-wrap;
+      word-break: break-all;
+      margin-top: 10px;
+      padding: 10px;
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    .tips {
+      background-color: #fff3cd;
+      border-color: #ffeaa7;
+      color: #856404;
+      padding: 12px;
+      border-radius: 4px;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <h1>Markdown编辑器图片上传测试</h1>
+    
+    <div class="tips">
+      <h3>测试说明：</h3>
+      <ul>
+        <li>测试1：点击工具栏图片按钮上传图片</li>
+        <li>测试2：直接粘贴图片（Ctrl+V 或 右键粘贴）</li>
+        <li>测试3：输入文字内容，测试混排效果</li>
+      </ul>
+    </div>
+    
+    <div class="test-section">
+      <h2>Markdown编辑器</h2>
+      <div class="markdown-editor">
+        <!-- 这里会渲染完整的MarkdownEditor组件 -->
+        <div ref="editorContainer"></div>
+      </div>
+    </div>
+    
+    <div class="result-section">
+      <h2>编辑内容</h2>
+      <div class="content-display" v-html="editorContent"></div>
+      
+      <h2>HTML源码</h2>
+      <div class="content-display">{{ editorContent }}</div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { createApp } from 'vue';
+    import App from './src/App.vue';
+    import { createRouter, createWebHistory } from 'vue-router';
+    import MarkdownEditor from './src/components/MarkdownEditor.vue';
+    
+    // 创建一个简单的测试组件
+    const TestApp = {
+      components: {
+        MarkdownEditor
+      },
+      data() {
+        return {
+          editorContent: ''
+        };
+      },
+      methods: {
+        handleContentChange(content) {
+          this.editorContent = content;
+        }
+      },
+      template: `
+        <div>
+          <h1>Markdown编辑器图片上传测试</h1>
+          
+          <div class="tips">
+            <h3>测试说明：</h3>
+            <ul>
+              <li>测试1：点击工具栏图片按钮上传图片</li>
+              <li>测试2：直接粘贴图片（Ctrl+V 或 右键粘贴）</li>
+              <li>测试3：输入文字内容，测试混排效果</li>
+            </ul>
+          </div>
+          
+          <div class="test-section">
+            <h2>Markdown编辑器</h2>
+            <div class="markdown-editor">
+              <markdown-editor @update:content="handleContentChange"></markdown-editor>
+            </div>
+          </div>
+          
+          <div class="result-section">
+            <h2>编辑内容</h2>
+            <div class="content-display" v-html="editorContent"></div>
+            
+            <h2>HTML源码</h2>
+            <div class="content-display">{{ editorContent }}</div>
+          </div>
+        </div>
+      `
+    };
+    
+    // 挂载测试应用
+    createApp(TestApp).mount('#app');
+  </script>
+</body>
+</html>

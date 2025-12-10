@@ -180,7 +180,33 @@ async updateStock(stockId, updateData) {  // 参数名从stockCode改为stockId
     return this.request('DELETE', `/notes/${noteId}`);
   }
 
+  /**
+   * 上传图片
+   * @param {File} file - 图片文件
+   * @returns {Promise<Object>} 上传结果
+   */
+  async uploadImage(file) {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    try {
+      // 对于文件上传，需要使用不同的请求头处理
+      const response = await fetch(`${this.baseURL}/notes/upload/image`, {
+        method: 'POST',
+        body: formData
+      });
 
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(`[${response.status}] ${errorData.detail || '图片上传失败'}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('图片上传错误:', error);
+      throw error;
+    }
+  }
 
   /**
    * 获取股票杜邦分析数据
