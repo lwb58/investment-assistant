@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>图片上传稳定性测试</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    .test-section {
+      margin-bottom: 20px;
+      padding: 15px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+    }
+    button {
+      padding: 8px 15px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 3px;
+      cursor: pointer;
+      margin-right: 10px;
+      margin-bottom: 10px;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    .result {
+      margin-top: 10px;
+      padding: 10px;
+      background-color: #f8f9fa;
+      border-radius: 3px;
+      font-family: monospace;
+      font-size: 14px;
+      white-space: pre-wrap;
+    }
+    .success {
+      color: green;
+    }
+    .error {
+      color: red;
+    }
+    .info {
+      color: blue;
+    }
+    input[type="file"] {
+      margin-bottom: 10px;
+    }
+    .counter {
+      display: inline-block;
+      margin-left: 10px;
+      padding: 5px 10px;
+      background-color: #e9ecef;
+      border-radius: 3px;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <h1>图片上传稳定性测试</h1>
+  
+  <div class="test-section">
+    <h2>1. 选择测试图片</h2>
+    <input type="file" id="testImage" accept="image/*">
+    <p>请选择一张小图片进行测试（建议小于1MB）</p>
+  </div>
+  
+  <div class="test-section">
+    <h2>2. 测试选项</h2>
+    <button id="testSingle">单次上传测试</button>
+    <button id="testMultiple">5次连续上传测试</button>
+    <button id="testFast">10次快速连续上传测试</button>
+    <button id="testParallel">5次并行上传测试</button>
+    <button id="clearResult">清空结果</button>
+  </div>
+  
+  <div class="test-section">
+    <h2>3. 测试结果</h2>
+    <div class="counter">
+      成功: <span id="successCount">0</span> | 失败: <span id="errorCount">0</span>
+    </div>
+    <div id="result" class="result"></div>
+  </div>
+
+  <script>
+    // DOM元素
+    const testImage = document.getElementById('testImage');
+    const testSingle = document.getElementById('testSingle');
+    const testMultiple = document.getElementById('testMultiple');
+    const testFast = document.getElementById('testFast');
+    const testParallel = document.getElementById('testParallel');
+    const clearResult = document.getElementById('clearResult');
+    const result = document.getElementById('result');
+    const successCount = document.getElementById('successCount');
+    const errorCount = document.getElementById('errorCount');
+    
+    // 统计
+    let stats = {
+      success: 0,
+      error: 0
+    };
+    
+    // 记录日志
+    function log(message, type = 'info') {
+      const logLine = `<span class="${type}">[${new Date().toLocaleTimeString()}] ${message}</span>\n`;
+      result.innerHTML += logLine;
+      result.scrollTop = result.scrollHeight;
+    }
+    
+    // 更新统计
+    function updateStats() {
+      successCount.textContent = stats.success;
+      errorCount.textContent = stats.error;
+    }
+    
+    // 上传图片
+    async function uploadImage(file, testId) {
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        log(`开始上传图片 ${testId}...`, 'info');
+        const startTime = performance.now();
+        
+        const response = await fetch('http://localhost:8000/api/notes/upload/image', {
+          method: 'POST',
+          body: formData
+        });
+        
+        const endTime = performance.now();
+        const duration = (endTime - startTime).toFixed(2);
+        
+        if (response.ok) {
+          const data = await response.json();
+          log(`图片 ${testId} 上传成功 (${duration}ms) - URL: ${data.url}`, 'success');
+          stats.success++;
+          return data;
+        } else {
+          const errorData = await response.json().catch(() => ({ detail: '未知错误' }));
+          log(`图片 ${testId} 上传失败 (${duration}ms) - ${errorData.detail || '请求失败'}`, 'error');
+          stats.error++;
+          return null;
+        }
+      } catch (error) {
+        log(`图片 ${testId} 上传出错 - ${error.message}`, 'error');
+        stats.error++;
+        return null;
+      } finally {
+        updateStats();
+      }
+    }
+    
+    // 获取测试文件
+    function getTestFile() {
+      if (!testImage.files || testImage.files.length === 0) {
+        alert('请先选择一张测试图片');
+        return null;
+      }
+      return testImage.files[0];
+    }
+    
+    // 测试单次上传
+    testSingle.addEventListener('click', async () => {
+      const file = getTestFile();
+      if (file) {
+        await uploadImage(file, 'single');
+      }
+    });
+    
+    // 测试多次连续上传
+    testMultiple.addEventListener('click', async () => {
+      const file = getTestFile();
+      if (file) {
+        log('开始5次连续上传测试...', 'info');
+        for (let i = 1; i <= 5; i++) {
+          await uploadImage(file, `multiple-${i}`);
+          await new Promise(resolve => setTimeout(resolve, 500)); // 500ms间隔
+        }
+        log('5次连续上传测试完成', 'info');
+      }
+    });
+    
+    // 测试快速连续上传
+    testFast.addEventListener('click', async () => {
+      const file = getTestFile();
+      if (file) {
+        log('开始10次快速连续上传测试...', 'info');
+        for (let i = 1; i <= 10; i++) {
+          await uploadImage(file, `fast-${i}`);
+          // 无间隔快速上传
+        }
+        log('10次快速连续上传测试完成', 'info');
+      }
+    });
+    
+    // 测试并行上传
+    testParallel.addEventListener('click', async () => {
+      const file = getTestFile();
+      if (file) {
+        log('开始5次并行上传测试...', 'info');
+        
+        // 创建5个上传任务
+        const uploadTasks = [];
+        for (let i = 1; i <= 5; i++) {
+          uploadTasks.push(uploadImage(file, `parallel-${i}`));
+        }
+        
+        // 等待所有任务完成
+        await Promise.all(uploadTasks);
+        log('5次并行上传测试完成', 'info');
+      }
+    });
+    
+    // 清空结果
+    clearResult.addEventListener('click', () => {
+      result.innerHTML = '';
+      stats = { success: 0, error: 0 };
+      updateStats();
+    });
+    
+    // 初始化
+    updateStats();
+    log('测试工具已准备就绪，请选择图片开始测试...', 'info');
+  </script>
+</body>
+</html>

@@ -65,33 +65,64 @@ const editorConfig = {
     // 工具栏上传图片配置
     uploadImage: {
       // 自定义上传方法
-      customUpload: async (file, insertFn) => {
-        // 调用后端上传接口
-        const url = await uploadImageToBackend(file)
-        // 插入图片
-        insertFn(url, file.name, url)
+      customUpload: (file, insertFn) => {
+        // 使用Promise链式调用确保同步执行，避免异步导致的保存冲突
+        Promise.resolve()
+          .then(() => uploadImageToBackend(file))
+          .then(url => {
+            if (url) {
+              insertFn(url, file.name, url)
+            } else {
+              console.error('图片上传失败，未插入图片')
+            }
+          })
+          .catch(error => {
+            console.error('图片上传错误:', error)
+            // 显示上传失败提示
+            if (typeof window !== 'undefined' && window.alert) {
+              window.alert('图片上传失败，请检查网络连接后重试')
+            }
+          })
       }
     },
     // 粘贴图片配置
     pasteImage: {
       // 自定义粘贴处理
-      customUpload: async (file, insertFn) => {
-        // 调用后端上传接口
-        const url = await uploadImageToBackend(file)
-        // 插入图片
-        insertFn(url, file.name, url)
+      customUpload: (file, insertFn) => {
+        // 使用Promise链式调用确保同步执行，避免异步导致的保存冲突
+        Promise.resolve()
+          .then(() => uploadImageToBackend(file))
+          .then(url => {
+            if (url) {
+              insertFn(url, file.name, url)
+            } else {
+              console.error('图片粘贴失败，未插入图片')
+            }
+          })
+          .catch(error => {
+            console.error('图片粘贴上传错误:', error)
+            // 显示上传失败提示
+            if (typeof window !== 'undefined' && window.alert) {
+              window.alert('图片粘贴失败，请检查网络连接后重试')
+            }
+          })
       }
     }
   }
 }
 
-// 调用后端上传图片接口
+// 调用后端上传图片接口（同步处理）
 const uploadImageToBackend = async (file) => {
   try {
+    // 使用同步方式上传，确保图片完全上传后再返回
     const data = await apiService.uploadImage(file)
     return data.url
   } catch (error) {
-    console.error('上传图片失败:', error)
+    console.error('图片上传失败:', error)
+    // 显示上传失败提示
+    if (typeof window !== 'undefined' && window.alert) {
+      window.alert('图片上传失败，请检查网络连接后重试')
+    }
     return null
   }
 }
