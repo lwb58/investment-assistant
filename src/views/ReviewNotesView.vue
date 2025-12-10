@@ -691,35 +691,29 @@ function editNote(note) {
   selectedStocksInfo.value = [];
   if (note.stockCode) {
     const stockCodes = note.stockCode.split(',');
-    // 尝试从API获取股票完整信息
-    stockCodes.forEach(async (code) => {
-      try {
-        // 先从本地availableStocks查找
-        const localStock = availableStocks.find(s => s.value === code);
-        if (localStock) {
-          selectedStocksInfo.value.push({
-            stockCode: code,
-            stockName: localStock.label
-          });
-        } else {
-          // 从API获取
-          const results = await apiService.getStocks(code);
-          if (results.length > 0) {
-            selectedStocksInfo.value.push(results[0]);
-          } else {
-            // 找不到则使用代码作为名称
-            selectedStocksInfo.value.push({
-              stockCode: code,
-              stockName: code
-            });
-          }
-        }
-      } catch (error) {
-        console.error(`获取股票${code}信息失败:`, error);
-        // 失败时使用代码作为名称
+    // 填充关联股票信息，优先使用本地数据和note中的stockName
+     stockCodes.forEach(code => {
+       // 先从本地availableStocks查找
+       const localStock = availableStocks.find(s => s.value === code);
+       if (localStock) {
         selectedStocksInfo.value.push({
           stockCode: code,
-          stockName: code
+          stockName: localStock.label
+        });
+      } else {
+        // 尝试从note.stockName中获取股票名称
+        let stockName = code;
+        if (note.stockName) {
+          const stockNames = note.stockName.split(',');
+          const index = stockCodes.indexOf(code);
+          if (index !== -1 && stockNames[index]) {
+            stockName = stockNames[index];
+          }
+        }
+        // 直接使用本地信息或从note中获取的信息，避免调用API
+        selectedStocksInfo.value.push({
+          stockCode: code,
+          stockName: stockName
         });
       }
     });
