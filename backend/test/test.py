@@ -55,9 +55,18 @@ INDUSTRY_PLATE_FIELDS = {
 
 # 2. 复用原有辅助函数（仅修改解析逻辑，不新增）
 def get_stock_market(stock_code: str) -> Optional[str]:  # 仅改这一行
-    if len(stock_code) != 6 or not stock_code.isdigit():
+    if not stock_code.isdigit():
         return None
-    return "sh" if stock_code.startswith("60") else "sz" if stock_code.startswith(("00", "30")) else None
+    if len(stock_code) < 6:
+        return "rt_hk"  # 港股
+    elif len(stock_code) == 6:
+        if stock_code.startswith("60"):
+            return "sh"  # 上海A股
+        elif stock_code.startswith(("00", "30")):
+            return "sz"  # 深圳A股
+        elif stock_code.startswith("8") or stock_code.startswith("4"):
+            return "bj"  # 北京A股
+    return None
 
 def parse_sina_hq(data: str) -> Dict[str, List[str]]:
     result = {}
@@ -115,13 +124,13 @@ def get_stock_quotes(stock_code: str):
     logger.info(f"请求股票行情: {stock_code}")
     
     # 校验股票代码
-    if len(stock_code) != 6 or not stock_code.isdigit():
-        raise HTTPException(status_code=400, detail="股票代码必须是6位数字")
+    if not stock_code.isdigit():
+        raise HTTPException(status_code=400, detail="股票代码必须是数字")
     
-    # 获取市场代码（sh/sz）
+    # 获取市场代码
     market = get_stock_market(stock_code)
     if not market:
-        raise HTTPException(status_code=400, detail="仅支持沪深A（60/00/30开头）")
+        raise HTTPException(status_code=400, detail="仅支持沪深A（60/00/30开头）和港股（5位数字）")
     
     # 构造新浪行情接口URL（复用现有工具）
     sina_list = f"{market}{stock_code},{market}{stock_code}_i"
@@ -178,12 +187,12 @@ def get_stock_quotes(stock_code: str):
 def get_stock_base_info(stockCode: str):
     logger.info(f"收到股票基础信息请求：{stockCode}")
     
-    if len(stockCode) != 6 or not stockCode.isdigit():
-        raise HTTPException(status_code=400, detail="股票代码必须是6位数字")
+    if not stockCode.isdigit():
+        raise HTTPException(status_code=400, detail="股票代码必须是数字")
     
     market = get_stock_market(stockCode)
     if not market:
-        raise HTTPException(status_code=400, detail="仅支持沪深A（60/00/30开头）")
+        raise HTTPException(status_code=400, detail="仅支持沪深A（60/00/30开头）和港股（5位数字）")
     
     # 关键修改1：去掉bk_new_jdhy，不查询无用板块数据
     sina_list = f"{market}{stockCode},{market}{stockCode}_i"

@@ -112,8 +112,14 @@ def get_notes_by_stock(stock_code: str):
     logger.info(f"请求股票{stock_code}的关联笔记")
     
     # 校验股票代码格式
-    if len(stock_code) != 6 or not stock_code.isdigit():
-        raise HTTPException(status_code=400, detail="股票代码必须是6位数字")
+    if not stock_code.isdigit():
+        raise HTTPException(status_code=400, detail="股票代码必须是数字")
+    
+    # 检查是否为支持的股票代码
+    from util import get_stock_market
+    market = get_stock_market(stock_code)
+    if not market:
+        raise HTTPException(status_code=400, detail="仅支持沪深A（60/00/30开头）和港股（5位数字）")
     
     try:
         all_notes = db.get_all_notes()

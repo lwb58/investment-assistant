@@ -88,23 +88,34 @@ stock_quote_cache = StockQuoteCache()
 # -------------- 辅助函数 --------------
 def get_stock_market(stock_code: str) -> Optional[str]:
     """
-    根据A股股票代码判断所属市场
-    返回值说明：sh=沪市（60开头），sz=深市（00/30开头），bj=北交所（8开头），None=格式错误或非A股代码
+    根据股票代码判断所属市场
+    返回值说明：sh=沪市（60开头），sz=深市（00/30开头），bj=北交所（8开头），rt_hk=港股（小于6位数字），None=格式错误
     """
-    if len(stock_code) != 6 or not stock_code.isdigit():
-        logger.warning(f"股票代码格式错误：{stock_code}（必须是6位数字）")
+    # 检查是否为纯数字
+    if not stock_code.isdigit():
+        logger.warning(f"股票代码格式错误：{stock_code}（必须是纯数字）")
         return None
     
-    # 补充北交所判断，覆盖全A股市场
-    if stock_code.startswith(("60","68")):
-        return "sh"
-    elif stock_code.startswith(("00", "30")):
-        return "sz"
-    elif stock_code.startswith("8"):
-        return "bj"
-    else:
-        logger.warning(f"非A股股票代码：{stock_code}（仅支持60/00/30/8开头的A股代码）")
-        return None
+    # 港股判断：小于6位数字
+    if len(stock_code) < 6:
+        return "rt_hk"
+    
+    # 6位数字为A股
+    if len(stock_code) == 6:
+        # 补充北交所判断，覆盖全A股市场
+        if stock_code.startswith(("60","68")):
+            return "sh"
+        elif stock_code.startswith(("00", "30")):
+            return "sz"
+        elif stock_code.startswith("8"):
+            return "bj"
+        else:
+            logger.warning(f"非A股股票代码：{stock_code}（仅支持60/00/30/8开头的A股代码）")
+            return None
+    
+    # 超过6位数字
+    logger.warning(f"股票代码格式错误：{stock_code}（长度超过6位）")
+    return None
 
 def parse_sina_hq(data: str) -> Dict[str, List[str]]:
     result = {}

@@ -1,0 +1,60 @@
+锘�<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <title>鏃燜10璧勬枡</title>
+    <style type="text/css">
+        .parent {
+            position: fixed;
+            top: 50%;
+            bottom: 50%;
+            left: 50%;
+            right: 50%;
+            width: 0;
+            height: 0;
+        }
+
+        .show {
+            border: 0px solid red;
+            width: 20rem;
+            /* 浠ヤ笅涓や釜灞炴�у繀椤讳负width,height鍊肩殑璐熶竴鍗� */
+            margin-left: -10rem;
+            margin-top: -60px;
+            text-align: center;
+        }
+
+        table {
+            width: 100%;
+            height: 100%;
+            text-align: center;
+        }
+
+        td {
+            border: 1px solid red;
+        }
+    </style>
+</head>
+<body style="background-color: #070707;">
+    <div class="parent">
+        <div class="show">
+            <img id="loadImg" src="../Content/img/noData_b.png" />
+        </div>
+    </div>
+</body>
+</html>
+<script>
+    window.onload = function () {
+        var skin = GetQueryString("type");
+        var color = GetQueryString("color");
+        if (skin && skin == "web" || color=="w") {
+            document.getElementById("loadImg").src = "../Content/img/noData_w.png";
+            document.getElementsByTagName("body")[0].style.backgroundColor = "#ffffff";
+        }
+    };
+
+    function GetQueryString(name) {
+        var reg = new RegExp("(^|&)" + name + "=([^&]*)(&|$)");
+        var r = window.location.search.substr(1).match(reg);
+        if (r != null) return unescape(r[2]); return null;
+    }
+</script>

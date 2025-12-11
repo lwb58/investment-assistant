@@ -1,11 +1,10 @@
-import chardet
 from urllib.parse import quote
-import requests
+import asyncio
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from fastapi.responses import StreamingResponse
 from datetime import datetime
-from typing import Optional, List, Dict, Union, Any
+from typing import Optional, List, Dict, Union, Any, Callable
 import random
 import logging
 import db
@@ -13,6 +12,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from io import BytesIO
+from functools import wraps
 from util import (
     get_stock_market, parse_sina_hq, format_field, fetch_url,
     cache_with_timeout, get_last_trade_date, sync_cache_with_timeout,
@@ -23,6 +23,37 @@ import re
 import time
 
 logger = logging.getLogger(__name__)
+
+# -------------- 统一错误处理装饰器 --------------
+def api_error_handler(func: Callable) -> Callable:
+    """API错误处理装饰器
+    统一处理API函数中的异常，记录日志并返回标准格式的错误响应
+    :param func: API函数
+    :return: 包装后的API函数
+    """
+    @wraps(func)
+    async def async_wrapper(*args, **kwargs):
+        try:
+            return await func(*args, **kwargs)
+        except HTTPException:
+            # 已处理的HTTP异常，直接抛出
+            raise
+        except Exception as e:
+            logger.error(f"API错误 [{func.__name__}]: {str(e)}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"服务器内部错误: {str(e)}")
+    
+    @wraps(func)
+    def sync_wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except HTTPException:
+            # 已处理的HTTP异常，直接抛出
+            raise
+        except Exception as e:
+            logger.error(f"API错误 [{func.__name__}]: {str(e)}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"服务器内部错误: {str(e)}")
+    
+    return async_wrapper if asyncio.iscoroutinefunction(func) else sync_wrapper
 
 # 创建路由实例
 stock_router = APIRouter(prefix="/api/stocks", tags=["股票模块"])
@@ -194,88 +225,195 @@ def get_tencent_stock_data(stock_code: str) -> Optional[Dict[str, Any]]:
     return None
 
 @sync_cache_with_timeout(300)
-def get_stock_quotes(stock_code: str) -> Optional[Dict[str, Any]]:
-    """获取股票实时行情（同步版本，修复核心问题）"""
-    logger.info(f"同步请求股票行情: {stock_code}")
-    
-    # 校验股票代码
-    if len(stock_code) != 6 or not stock_code.isdigit():
-        logger.warning(f"股票代码格式错误: {stock_code}")
+def validate_stock_code(stock_code: str) -> Optional[str]:
+    """验证股票代码格式和有效性
+    :param stock_code: 股票代码
+    :return: 市场代码或None（如果代码无效）
+    """
+    if not stock_code.isdigit():
+        logger.warning(f"股票代码格式错误: {stock_code}（必须是纯数字）")
         return None
     
     market = get_stock_market(stock_code)
     if not market:
-        logger.warning(f"不支持的市场: {stock_code}（仅支持沪深A：60/00/30开头）")
+        logger.warning(f"不支持的市场: {stock_code}")
         return None
     
-    # 构造接口URL（优化URL参数，增加随机数避免缓存）
-    random_num = int(time.time() * 1000)
-    sina_list = f"{market}{stock_code},{market}{stock_code}_i"
-    sina_url = f"https://hq.sinajs.cn/rn={random_num}&list={sina_list}"
+    return market
+
+@sync_cache_with_timeout(300)
+def get_stock_quotes(stock_code: str) -> Optional[Dict[str, Any]]:
+    """获取股票实时行情（同步版本，支持港股）"""
+    logger.info(f"同步请求股票行情: {stock_code}")
+    
+    # 校验股票代码
+    market = validate_stock_code(stock_code)
+    if not market:
+        return None
+    
+    # 构造接口URL
+    if market == "rt_hk":
+        # 港股URL格式 - 使用正确的参数列表、随机数格式（浮点数）和完整的5位股票代码
+        random_num = random.random()  # 生成0到1之间的随机浮点数
+        full_stock_code = stock_code.zfill(5)  # 确保是5位代码
+        sina_list = f"rt_hk{full_stock_code},rt_hkHSI,rt_hk{full_stock_code}_preipo,rt_hkHSI_preipo"
+        sina_url = f"https://hq.sinajs.cn/?_={random_num}&list={sina_list}"
+    else:
+        # A股URL格式
+        random_num = int(time.time() * 1000)
+        sina_list = f"{market}{stock_code},{market}{stock_code}_i"
+        sina_url = f"https://hq.sinajs.cn/rn={random_num}&list={sina_list}"
     
     try:
         # 增加重试机制，确保接口访问成功
         hq_data = fetch_url(sina_url, is_sina_var=True, retry=3)
-        if not hq_data:
+        parsed_data = {}
+        
+        if hq_data:
+            # 解析行情数据
+            parsed_data = parse_sina_hq(hq_data)
+        
+        # 如果港股核心数据不存在，尝试从搜索建议接口获取
+        stock_key = f"rt_hk{stock_code.zfill(5)}"  # 使用5位代码作为stock_key
+        stock_name = f"港股{stock_code}"
+        
+        if market == "rt_hk" and stock_key not in parsed_data:
+            logger.info(f"尝试从搜索建议接口获取港股{stock_code}的信息")
+            search_url = f"https://suggest3.sinajs.cn/suggest/type=11&key={stock_code}&name=suggestdata_{random.random()}"
+            search_data = fetch_url(search_url, is_sina_var=False, retry=2)
+            
+            if search_data:
+                # 解析搜索建议数据
+                match = re.search(r'"([^"]+)"', search_data)
+                if match:
+                    suggest_data = match.group(1)
+                    if suggest_data:
+                        # 查找匹配的股票数据
+                        for item in suggest_data.split(";"):
+                            if item:
+                                fields = item.split(",")
+                                if len(fields) >= 5 and fields[2] == stock_code:
+                                    # 构造模拟的行情数据
+                                    stock_name = fields[4] if len(fields) > 4 else stock_name
+                                    mock_data = f'var hq_str_{stock_key}="{stock_name},0,0,0,0,0,0,0,0,0";'
+                                    parsed_data.update(parse_sina_hq(mock_data))
+                                    logger.info(f"成功从搜索建议接口获取港股{stock_code}的信息")
+                                    break
+            
+            # 如果仍然没有数据，返回None而不是构造全0的模拟数据
+            if stock_key not in parsed_data:
+                logger.info(f"无法获取港股{stock_code}的信息，返回None")
+                return None
+        
+        if not parsed_data:
             logger.error(f"新浪接口返回空数据: {stock_code}")
             return None
         
-        # 解析行情数据
-        parsed_data = parse_sina_hq(hq_data)
-        stock_key = f"{market}{stock_code}"
-        supplement_key = f"{market}{stock_code}_i"
-        
-        # 校验核心数据是否存在
-        if stock_key not in parsed_data:
-            logger.error(f"未找到股票{stock_code}的核心行情数据")
-            return None
-        
-        core_data = parsed_data[stock_key]
-        if len(core_data) < 32:
-            logger.error(f"股票{stock_code}核心字段不足（仅{len(core_data)}个）")
-            return None
-        
-        # 解析核心行情（优化字段格式化）
-        core_quotes = {}
-        for field, (idx, field_name, field_type, formatter) in CORE_QUOTES_FIELDS.items():
-            value = core_data[idx] if len(core_data) > idx else ""
-            core_quotes[field] = format_field(value, formatter)
-            logger.debug(f"股票{stock_code} - {field_name}: {core_quotes[field]}")
-        
-        # 解析补充信息
-        supplement_data = parsed_data.get(supplement_key, [])
-        supplement_info = {}
-        for field, (idx, field_name, field_type, formatter) in SUPPLEMENT_FIELDS.items():
-            value = supplement_data[idx] if len(supplement_data) > idx else ""
-            supplement_info[field] = format_field(value, formatter)
-        
-        # 获取腾讯财经的补充数据（市值和市盈率）
-        tencent_data = get_tencent_stock_data(stock_code)
-        
-        # 输出关键数据日志，便于排查
-        current_price = core_quotes["currentPrice"]
-        prev_close = core_quotes["prevClosePrice"]
-        logger.info(f"股票{stock_code}行情解析完成 - 最新价: {current_price}, 昨收: {prev_close}, 股票名称: {core_quotes['stockName']}")
-        
-        result = {
-            "baseInfo": {
-                "stockCode": stock_code,
-                "market": "沪A" if market == "sh" else "深A",
-                "stockName": core_quotes["stockName"],
-                "industry": supplement_info["industry"]
-            },
-            "coreQuotes": core_quotes,
-            "supplementInfo": supplement_info,
-            "dataValidity": {
-                "isValid": current_price >= 0 and core_quotes["stockName"] != "未知名称",
-                "reason": "" if (current_price >= 0 and core_quotes["stockName"] != "未知名称") 
-                          else "股票数据无效（可能停牌、退市或代码错误）"
+        if market == "rt_hk":
+            # 港股数据处理 - 使用5位代码作为stock_key
+            stock_key = f"rt_hk{stock_code.zfill(5)}"
+            
+            # 校验核心数据是否存在
+            if stock_key not in parsed_data:
+                logger.error(f"未找到港股{stock_code}的核心行情数据")
+                return None
+            
+            core_data = parsed_data[stock_key]
+            if len(core_data) < 10:
+                logger.error(f"港股{stock_code}核心字段不足（仅{len(core_data)}个）")
+                return None
+            
+            # 解析港股核心行情 - 根据新浪港股数据格式调整字段索引
+            core_quotes = {
+                "stockName": core_data[1] if len(core_data) > 1 else core_data[0],  # 使用中文名称
+                "currentPrice": format_field(core_data[6], lambda x: float(x) if x else 0.0),  # 当前价
+                "prevClosePrice": format_field(core_data[2], lambda x: float(x) if x else 0.0),  # 昨收价
+                "openPrice": format_field(core_data[3], lambda x: float(x) if x else 0.0),  # 开盘价
+                "highPrice": format_field(core_data[4], lambda x: float(x) if x else 0.0),  # 最高价
+                "lowPrice": format_field(core_data[5], lambda x: float(x) if x else 0.0),  # 最低价
+                "volume": format_field(core_data[12], lambda x: int(x) if x else 0),  # 成交量
+                "amount": format_field(core_data[11], lambda x: float(x) if x else 0.0),  # 成交额
+                "priceChange": format_field(core_data[7], lambda x: float(x) if x else 0.0),  # 涨跌额
+                "changePercent": format_field(core_data[8], lambda x: float(x) if x else 0.0)  # 涨跌幅
             }
-        }
-        
-        # 添加腾讯财经数据（如果获取成功）
-        if tencent_data:
-            result["tencentData"] = tencent_data
+            
+            # 港股没有补充信息和腾讯数据
+            supplement_info = {"industry": ""}
+            tencent_data = None
+            
+            logger.info(f"港股{stock_code}行情解析完成 - 最新价: {core_quotes['currentPrice']}, 昨收: {core_quotes['prevClosePrice']}, 股票名称: {core_quotes['stockName']}")
+            
+            result = {
+                "baseInfo": {
+                    "stockCode": stock_code,
+                    "market": "港股通",
+                    "stockName": core_quotes["stockName"],
+                    "industry": supplement_info["industry"]
+                },
+                "coreQuotes": core_quotes,
+                "supplementInfo": supplement_info,
+                "dataValidity": {
+                    "isValid": core_quotes["currentPrice"] >= 0 and core_quotes["stockName"] != "",
+                    "reason": "" if (core_quotes["currentPrice"] >= 0 and core_quotes["stockName"] != "") 
+                              else "股票数据无效（可能停牌、退市或代码错误）"
+                }
+            }
+        else:
+            # A股数据处理
+            stock_key = f"{market}{stock_code}"
+            supplement_key = f"{market}{stock_code}_i"
+            
+            # 校验核心数据是否存在
+            if stock_key not in parsed_data:
+                logger.error(f"未找到股票{stock_code}的核心行情数据")
+                return None
+            
+            core_data = parsed_data[stock_key]
+            if len(core_data) < 32:
+                logger.error(f"股票{stock_code}核心字段不足（仅{len(core_data)}个）")
+                return None
+            
+            # 解析核心行情
+            core_quotes = {}
+            for field, (idx, field_name, field_type, formatter) in CORE_QUOTES_FIELDS.items():
+                value = core_data[idx] if len(core_data) > idx else ""
+                core_quotes[field] = format_field(value, formatter)
+                logger.debug(f"股票{stock_code} - {field_name}: {core_quotes[field]}")
+            
+            # 解析补充信息
+            supplement_data = parsed_data.get(supplement_key, [])
+            supplement_info = {}
+            for field, (idx, field_name, field_type, formatter) in SUPPLEMENT_FIELDS.items():
+                value = supplement_data[idx] if len(supplement_data) > idx else ""
+                supplement_info[field] = format_field(value, formatter)
+            
+            # 获取腾讯财经的补充数据（市值和市盈率）
+            tencent_data = get_tencent_stock_data(stock_code)
+            
+            # 输出关键数据日志，便于排查
+            current_price = core_quotes["currentPrice"]
+            prev_close = core_quotes["prevClosePrice"]
+            logger.info(f"股票{stock_code}行情解析完成 - 最新价: {current_price}, 昨收: {prev_close}, 股票名称: {core_quotes['stockName']}")
+            
+            result = {
+                "baseInfo": {
+                    "stockCode": stock_code,
+                    "market": "沪A" if market == "sh" else "深A" if market == "sz" else "北A",
+                    "stockName": core_quotes["stockName"],
+                    "industry": supplement_info["industry"]
+                },
+                "coreQuotes": core_quotes,
+                "supplementInfo": supplement_info,
+                "dataValidity": {
+                    "isValid": current_price >= 0 and core_quotes["stockName"] != "未知名称",
+                    "reason": "" if (current_price >= 0 and core_quotes["stockName"] != "未知名称") 
+                              else "股票数据无效（可能停牌、退市或代码错误）"
+                }
+            }
+            
+            # 添加腾讯财经数据（如果获取成功）
+            if tencent_data:
+                result["tencentData"] = tencent_data
         
         return result
     
@@ -319,34 +457,85 @@ def fetch_market_overview_data() -> dict:
     }
 
 # -------------- 市场概览接口 --------------
+@api_error_handler
 @market_router.get("/overview", response_model=MarketOverview)
 def get_market_overview():
+    real_data = fetch_market_overview_data()
+    return {
+        "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "shIndex": real_data["shIndex"],
+        "shChange": real_data["shChange"],
+        "shChangeRate": real_data["shChangeRate"],
+        "szIndex": real_data["szIndex"],
+        "szChange": real_data["szChange"],
+        "szChangeRate": real_data["szChangeRate"],
+        "cyIndex": real_data["cyIndex"],
+        "cyChange": real_data["cyChange"],
+        "cyChangeRate": real_data["cyChangeRate"],
+        "totalVolume": real_data["totalVolume"],
+        "totalAmount": real_data["totalAmount"],
+        "medianChangeRate": real_data["medianChangeRate"],
+        "upStocks": real_data["upStocks"],
+        "downStocks": real_data["downStocks"],
+        "flatStocks": real_data["flatStocks"],
+        "marketHotspots": real_data["marketHotspots"]
+    }
+
+def enhance_stock_with_quotes(stock: Dict[str, Any]) -> Dict[str, Any]:
+    """增强股票数据，添加行情信息（当前价、涨跌幅等）
+    :param stock: 股票基本信息
+    :return: 添加了行情信息的股票字典
+    """
+    stock_with_quotes = stock.copy()
+    stock_code = stock["stockCode"]
+    
     try:
-        real_data = fetch_market_overview_data()
-        return {
-            "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "shIndex": real_data["shIndex"],
-            "shChange": real_data["shChange"],
-            "shChangeRate": real_data["shChangeRate"],
-            "szIndex": real_data["szIndex"],
-            "szChange": real_data["szChange"],
-            "szChangeRate": real_data["szChangeRate"],
-            "cyIndex": real_data["cyIndex"],
-            "cyChange": real_data["cyChange"],
-            "cyChangeRate": real_data["cyChangeRate"],
-            "totalVolume": real_data["totalVolume"],
-            "totalAmount": real_data["totalAmount"],
-            "medianChangeRate": real_data["medianChangeRate"],
-            "upStocks": real_data["upStocks"],
-            "downStocks": real_data["downStocks"],
-            "flatStocks": real_data["flatStocks"],
-            "marketHotspots": real_data["marketHotspots"]
-        }
+        logger.info(f"正在获取股票{stock_code}行情数据")
+        # 直接调用同步行情函数（带缓存）
+        quote_data = get_stock_quotes(stock_code)
+        
+        if quote_data and "coreQuotes" in quote_data:
+            core_quotes = quote_data["coreQuotes"]
+            current_price = core_quotes.get("currentPrice", 0.0)
+            prev_close = core_quotes.get("prevClosePrice", 0.0)
+            
+            # 计算涨跌幅（优化逻辑，处理特殊情况）
+            if prev_close > 0.01 and current_price >= 0:
+                change_amount = current_price - prev_close
+                change_rate = (change_amount / prev_close) * 100
+            else:
+                change_amount = 0.0
+                change_rate = 0.0
+                if prev_close <= 0.01:
+                    logger.warning(f"股票{stock_code}昨收盘价无效（{prev_close}），无法计算涨跌幅")
+                else:
+                    logger.info(f"股票{stock_code}当前价为0（可能停牌）")
+            
+            # 赋值结果（保留两位小数）
+            stock_with_quotes["currentPrice"] = round(current_price, 2)
+            stock_with_quotes["changeAmount"] = round(change_amount, 2)
+            stock_with_quotes["changeRate"] = round(change_rate, 2)
+            stock_with_quotes["updateTime"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            
+            logger.info(f"股票{stock_code}行情处理完成 - 最新价: {current_price}, 涨跌幅: {change_rate:.2f}%")
+        else:
+            logger.warning(f"股票{stock_code}无有效行情数据")
+            stock_with_quotes["currentPrice"] = 0.0
+            stock_with_quotes["changeAmount"] = 0.0
+            stock_with_quotes["changeRate"] = 0.0
+            stock_with_quotes["updateTime"] = ""
+            
     except Exception as e:
-        logger.error(f"市场接口异常: {str(e)}")
-        raise HTTPException(status_code=500, detail="市场数据获取失败")
+        logger.error(f"处理股票{stock_code}行情失败: {str(e)}", exc_info=True)
+        stock_with_quotes["currentPrice"] = 0.0
+        stock_with_quotes["changeAmount"] = 0.0
+        stock_with_quotes["changeRate"] = 0.0
+        stock_with_quotes["updateTime"] = ""
+    
+    return stock_with_quotes
 
 # -------------- 股票清单接口（核心修复）--------------
+@api_error_handler
 @stock_router.get("", response_model=List[StockItem])
 def get_all_stocks(search: Optional[str] = Query(None)):
     """获取股票清单（支持搜索，修复价格和涨跌幅为0的问题）"""
@@ -356,58 +545,14 @@ def get_all_stocks(search: Optional[str] = Query(None)):
     logger.info(f"获取股票清单，搜索条件：{search}，共{len(stocks_to_process)}支股票")
     
     for stock in stocks_to_process:
-        stock_with_quotes = stock.copy()
-        stock_code = stock["stockCode"]
-        
-        try:
-            logger.info(f"正在获取股票{stock_code}行情数据")
-            # 直接调用同步行情函数（带缓存）
-            quote_data = get_stock_quotes(stock_code)
-            
-            if quote_data and "coreQuotes" in quote_data:
-                core_quotes = quote_data["coreQuotes"]
-                current_price = core_quotes.get("currentPrice", 0.0)
-                prev_close = core_quotes.get("prevClosePrice", 0.0)
-                
-                # 计算涨跌幅（优化逻辑，处理特殊情况）
-                if prev_close > 0.01 and current_price >= 0:
-                    change_amount = current_price - prev_close
-                    change_rate = (change_amount / prev_close) * 100
-                else:
-                    change_amount = 0.0
-                    change_rate = 0.0
-                    if prev_close <= 0.01:
-                        logger.warning(f"股票{stock_code}昨收盘价无效（{prev_close}），无法计算涨跌幅")
-                    else:
-                        logger.info(f"股票{stock_code}当前价为0（可能停牌）")
-                
-                # 赋值结果（保留两位小数）
-                stock_with_quotes["currentPrice"] = round(current_price, 2)
-                stock_with_quotes["changeAmount"] = round(change_amount, 2)
-                stock_with_quotes["changeRate"] = round(change_rate, 2)
-                stock_with_quotes["updateTime"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                
-                logger.info(f"股票{stock_code}行情处理完成 - 最新价: {current_price}, 涨跌幅: {change_rate:.2f}%")
-            else:
-                logger.warning(f"股票{stock_code}无有效行情数据")
-                stock_with_quotes["currentPrice"] = 0.0
-                stock_with_quotes["changeAmount"] = 0.0
-                stock_with_quotes["changeRate"] = 0.0
-                stock_with_quotes["updateTime"] = ""
-                
-        except Exception as e:
-            logger.error(f"处理股票{stock_code}行情失败: {str(e)}", exc_info=True)
-            stock_with_quotes["currentPrice"] = 0.0
-            stock_with_quotes["changeAmount"] = 0.0
-            stock_with_quotes["changeRate"] = 0.0
-            stock_with_quotes["updateTime"] = ""
-        
+        stock_with_quotes = enhance_stock_with_quotes(stock)
         result_stocks.append(stock_with_quotes)
     
     logger.info(f"股票清单获取完成，返回{len(result_stocks)}支数据")
     return result_stocks
 
 # -------------- 单只股票接口（修复）--------------
+@api_error_handler
 @stock_router.get("/{stock_id}", response_model=StockItem)
 def get_stock(stock_id: str):
     """获取单只股票"""
@@ -416,41 +561,11 @@ def get_stock(stock_id: str):
         raise HTTPException(status_code=404, detail="股票不存在")
     
     # 添加行情数据
-    try:
-        quote_data = get_stock_quotes(stock["stockCode"])
-        if quote_data and "coreQuotes" in quote_data:
-            core_quotes = quote_data["coreQuotes"]
-            current_price = core_quotes.get("currentPrice", 0.0)
-            prev_close = core_quotes.get("prevClosePrice", 0.0)
-            
-            # 计算涨跌幅
-            if prev_close > 0.01 and current_price >= 0:
-                change_amount = current_price - prev_close
-                change_rate = (change_amount / prev_close) * 100
-            else:
-                change_amount = 0.0
-                change_rate = 0.0
-            
-            stock["currentPrice"] = round(current_price, 2)
-            stock["changeAmount"] = round(change_amount, 2)
-            stock["changeRate"] = round(change_rate, 2)
-            stock["updateTime"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        else:
-            logger.warning(f"股票{stock['stockCode']}无有效行情数据")
-            stock["currentPrice"] = 0.0
-            stock["changeAmount"] = 0.0
-            stock["changeRate"] = 0.0
-            stock["updateTime"] = ""
-    except Exception as e:
-        logger.error(f"获取股票{stock['stockCode']}行情失败: {str(e)}", exc_info=True)
-        stock["currentPrice"] = 0.0
-        stock["changeAmount"] = 0.0
-        stock["changeRate"] = 0.0
-        stock["updateTime"] = ""
-    
-    return stock
+    enhanced_stock = enhance_stock_with_quotes(stock)
+    return enhanced_stock
 
 # -------------- 股票行情接口 --------------
+@api_error_handler
 @stock_router.get("/{stock_code}/quotes", response_model=StockQuoteResponse)
 def get_stock_quotes_api(stock_code: str):
     """获取股票实时行情（API接口）"""
@@ -461,9 +576,138 @@ def get_stock_quotes_api(stock_code: str):
 
 
 
-# ------------------- 杜邦分析数据提取 -------------------
+# ------------------- 通用杜邦分析数据提取（支持A股和港股） -------------------
+@api_error_handler
 @stock_router.get("/dubang/{stock_id}", response_model=DupontAnalysisResponse)
-def sina_dupont_analysis(
+def dupont_analysis(
+    stock_id: str, 
+    displaytype: str = "10",
+    export_excel: bool = True  # 默认导出Excel（全量数据）
+):
+    """
+    通用杜邦分析数据提取（自动判断A股/港股）
+    - stock_id: 股票代码（如02367、600036）
+    - 返回: 统一格式的杜邦分析响应
+    """
+    # 自动判断是A股还是港股
+    # 港股代码通常为5位数字（如02367），A股为6位数字
+    if len(stock_id) == 5 and stock_id.isdigit():
+        # 港股处理
+        return _hk_dupont_analysis_impl(stock_id, displaytype, export_excel)
+    else:
+        # A股处理（保留原有逻辑）
+        return _a_dupont_analysis_impl(stock_id, displaytype, export_excel)
+
+
+def _hk_dupont_analysis_impl(
+    stock_id: str, 
+    displaytype: str = "10",  # 保留参数以保持接口兼容性
+    export_excel: bool = True  # 默认导出Excel（全量数据）
+):
+    """
+    港股杜邦分析数据提取实现（使用东方财富网API）
+    - stock_id: 港股代码（如02367）
+    - 返回: 与A股杜邦分析相同格式的响应
+    """
+    result = {
+        "stock_id": stock_id,  # 响应模型要求stock_id为字符串类型
+        "full_data": None,  # 全量数据（含周期类型）
+        "error": None
+    }
+    
+    try:
+        # 1. 构造东方财富网API请求URL
+        secucode = f"{stock_id}.HK"
+        url = f"https://datacenter.eastmoney.com/securities/api/data/v1/get?reportName=RPT_HKF10_FN_MAININDICATOR&columns=ALL&quoteColumns=&filter=(SECUCODE%3D%22{secucode}%22)&pageNumber=1&pageSize=20&sortTypes=-1&sortColumns=STD_REPORT_DATE&source=F10&client=PC&v=040146104118736425"
+        
+        logger.info(f"请求东方财富网港股杜邦分析数据: {stock_id}, URL: {url}")
+        
+        # 2. 发送请求并解析数据
+        data = fetch_url(url, timeout=20, retry=3)
+        if not data or "result" not in data or "data" not in data["result"]:
+            result["error"] = "请求失败，未获取到数据"
+            return result
+        
+        indicator_data = data["result"]["data"]
+        if not indicator_data:
+            result["error"] = "未找到有效数据（可能股票代码错误或无数据）"
+            return result
+        
+        # 3. 解析并转换为与A股杜邦分析相同的格式
+        full_data = []
+        
+        for item in indicator_data:
+            # 解析报告日期和周期类型
+            std_report_date = item.get("STD_REPORT_DATE", "").split()[0]  # 去除时间部分
+            date_type_code = item.get("DATE_TYPE_CODE", "001")
+            
+            # 周期类型映射
+            date_type_map = {
+                "001": "年报",
+                "002": "中报",
+                "003": "一季报",
+                "004": "三季报"
+            }
+            period_type = date_type_map.get(date_type_code, "未知周期")
+            
+            # 将数值转换为字符串并保留两位小数的辅助函数
+            def format_value(value):
+                if value is None or value == "":
+                    return ""
+                try:
+                    # 尝试转换为浮点数
+                    float_value = float(value)
+                    # 保留两位小数并转换为字符串
+                    return f"{float_value:.2f}"
+                except (ValueError, TypeError):
+                    # 如果转换失败，直接返回字符串
+                    return str(value)
+            
+            # 构建杜邦分析数据条目（保持与A股格式一致）
+            dupont_item = {
+                "report_date": std_report_date,
+                "period_type": period_type,
+                "净资产收益率(%)": format_value(item.get("ROE_AVG", item.get("ROE_AVG_SQ", ""))),
+                "销售净利率(%)": format_value(item.get("NETPROFITMARGIN", "")),
+                "总资产周转率(次)": format_value(item.get("TOTALASSETTURNOVER", "")),
+                "权益乘数": format_value(item.get("EQUITY_MULTIPLIER", item.get("ASSETEQUITYRATIO", ""))),
+                "总资产收益率(%)": format_value(item.get("ROA", item.get("ROA_SQ", ""))),
+                "毛利率(%)": format_value(item.get("GROSSMARGIN", "")),
+                "营业利润率(%)": format_value(item.get("OPERATINGMARGIN", "")),
+                "净利润": format_value(item.get("NET_PROFIT", item.get("NETPROFIT", ""))),
+                "营业总收入": format_value(item.get("TOTAL_OPERATE_INCOME", item.get("OPERATE_INCOME", ""))),
+                "总资产": format_value(item.get("TOTAL_ASSETS", "")),
+                "股东权益": format_value(item.get("TOTAL_PARENT_EQUITY", "")),
+                "每股收益": format_value(item.get("BASIC_EPS", "")),
+                "每股净资产": format_value(item.get("BVPS", "")),
+                "每股经营现金流": format_value(item.get("PER_NETCASH_OPERATE", ""))
+            }
+            
+            # 添加所有原始字段（保持全量数据完整性）
+            for key, value in item.items():
+                if key not in dupont_item:
+                    dupont_item[key] = value
+            
+            full_data.append(dupont_item)
+        
+        if not full_data:
+            result["error"] = "未解析到有效杜邦分析数据"
+            return result
+        
+        # 4. 按报告日期倒序排列
+        full_data.sort(key=lambda x: x.get("report_date", ""), reverse=True)
+        
+        # 5. 设置结果
+        result["full_data"] = full_data
+        return result
+        
+    except Exception as e:
+        logger.error(f"港股杜邦分析失败 [{stock_id}]: {str(e)}", exc_info=True)
+        result["error"] = f"获取数据失败: {str(e)}"
+        return result
+
+
+def _a_dupont_analysis_impl(
     stock_id: str, 
     displaytype: str = "10",
     export_excel: bool = True  # 默认导出Excel（全量数据）
@@ -503,13 +747,12 @@ def sina_dupont_analysis(
     
     try:
         # 1. 发送请求并解析页面
-        response = requests.get(url, headers=headers, timeout=20, verify=False)
-        response.encoding = "gb2312"
-        if response.status_code != 200:
-            result["error"] = f"请求失败，状态码：{response.status_code}"
+        response_text = fetch_url(url, timeout=20, retry=3)
+        if not response_text:
+            result["error"] = "请求失败，未获取到数据"
             return result
         
-        soup = BeautifulSoup(response.text, "html.parser")
+        soup = BeautifulSoup(response_text, "html.parser")
         full_data = []
         
         # 2. 提取所有有效报告期（严格匹配YYYY-MM-DD格式）
@@ -597,6 +840,7 @@ def sina_dupont_analysis(
         result["error"] = f"解析失败：{str(e)}"
     
     return result
+@api_error_handler
 @stock_router.get("/dupont/chart", response_class=StreamingResponse)
 def generate_dupont_chart(
     stock_id: str = Query(..., description="股票代码（如600000）"),
@@ -727,20 +971,30 @@ def generate_dupont_chart(
 
 
 # -------------- 股票基础信息接口 --------------
+@api_error_handler
 @stock_router.get("/baseInfo/{stockCode}")
 def get_stock_base_info(stockCode: str):
     """获取股票基础信息"""
     logger.info(f"请求股票基础信息：{stockCode}")
     
-    if len(stockCode) != 6 or not stockCode.isdigit():
-        raise HTTPException(status_code=400, detail="股票代码必须是6位数字")
+    if not stockCode.isdigit():
+        raise HTTPException(status_code=400, detail="股票代码必须是数字")
     
     market = get_stock_market(stockCode)
     if not market:
-        raise HTTPException(status_code=400, detail="仅支持沪深A（60/00/30/68开头）")
+        raise HTTPException(status_code=400, detail="不支持的股票代码")
     
-    sina_list = f"{market}{stockCode},{market}{stockCode}_i"
-    sina_url = f"https://hq.sinajs.cn/rn={int(time.time()*1000)}&list={sina_list}"
+    # 构造接口URL
+    random_num = int(time.time() * 1000)
+    
+    if market == "rt_hk":
+        # 港股URL格式
+        sina_list = f"rt_hk{stockCode}"
+        sina_url = f"https://hq.sinajs.cn/?_={random_num}&list={sina_list}"
+    else:
+        # A股URL格式
+        sina_list = f"{market}{stockCode},{market}{stockCode}_i"
+        sina_url = f"https://hq.sinajs.cn/rn={random_num}&list={sina_list}"
     
     try:
         hq_data = fetch_url(sina_url, is_sina_var=True, retry=3)
@@ -749,176 +1003,182 @@ def get_stock_base_info(stockCode: str):
         
         parsed_data = parse_sina_hq(hq_data)
         stock_key = f"{market}{stockCode}"
-        supplement_key = f"{market}{stockCode}_i"
         
-        core_data = parsed_data.get(stock_key, [])
-        if len(core_data) < 32:
-            raise Exception("核心字段不足")
-        
-        core_quotes = {}
-        for field, (idx, _, _, formatter) in CORE_QUOTES_FIELDS.items():
-            value = core_data[idx] if len(core_data) > idx else ""
-            core_quotes[field] = format_field(value, formatter)
-        
-        supplement_data = parsed_data.get(supplement_key, [])
-        supplement_info = {}
-        for field, (idx, _, _, formatter) in SUPPLEMENT_FIELDS.items():
-            value = supplement_data[idx] if len(supplement_data) > idx else ""
-            supplement_info[field] = format_field(value, formatter)
-        
-        return {
-            "baseInfo": {
-                "stockCode": stockCode,
-                "market": "沪A" if market == "sh" else "深A",
-                "stockName": core_quotes["stockName"],
-                "industry": supplement_info["industry"]
-            },
-            "coreQuotes": core_quotes,
-            "supplementInfo": supplement_info,
-            "dataValidity": {
-                "isValid": core_quotes["currentPrice"] >= 0 and core_quotes["stockName"] != "未知名称",
-                "reason": "" if (core_quotes["currentPrice"] >= 0 and core_quotes["stockName"] != "未知名称") 
-                          else "股票数据无效"
+        if market == "rt_hk":
+            # 港股数据处理
+            core_data = parsed_data.get(stock_key, [])
+            if not core_data:
+                # 如果返回空数据，说明新浪接口不支持该港股
+                raise HTTPException(status_code=404, detail=f"新浪接口不支持该港股：{stockCode}")
+            if len(core_data) < 10:
+                raise Exception("港股核心字段不足")
+            
+            # 解析港股核心行情
+            core_quotes = {
+                "stockName": core_data[0],
+                "currentPrice": format_field(core_data[1], lambda x: float(x) if x else 0.0),
+                "openPrice": format_field(core_data[2], lambda x: float(x) if x else 0.0),
+                "preClosePrice": format_field(core_data[3], lambda x: float(x) if x else 0.0),
+                "highPrice": format_field(core_data[4], lambda x: float(x) if x else 0.0),
+                "lowPrice": format_field(core_data[5], lambda x: float(x) if x else 0.0),
+                "volume": format_field(core_data[6], lambda x: int(x) if x else 0),
+                "turnover": format_field(core_data[7], lambda x: float(x) if x else 0.0),
+                "amplitude": "",
+                "pe": "",
+                "pb": "",
+                "changePercent": format_field(core_data[8], lambda x: float(x) if x else 0.0),
+                "changeAmount": format_field(core_data[9], lambda x: float(x) if x else 0.0)
             }
-        }
+            
+            return {
+                "baseInfo": {
+                    "stockCode": stockCode,
+                    "market": "港股通",
+                    "stockName": core_quotes["stockName"],
+                    "industry": ""
+                },
+                "coreQuotes": core_quotes,
+                "supplementInfo": {},
+                "dataValidity": {
+                    "isValid": core_quotes["currentPrice"] >= 0 and core_quotes["stockName"] != "",
+                    "reason": "" if (core_quotes["currentPrice"] >= 0 and core_quotes["stockName"] != "") else "股票数据无效"
+                }
+            }
+        else:
+            # A股数据处理
+            supplement_key = f"{market}{stockCode}_i"
+            core_data = parsed_data.get(stock_key, [])
+            if len(core_data) < 32:
+                raise Exception("核心字段不足")
+            
+            core_quotes = {}
+            for field, (idx, _, _, formatter) in CORE_QUOTES_FIELDS.items():
+                value = core_data[idx] if len(core_data) > idx else ""
+                core_quotes[field] = format_field(value, formatter)
+            
+            supplement_data = parsed_data.get(supplement_key, [])
+            supplement_info = {}
+            for field, (idx, _, _, formatter) in SUPPLEMENT_FIELDS.items():
+                value = supplement_data[idx] if len(supplement_data) > idx else ""
+                supplement_info[field] = format_field(value, formatter)
+            
+            return {
+                "baseInfo": {
+                    "stockCode": stockCode,
+                    "market": "沪A" if market == "sh" else "深A" if market == "sz" else "北A",
+                    "stockName": core_quotes["stockName"],
+                    "industry": supplement_info["industry"]
+                },
+                "coreQuotes": core_quotes,
+                "supplementInfo": supplement_info,
+                "dataValidity": {
+                    "isValid": core_quotes["currentPrice"] >= 0 and core_quotes["stockName"] != "未知名称",
+                    "reason": "" if (core_quotes["currentPrice"] >= 0 and core_quotes["stockName"] != "未知名称") 
+                              else "股票数据无效"
+                }
+            }
     
+    except HTTPException:
+        # 如果是HTTPException，直接重新抛出
+        raise
     except Exception as e:
         logger.error(f"接口请求失败：{str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="获取股票信息失败")
 
 # -------------- 股票搜索接口 --------------
+@api_error_handler
 @stock_router.get("/search/{keyword}")
 def search_stocks(keyword: str):
-    """搜索股票（基于你的原有逻辑，修复SSL/编码/拦截问题）"""
+    """搜索股票（使用新浪新接口，支持港股通）"""
     if not keyword.strip():
         raise HTTPException(status_code=400, detail="搜索关键词不能为空")
     
     try:
         encoded_keyword = quote(keyword.strip(), encoding='utf-8')
-        search_url = f"https://biz.finance.sina.com.cn/suggest/lookup_n.php?country=stock&q={encoded_keyword}"
+        # 生成随机数作为name参数
+        timestamp = str(int(time.time() * 1000))
+        search_url = f"https://suggest3.sinajs.cn/suggest/type=&key={encoded_keyword}&name=suggestdata_{timestamp}"
         logger.info(f"请求搜索接口：{search_url}")
         
-        # 核心修复1：增强请求头，避免被新浪拦截（原有头信息太简单）
+        # 设置请求头
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36",
             "Referer": "https://finance.sina.com.cn/",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Accept-Encoding": "gzip, deflate, br",  # 支持压缩，避免编码异常
+            "Accept": "text/javascript, */*",
+            "Accept-Encoding": "gzip, deflate, br",
             "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-            "Cache-Control": "no-cache",  # 禁用缓存，获取最新数据
+            "Cache-Control": "no-cache",
             "Pragma": "no-cache"
         }
         
-        # 核心修复2：关闭SSL验证（新浪这个接口的SSL证书可能有问题）
-        # 增加超时时间到20秒，避免网络波动超时
-        response = requests.get(
-            search_url, 
-            headers=headers, 
-            timeout=20,
-            verify=False  # 关键：关闭SSL证书验证，解决请求失败
-        )
-        response.raise_for_status()
+        # 解析响应内容
+        response_text = fetch_url(search_url, timeout=20, retry=3)
+        logger.info(f"接口返回内容长度：{len(response_text)} 字符")
+        logger.debug(f"返回内容：{response_text}")
         
-        # 核心修复3：智能编码处理（原有固定gb2312导致乱码）
-        # 先尝试gb2312，失败则用chardet自动识别
-        try:
-            response.encoding = "gb2312"
-            response_text = response.text
-            # 验证编码是否正确（如果包含大量�，说明编码错误）
-            if "�" in response_text:
-                raise ValueError("gb2312编码失败，自动识别")
-        except:
-            # 自动识别编码
-            detected_encoding = chardet.detect(response.content)["encoding"] or "utf-8"
-            logger.info(f"自动识别编码：{detected_encoding}")
-            response.encoding = detected_encoding
-            response_text = response.content.decode(detected_encoding, errors="replace")
-        
-        logger.info(f"接口返回HTML长度：{len(response_text)} 字符")
-        logger.debug(f"HTML前500字符：{response_text[:500]}")  # 查看实际返回内容，确认是否有数据
-        
-        soup = BeautifulSoup(response_text, "html.parser")
         stock_list = []
         seen_codes = set()
         
-        # 保持你的原有定位逻辑（不变）
-        stock_market_div = soup.find("div", id="stock_stock")
-        if not stock_market_div:
-            logger.warning("未找到沪深个股板块，返回空结果")
-            return {"stocks": [], "message": "未找到沪深个股板块"}
+        # 提取JavaScript变量中的股票数据
+        match = re.search(r'var\s+suggestdata_\d+\s*=\s*"([^"]+)"', response_text)
+        if not match:
+            logger.warning("未找到股票数据")
+            return {"stocks": [], "message": "未找到股票数据"}
         
-        stock_list_div = stock_market_div.find_next_sibling("div", class_="list")
-        if not stock_list_div:
-            logger.warning("未找到股票列表容器，返回空结果")
-            return {"stocks": [], "message": "未找到股票列表容器"}
-        logger.info("找到股票列表容器，开始解析")
+        stock_data_str = match.group(1)
+        logger.info(f"提取到股票数据字符串：{stock_data_str[:100]}...")
         
-        # 保持你的原有提取逻辑（不变）
-        stock_links = stock_list_div.find_all("a")
-        logger.info(f"从容器中提取到 {len(stock_links)} 个股票链接")
+        # 分割股票数据
+        stock_items = stock_data_str.split(';')
+        logger.info(f"解析到 {len(stock_items)} 个股票项")
         
-        # 保持你的超级宽松正则（不变）
-        stock_pattern = re.compile(
-            r"(sz|sh)(\d{6})[\s\u3000]+(.+)",
-            re.IGNORECASE
-        )
-        
-        # 优化你的手动分割逻辑，避免索引错误
-        for idx, link in enumerate(stock_links):
-            link_text = link.get_text(strip=True)
-            logger.info(f"第{idx+1}个链接文本：{repr(link_text)}")  # 改为info级别，让你直接看到
-            
-            if not link_text:
-                logger.info("跳过空文本链接")
+        for item in stock_items:
+            if not item:
                 continue
             
-            match = stock_pattern.search(link_text)
-            if not match:
-                logger.info(f"正则未匹配到：{repr(link_text)}，尝试手动分割")
-                # 修复手动分割逻辑：避免split后索引错误
-                code_match = re.search(r"\d{6}", link_text)
-                if code_match:
-                    stock_code = code_match.group()
-                    # 优化市场前缀判断：更健壮
-                    link_text_lower = link_text.lower()
-                    if "sz" in link_text_lower:
-                        market_prefix = "sz"
-                    elif "sh" in link_text_lower:
-                        market_prefix = "sh"
-                    else:
-                        # 兜底：根据股票代码前缀判断市场
-                        if stock_code.startswith("60"):
-                            market_prefix = "sh"
-                        elif stock_code.startswith(("00", "30")):
-                            market_prefix = "sz"
-                        else:
-                            logger.info(f"未找到市场前缀且代码不合法，跳过：{link_text}")
-                            continue
-                    # 修复名称提取：避免split后无元素
-                    parts = link_text.split(stock_code)
-                    stock_name = parts[-1].strip() if len(parts) > 1 else ""
-                    # 名称为空时，从parts[0]提取
-                    if not stock_name and len(parts) > 0:
-                        stock_name = parts[0].replace("sz", "").replace("sh", "").replace("SZ", "").replace("SH", "").strip()
-                    if not stock_name:
-                        logger.info(f"手动分割未提取到名称，跳过：{link_text}")
-                        continue
-                    logger.info(f"手动分割成功：{market_prefix} | {stock_code} | {stock_name}")
-                else:
-                    logger.info(f"手动分割也失败，跳过：{link_text}")
-                    continue
-            else:
-                market_prefix = match.group(1).lower()
-                stock_code = match.group(2)
-                stock_name = match.group(3).strip()
+            fields = item.split(',')
+            if len(fields) < 4:
+                logger.warning(f"股票数据字段不足：{item}")
+                continue
             
-            # 过滤无效数据（保持不变）
+            stock_name = fields[0]
+            stock_type = fields[1]
+            stock_code = fields[2]
+            full_code = fields[3]
+            
+            # 过滤无效数据
             if len(stock_name) < 2 or stock_code in seen_codes:
                 logger.info(f"无效数据（重复/名称过短）：{stock_code} | {stock_name}")
                 continue
             
-            # 确定市场（保持不变）
-            market = "深A" if market_prefix == "sz" else "沪A"
+            # 确定市场
+            market = ""
+            if stock_type == "31":
+                # 31代表港股通
+                market = "港股通"
+            elif stock_type == "11":
+                # 11代表A股
+                if full_code.startswith("sz"):
+                    market = "深A"
+                elif full_code.startswith("sh"):
+                    market = "沪A"
+                elif full_code.startswith("bj"):
+                    market = "北A"
+                else:
+                    # 根据股票代码前缀判断
+                    if stock_code.startswith(("60", "68")):
+                        market = "沪A"
+                    elif stock_code.startswith(("00", "30")):
+                        market = "深A"
+                    elif stock_code.startswith("8"):
+                        market = "北A"
+                    else:
+                        logger.warning(f"无法确定A股市场：{stock_code}")
+                        continue
+            else:
+                logger.info(f"跳过未知类型股票：{stock_code} | {stock_name} (type: {stock_type})")
+                continue
+            
             seen_codes.add(stock_code)
             stock_list.append({
                 "stockCode": stock_code,
@@ -927,7 +1187,7 @@ def search_stocks(keyword: str):
             })
             logger.info(f"✅ 解析成功：{stock_code} | {stock_name} | {market}")
         
-        # 保持你的排序逻辑（不变）
+        # 排序
         stock_list.sort(key=lambda x: x["stockCode"])
         logger.info(f"解析完成，共得到 {len(stock_list)} 支有效个股（去重后）")
         
@@ -938,7 +1198,7 @@ def search_stocks(keyword: str):
         return {"stocks": stock_list[:50]}
     
     except requests.exceptions.SSLError:
-        logger.error("SSL证书验证失败（已关闭验证仍报错，请检查网络环境）")
+        logger.error("SSL证书验证失败")
         raise HTTPException(status_code=500, detail="SSL证书验证失败，请检查网络环境")
     except requests.exceptions.RequestException as e:
         logger.error(f"接口请求失败：{str(e)}")
@@ -948,18 +1208,19 @@ def search_stocks(keyword: str):
         raise HTTPException(status_code=500, detail=f"股票搜索失败：{str(e)}")
 
 # -------------- 股票详情接口 --------------
+@api_error_handler
 @stock_router.get("/{stock_code}/detail", response_model=StockDetailResponse)
 def get_stock_detail(stock_code: str):
     """获取股票详情（基础信息+行情+财务+股东）- 已集成指定财务接口"""
     logger.info(f"请求股票详情: {stock_code}")
     
     # 校验股票代码
-    if len(stock_code) != 6 or not stock_code.isdigit():
-        raise HTTPException(status_code=400, detail="股票代码必须是6位数字")
+    if not stock_code.isdigit():
+        raise HTTPException(status_code=400, detail="股票代码必须是数字")
     
     market = get_stock_market(stock_code)
     if not market:
-        raise HTTPException(status_code=400, detail="仅支持沪深A（60/00/30开头）")
+        raise HTTPException(status_code=400, detail="仅支持沪深A（60/00/30开头）和港股（5位数字）")
     
     try:
         # 1. 获取基础行情数据
@@ -967,8 +1228,8 @@ def get_stock_detail(stock_code: str):
         if not base_info_data or not base_info_data["dataValidity"]["isValid"]:
             raise HTTPException(status_code=500, detail="股票基础数据无效")
         
-        # 2. 获取财务数据（调用上面修改后的方法，使用指定新浪接口）
-        financial_data = DataSource.get_stock_financial_data(stock_code)
+        # 2. 获取财务数据（使用统一接口）
+        financial_data = get_stock_financial_data(stock_code)
         
         # 3. 构造基础信息（使用实际可用的数据）
         base_info = {
@@ -1043,6 +1304,7 @@ def get_stock_detail(stock_code: str):
         raise HTTPException(status_code=500, detail="股票详情数据获取失败")
 
 # -------------- 股票CRUD接口 --------------
+@api_error_handler
 @stock_router.post("/add", response_model=StockItem)
 def add_stock(stock: StockCreate):
     """添加股票到清单"""
@@ -1074,6 +1336,7 @@ def add_stock(stock: StockCreate):
         logger.error(f"添加股票异常: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"添加股票失败: {str(e)}")
 
+@api_error_handler
 @stock_router.put("/{stock_id}", response_model=StockItem)
 def update_stock(stock_id: str, update_data: StockUpdate):
     """更新股票信息"""
@@ -1097,6 +1360,7 @@ def update_stock(stock_id: str, update_data: StockUpdate):
     logger.info(f"成功更新股票: {updated_stock['stockCode']} 持仓状态={updated_stock['isHold']}")
     return updated_stock
 
+@api_error_handler
 @stock_router.delete("/{stock_id}")
 def delete_stock(stock_id: str):
     """删除股票"""
@@ -1113,6 +1377,7 @@ def delete_stock(stock_id: str):
     return {"detail": "股票删除成功"}
 
 # -------------- 估值逻辑API --------------
+@api_error_handler
 @stock_router.get("/valuation/{stock_code}", response_model=Optional[ValuationLogicItem])
 def get_stock_valuation(stock_code: str):
     """获取特定股票的估值逻辑数据"""
@@ -1123,6 +1388,7 @@ def get_stock_valuation(stock_code: str):
         logger.error(f"获取估值逻辑数据失败: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="获取估值逻辑数据失败")
 
+@api_error_handler
 @stock_router.post("/valuation", response_model=ValuationLogicItem)
 def save_stock_valuation(valuation: ValuationLogicItem):
     """保存或更新股票估值逻辑数据"""
@@ -1165,4 +1431,189 @@ def save_stock_valuation(valuation: ValuationLogicItem):
     except Exception as e:
         logger.error(f"保存估值逻辑数据失败: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="保存估值逻辑数据失败")
+
+
+def get_stock_financial_data(stock_code: str) -> Dict[str, Dict[str, str]]:
+    """统一财务数据获取接口，根据股票代码判断是港股还是A股
+    - stock_code: 股票代码
+    - 返回: 包含财务数据的字典，格式与util.py的get_stock_financial_data一致
+    """
+    logger.info(f"获取股票{stock_code}金融数据")
+    
+    # 判断股票市场
+    market = get_stock_market(stock_code)
+    
+    # 如果是港股（market为rt_hk），调用港股财务数据获取函数
+    if market == "rt_hk":
+        return _get_hk_stock_financial_data(stock_code)
+    # 否则调用util.py中的A股财务数据获取函数
+    else:
+        from util import DataSource
+        return DataSource.get_stock_financial_data(stock_code)
+
+
+def _get_hk_stock_financial_data(stock_code: str) -> Dict[str, Dict[str, str]]:
+    """获取港股金融数据，使用东方财富网API
+    返回值与util.py的get_stock_financial_data格式一致
+    """
+    logger.info(f"获取港股{stock_code}金融数据")
+    
+    # 校验股票代码
+    if not stock_code.isdigit():
+        logger.warning(f"股票代码格式错误: {stock_code}（必须是纯数字）")
+        return {}
+    
+    # 构造东方财富网港股财务数据API URL
+    secucode = f"{stock_code}.HK"
+    api_url = f"https://datacenter.eastmoney.com/securities/api/data/v1/get?reportName=RPT_HKF10_FN_MAININDICATOR&columns=ALL&quoteColumns=&filter=(SECUCODE%3D%22{secucode}%22)&pageNumber=1&pageSize=9&sortTypes=-1&sortColumns=STD_REPORT_DATE&source=F10&client=PC&v=040146104118736425"
+    
+    try:
+        # 获取财务数据
+        response_data = fetch_url(api_url, retry=3, timeout=20)
+        if not response_data or "result" not in response_data:
+            logger.error(f"东方财富网API返回空数据或格式错误: {stock_code}")
+            financial_data = {}
+            latest_year = "2022"
+            financial_data[latest_year] = {
+                "revenue": "0.00",
+                "revenueGrowth": "0.0",
+                "netProfit": "0.00",
+                "netProfitGrowth": "0.0",
+                "eps": "0.00",
+                "navps": "0.00",
+                "roe": "0.0",
+                "pe": "0.0",
+                "pb": "0.0",
+                "grossMargin": "0.0",
+                "netMargin": "0.0",
+                "debtRatio": "0.0"
+            }
+            return financial_data
+        
+        # 获取最新的财务数据（按报告日期降序排列，第一条为最新）
+        financial_records = response_data.get("result", {}).get("data", [])
+        if not financial_records:
+            logger.error(f"未找到港股{stock_code}财务数据")
+            financial_data = {}
+            latest_year = "2022"
+            financial_data[latest_year] = {
+                "revenue": "0.00",
+                "revenueGrowth": "0.0",
+                "netProfit": "0.00",
+                "netProfitGrowth": "0.0",
+                "eps": "0.00",
+                "navps": "0.00",
+                "roe": "0.0",
+                "pe": "0.0",
+                "pb": "0.0",
+                "grossMargin": "0.0",
+                "netMargin": "0.0",
+                "debtRatio": "0.0"
+            }
+            return financial_data
+        
+        # 设置返回数据结构
+        financial_data = {}
+        mllsj_data = {}
+        
+        # 处理所有财务记录（按报告日期降序排列）
+        for record in financial_records:
+            # 提取报告日期和年份
+            report_date = record.get("REPORT_DATE", "")
+            if not report_date:
+                continue
+            
+            year = report_date[:4]
+            
+            # 将数值转换为字符串并保留两位小数的辅助函数
+            def format_value(value, default="0.00"):
+                if value is None or value == "":
+                    return default
+                try:
+                    # 尝试转换为浮点数
+                    float_value = float(value)
+                    # 保留两位小数并转换为字符串
+                    return f"{float_value:.2f}"
+                except (ValueError, TypeError):
+                    # 如果转换失败，返回默认值
+                    return default
+            
+            # 构建财务指标字典
+            indicators = {
+                "revenue": format_value(record.get("OPERATE_INCOME")),
+                "revenueGrowth": format_value(record.get("OPERATE_INCOME_YOY")),
+                "netProfit": format_value(record.get("HOLDER_PROFIT")),
+                "netProfitGrowth": format_value(record.get("HOLDER_PROFIT_YOY")),
+                "eps": format_value(record.get("BASIC_EPS")),
+                "navps": format_value(record.get("BPS")),
+                "roe": format_value(record.get("ROE_AVG")),
+                "pe": format_value(record.get("PE_TTM")),
+                "pb": format_value(record.get("PB_TTM")),
+                "grossMargin": format_value(record.get("GROSS_PROFIT_RATIO")),
+                "netMargin": format_value(record.get("NET_PROFIT_RATIO")),
+                "debtRatio": format_value(record.get("DEBT_ASSET_RATIO"))
+            }
+            
+            # 只有在当前年份没有数据或者该记录是年报时才添加到年度数据中
+            # 优先使用年报数据
+            if year not in financial_data or record.get("DATE_TYPE_CODE") == "001":
+                financial_data[year] = indicators
+            
+            # 添加毛利率和净利率数据（所有报告期）
+            mllsj_data[report_date] = {
+                "mll": indicators["grossMargin"],
+                "xsjll": indicators["netMargin"]
+            }
+        
+        # 确保至少有一年的数据
+        if not financial_data:
+            financial_data = {
+                "2022": {
+                    "revenue": "0.00",
+                    "revenueGrowth": "0.0",
+                    "netProfit": "0.00",
+                    "netProfitGrowth": "0.0",
+                    "eps": "0.00",
+                    "navps": "0.00",
+                    "roe": "0.0",
+                    "pe": "0.0",
+                    "pb": "0.0",
+                    "grossMargin": "0.0",
+                    "netMargin": "0.0",
+                    "debtRatio": "0.0"
+                }
+            }
+        
+        # 添加毛利率和净利率数据（包含所有季度）
+        financial_data['mllsj'] = mllsj_data
+        
+        logger.info(f"港股{stock_code}金融数据获取成功")
+        return financial_data
+    
+    except Exception as e:
+        logger.error(f"港股{stock_code}金融数据获取失败: {str(e)}", exc_info=True)
+        # 返回默认数据结构
+        financial_data = {
+            "2022": {
+                "revenue": "0.00",
+                "revenueGrowth": "0.0",
+                "netProfit": "0.00",
+                "netProfitGrowth": "0.0",
+                "eps": "0.00",
+                "navps": "0.00",
+                "roe": "0.0",
+                "pe": "0.0",
+                "pb": "0.0",
+                "grossMargin": "0.0",
+                "netMargin": "0.0",
+                "debtRatio": "0.0"
+            },
+            "mllsj": {
+                "2022-12-31": {
+                    "mll": "0.0",
+                    "xsjll": "0.0"
+                }
+            }
+        }
+        return financial_data
 
