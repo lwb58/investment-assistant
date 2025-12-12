@@ -831,11 +831,13 @@ def _hk_dupont_analysis_impl(
             
             # 计算总资产周转率(次) = 营业总收入 / 总资产
             total_asset_turnover = ""
-            if operate_income and total_assets and operate_income != 0 and total_assets != 0:
-                try:
-                    total_asset_turnover = float(operate_income) / float(total_assets)
-                except (ValueError, TypeError):
-                    pass
+            try:
+                op_income = float(operate_income)
+                tot_assets = float(total_assets)
+                if op_income != 0 and tot_assets != 0:
+                    total_asset_turnover = op_income / tot_assets
+            except (ValueError, TypeError):
+                pass
             
             # 计算归母净利润（单位：亿元）
             def format_yuan_to_billion(value):
@@ -854,8 +856,10 @@ def _hk_dupont_analysis_impl(
             # 税负因素 = (1 - 所得税费用/利润总额) * 100
             tax_factor = ""
             try:
-                income_tax = float(item.get("INCOME_TAX", "0"))
-                total_profit = float(item.get("TOTAL_PROFIT", item.get("PROFIT", "0")))
+                # 尝试获取所得税费用，可能的字段名：INCOME_TAX, TAX_EXPENSE
+                income_tax = float(item.get("INCOME_TAX", item.get("TAX_EXPENSE", "0")))
+                # 尝试获取利润总额，可能的字段名：TOTAL_PROFIT, PROFIT, PRETAX_PROFIT
+                total_profit = float(item.get("TOTAL_PROFIT", item.get("PROFIT", item.get("PRETAX_PROFIT", "0"))))
                 if total_profit != 0:
                     tax_factor = f"{((1 - income_tax/total_profit) * 100):.2f}"
             except (ValueError, TypeError):
@@ -864,23 +868,58 @@ def _hk_dupont_analysis_impl(
             # 利息负担 = (1 - 财务费用/营业利润) * 100
             interest_factor = ""
             try:
-                financial_expense = float(item.get("FINANCIAL_EXPENSE", "0"))
+                # 财务费用字段查找：尝试多种可能的字段名
+                financial_expense_fields = ["FINANCIAL_EXPENSE", "FINANCE_EXPENSE", "INTEREST_EXPENSE", "PREMIUM_EXPENSE"]
+                financial_expense_value = None
+                
+                for field in financial_expense_fields:
+                    field_value = item.get(field)
+                    if field_value is not None:
+                        financial_expense_value = field_value
+                        break
+                
+                # 如果没有找到财务费用字段或值为None，设为0
+                financial_expense = float(financial_expense_value) if financial_expense_value is not None else 0.0
+                
+                # 获取营业利润
                 operate_profit = float(item.get("OPERATE_PROFIT", "0"))
+                
                 if operate_profit != 0:
                     interest_factor = f"{((1 - financial_expense/operate_profit) * 100):.2f}"
-            except (ValueError, TypeError):
-                interest_factor = ""
+                else:
+                    interest_factor = "100.00"
+            except (ValueError, TypeError) as e:
+                # 如果计算出错，默认设为100%
+                interest_factor = "100.00"
+            
+            # 注意：当利息负担为100%时，通常表示该公司没有财务费用（利息支出）
+            # 这在现金充足、几乎没有债务的公司中很常见
             
             # 获取营业利润率（前端五因素分析使用经营利润率）
-            operating_margin = format_value(item.get("OPERATE_PROFIT_RATIO", ""))
+            # 尝试获取营业利润率，可能的字段名：OPERATE_PROFIT_RATIO, OPERATING_PROFIT_RATIO
+            operating_margin = format_value(item.get("OPERATE_PROFIT_RATIO", item.get("OPERATING_PROFIT_RATIO", "")))
+            
+            # 确保销售净利率有值（使用NET_PROFIT_RATIO或手动计算）
+            net_profit_ratio = item.get("NET_PROFIT_RATIO", "")
+            if not net_profit_ratio:
+                # 如果没有直接的销售净利率字段，手动计算：净利润/营业总收入
+                try:
+                    net_profit = float(item.get("NET_PROFIT", item.get("HOLDER_PROFIT", "0")))
+                    op_income = float(operate_income)
+                    if op_income != 0:
+                        net_profit_ratio = net_profit / op_income * 100
+                except (ValueError, TypeError):
+                    net_profit_ratio = ""
             
             # 构建杜邦分析数据条目（保持与A股格式一致，使用统一的字段名）
             dupont_item = {
                 "报告期": std_report_date,  # 前端使用的报告期字段
                 "周期类型": period_type,  # 前端使用的周期类型字段
                 "净资产收益率": format_value(item.get("ROE_AVG", item.get("ROE_AVG_SQ", ""))),
-                "销售净利率": format_value(item.get("NET_PROFIT_RATIO", "")),
+                "销售净利率": format_value(net_profit_ratio),
+                "归属母公司股东的销售净利率": format_value(net_profit_ratio),  # 前端表格使用的字段名
                 "总资产周转率": format_value(total_asset_turnover),
+                "资产周转率(次)": format_value(total_asset_turnover),  # 前端表格使用的字段名
                 "权益乘数": format_value(item.get("EQUITY_MULTIPLIER", item.get("ASSETEQUITYRATIO", ""))),
                 "总资产收益率": format_value(item.get("ROA", item.get("ROA_SQ", ""))),
                 "毛利率": format_value(item.get("GROSS_PROFIT_RATIO", "")),
