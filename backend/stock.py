@@ -971,6 +971,9 @@ def _hk_dupont_analysis_impl(
                     net_profit_ratio = ""
             
             # 构建杜邦分析数据条目（保持与A股格式一致，使用统一的字段名）
+            # 修复经营利润率字段：当值为空时不显示百分号
+            operating_margin_with_percent = f"{operating_margin}%" if operating_margin else ""
+            
             dupont_item = {
                 "报告期": std_report_date,  # 前端使用的报告期字段
                 "周期类型": period_type,  # 前端使用的周期类型字段
@@ -983,7 +986,7 @@ def _hk_dupont_analysis_impl(
                 "总资产收益率": format_value(item.get("ROA", item.get("ROA_SQ", ""))),
                 "毛利率": format_value(item.get("GROSS_PROFIT_RATIO", "")),
                 "营业利润率": operating_margin,
-                "经营利润率": f"{operating_margin}%",  # 五因素分析所需字段
+                "经营利润率": operating_margin_with_percent,  # 五因素分析所需字段
                 "净利润": format_value(item.get("NET_PROFIT", item.get("NETPROFIT", ""))),
                 "营业总收入": format_value(operate_income),
                 "总资产": format_value(total_assets),

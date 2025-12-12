@@ -1,0 +1,120 @@
+{
+  "2025": {
+    "revenue": "256.22",
+    "revenueGrowth": "15.56",
+    "netProfit": "76.22",
+    "netProfitGrowth": "22.16",
+    "eps": "0.68",
+    "navps": "2.79",
+    "roe": "23.95",
+    "pe": "35.34",
+    "pb": "15.01",
+    "grossMargin": "60.32",
+    "netMargin": "29.75",
+    "debtRatio": "51.28",
+    "totalRevenue": "256.22",
+    "netProfitAttribution": "76.22"
+  },
+  "2024": {
+    "revenue": "428.96",
+    "revenueGrowth": "0.54",
+    "netProfit": "121.23",
+    "netProfitGrowth": "0.36",
+    "eps": "1.08",
+    "navps": "2.87",
+    "roe": "39.84",
+    "pe": "41.29",
+    "pb": "17.54",
+    "grossMargin": "58.08",
+    "netMargin": "28.26",
+    "debtRatio": "39.26",
+    "totalRevenue": "428.96",
+    "netProfitAttribution": "121.23"
+  },
+  "2023": {
+    "revenue": "426.67",
+    "revenueGrowth": "28.36",
+    "netProfit": "120.79",
+    "netProfitGrowth": "42.19",
+    "eps": "1.07",
+    "navps": "2.54",
+    "roe": "45.88",
+    "pe": "40.34",
+    "pb": "15.35",
+    "grossMargin": "59.55",
+    "netMargin": "28.31",
+    "debtRatio": "41.85",
+    "totalRevenue": "426.67",
+    "netProfitAttribution": "120.79"
+  },
+  "2022": {
+    "revenue": "332.39",
+    "revenueGrowth": "11.93",
+    "netProfit": "84.95",
+    "netProfitGrowth": "18.62",
+    "eps": "0.76",
+    "navps": "2.14",
+    "roe": "37.90",
+    "pe": "40.34",
+    "pb": "15.35",
+    "grossMargin": "57.45",
+    "netMargin": "25.56",
+    "debtRatio": "38.65",
+    "totalRevenue": "332.39",
+    "netProfitAttribution": "84.95"
+  },
+  "2021": {
+    "revenue": "296.96",
+    "revenueGrowth": "29.81",
+    "netProfit": "71.62",
+    "netProfitGrowth": "35.71",
+    "eps": "0.64",
+    "navps": "1.84",
+    "roe": "39.53",
+    "pe": "40.34",
+    "pb": "15.35",
+    "grossMargin": "59.46",
+    "netMargin": "24.12",
+    "debtRatio": "36.95",
+    "totalRevenue": "296.96",
+    "netProfitAttribution": "71.62"
+  },
+  "mllsj": {
+    "2025-06-30 00:00:00": {
+      "mll": "60.32",
+      "xsjll": "29.75"
+    },
+    "2024-12-31 00:00:00": {
+      "mll": "58.08",
+      "xsjll": "28.26"
+    },
+    "2024-06-30 00:00:00": {
+      "mll": "58.78",
+      "xsjll": "28.14"
+    },
+    "2023-12-31 00:00:00": {
+      "mll": "59.55",
+      "xsjll": "28.31"
+    },
+    "2023-06-30 00:00:00": {
+      "mll": "60.16",
+      "xsjll": "28.22"
+    },
+    "2022-12-31 00:00:00": {
+      "mll": "57.45",
+      "xsjll": "25.56"
+    },
+    "2022-06-30 00:00:00": {
+      "mll": "59.27",
+      "xsjll": "27.76"
+    },
+    "2021-12-31 00:00:00": {
+      "mll": "59.46",
+      "xsjll": "24.12"
+    },
+    "2021-06-30 00:00:00": {
+      "mll": "60.90",
+      "xsjll": "26.44"
+    }
+  }
+}

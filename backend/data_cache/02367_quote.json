@@ -1,0 +1,30 @@
+{
+  "baseInfo": {
+    "stockCode": "02367",
+    "market": "港股通",
+    "stockName": "巨子生物",
+    "industry": "--"
+  },
+  "coreQuotes": {
+    "stockName": "巨子生物",
+    "currentPrice": 35.06,
+    "openPrice": 34.42,
+    "prevClosePrice": 34.47,
+    "highPrice": 35.8,
+    "lowPrice": 34.26,
+    "volume": 223123755,
+    "amount": 6360292.0,
+    "priceChange": 0.59,
+    "changePercent": 0.15,
+    "turnoverRate": 0.8,
+    "pe": 2.04,
+    "marketCap": 3413193705.79527
+  },
+  "supplementInfo": {
+    "industry": "--"
+  },
+  "dataValidity": {
+    "isValid": true,
+    "reason": ""
+  }
+}

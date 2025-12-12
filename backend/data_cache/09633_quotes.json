@@ -1,0 +1,30 @@
+{
+  "baseInfo": {
+    "stockCode": "09633",
+    "market": "港股通",
+    "stockName": "农夫山泉",
+    "industry": "--"
+  },
+  "coreQuotes": {
+    "stockName": "农夫山泉",
+    "currentPrice": 46.96,
+    "openPrice": 45.92,
+    "prevClosePrice": 46.9,
+    "highPrice": 47.24,
+    "lowPrice": 45.92,
+    "volume": 152656775,
+    "amount": 3258688.0,
+    "priceChange": 0.06,
+    "changePercent": 0.36,
+    "turnoverRate": 0.78,
+    "pe": 2.26,
+    "marketCap": 28096058994.4624
+  },
+  "supplementInfo": {
+    "industry": "--"
+  },
+  "dataValidity": {
+    "isValid": true,
+    "reason": ""
+  }
+}
