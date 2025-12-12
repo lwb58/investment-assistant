@@ -1,0 +1,162 @@
+{
+  "baseInfo": {
+    "stockCode": "02367",
+    "market": "港股通",
+    "stockName": "巨子生物",
+    "industry": "--",
+    "companyName": "巨子生物",
+    "listDate": "--",
+    "totalShares": "10.71亿股",
+    "floatShares": "10.71亿股",
+    "marketCap": "367.96亿元",
+    "operateIncome": "31.13亿元",
+    "holderProfit": "11.82亿元"
+  },
+  "coreQuotes": {
+    "stockName": "巨子生物",
+    "currentPrice": 34.36,
+    "prevClosePrice": 36.0,
+    "openPrice": 36.2,
+    "highPrice": 36.04,
+    "lowPrice": 34.18,
+    "volume": 16197471.0,
+    "amount": 563169311.7,
+    "priceChange": -1.84,
+    "changePercent": -5.083,
+    "peDynamic": 15.04,
+    "peStatic": 15.04,
+    "pbRatio": 3.66,
+    "roe": 14.52,
+    "netProfitRatio": 37.99,
+    "dividendRate": 3.8
+  },
+  "financialData": {
+    "2025": {
+      "revenue": "31.13",
+      "revenueGrowth": "22.52",
+      "netProfit": "11.82",
+      "netProfitGrowth": "20.23",
+      "eps": "1.14",
+      "navps": "8.57",
+      "roe": "14.52",
+      "pe": "15.04",
+      "pb": "3.66",
+      "grossMargin": "81.68",
+      "netMargin": "37.99",
+      "debtRatio": "18.58"
+    },
+    "2024": {
+      "revenue": "55.39",
+      "revenueGrowth": "57.17",
+      "netProfit": "20.62",
+      "netProfitGrowth": "42.06",
+      "eps": "2.10",
+      "navps": "6.64",
+      "roe": "35.96",
+      "pe": "23.51",
+      "pb": "5.71",
+      "grossMargin": "82.09",
+      "netMargin": "37.22",
+      "debtRatio": "11.42"
+    },
+    "2023": {
+      "revenue": "35.24",
+      "revenueGrowth": "49.05",
+      "netProfit": "14.52",
+      "netProfitGrowth": "44.88",
+      "eps": "1.49",
+      "navps": "4.07",
+      "roe": "40.35",
+      "pe": "23.51",
+      "pb": "5.71",
+      "grossMargin": "83.63",
+      "netMargin": "41.09",
+      "debtRatio": "12.11"
+    },
+    "2022": {
+      "revenue": "23.64",
+      "revenueGrowth": "52.30",
+      "netProfit": "10.02",
+      "netProfitGrowth": "21.00",
+      "eps": "0.99",
+      "navps": "2.65",
+      "roe": "52.05",
+      "pe": "26.38",
+      "pb": "5.84",
+      "grossMargin": "84.39",
+      "netMargin": "42.36",
+      "debtRatio": "9.60"
+    },
+    "2021": {
+      "revenue": "15.52",
+      "revenueGrowth": "30.41",
+      "netProfit": "8.28",
+      "netProfitGrowth": "0.20",
+      "eps": "0.83",
+      "navps": "0.95",
+      "roe": "112.30",
+      "pe": "23.51",
+      "pb": "5.71",
+      "grossMargin": "87.24",
+      "netMargin": "53.34",
+      "debtRatio": "87.09"
+    },
+    "2020": {
+      "revenue": "11.90",
+      "revenueGrowth": "24.44",
+      "netProfit": "8.26",
+      "netProfitGrowth": "49.65",
+      "eps": "0.83",
+      "navps": "0.43",
+      "roe": "102.94",
+      "pe": "23.51",
+      "pb": "5.71",
+      "grossMargin": "84.59",
+      "netMargin": "69.42",
+      "debtRatio": "82.72"
+    }
+  },
+  "mllsj": {
+    "2025-06-30 00:00:00": {
+      "mll": "81.68",
+      "xsjll": "37.99"
+    },
+    "2024-12-31 00:00:00": {
+      "mll": "82.09",
+      "xsjll": "37.22"
+    },
+    "2024-06-30 00:00:00": {
+      "mll": "82.40",
+      "xsjll": "38.60"
+    },
+    "2023-12-31 00:00:00": {
+      "mll": "83.63",
+      "xsjll": "41.09"
+    },
+    "2023-06-30 00:00:00": {
+      "mll": "84.14",
+      "xsjll": "41.48"
+    },
+    "2022-12-31 00:00:00": {
+      "mll": "84.39",
+      "xsjll": "42.36"
+    },
+    "2022-06-30 00:00:00": {
+      "mll": "85.11",
+      "xsjll": "44.40"
+    },
+    "2021-12-31 00:00:00": {
+      "mll": "87.24",
+      "xsjll": "53.34"
+    },
+    "2020-12-31 00:00:00": {
+      "mll": "84.59",
+      "xsjll": "69.42"
+    }
+  },
+  "topShareholders": [],
+  "dataValidity": {
+    "isValid": true,
+    "reason": ""
+  }
+}

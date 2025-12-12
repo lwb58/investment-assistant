@@ -7,7 +7,7 @@ import re
 # 将项目根目录添加到Python路径
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from stock import search_stocks, get_stock_quotes, get_hk_stock_financial_data
+from stock import search_stocks, get_stock_quotes
 from util import get_stock_market
 
 # 测试报告生成

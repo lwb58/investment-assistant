@@ -160,6 +160,62 @@ class DupontAnalysisResponse(BaseModel):
     full_data: Optional[List[Dict]]  # 全量数据
     error: Optional[str]  # 错误信息
 
+# -------------- 港股详细数据获取函数 --------------
+def get_hk_stock_detail_from_eastmoney(stock_id: str) -> Optional[Dict[str, Any]]:
+    """
+    从东方财富API获取港股详细数据
+    - stock_id: 5位港股代码（如02367）
+    - 返回: 包含总市值、股本、行业等信息的字典
+    """
+    logger.info(f"从东方财富API获取港股{stock_id}详细数据")
+    
+    try:
+        # 使用东方财富API获取港股数据
+        url = f"https://datacenter.eastmoney.com/securities/api/data/v1/get?reportName=RPT_CUSTOM_HKF10_FN_MAININDICATORMAX&columns=ORG_CODE%2CSECUCODE%2CSECURITY_CODE%2CSECURITY_NAME_ABBR%2CSECURITY_INNER_CODE%2CREPORT_DATE%2CBASIC_EPS%2CPER_NETCASH_OPERATE%2CBPS%2CBPS_NEDILUTED%2CCOMMON_ACS%2CPER_SHARES%2CISSUED_COMMON_SHARES%2CHK_COMMON_SHARES%2CTOTAL_MARKET_CAP%2CHKSK_MARKET_CAP%2COPERATE_INCOME%2COPERATE_INCOME_SQ%2COPERATE_INCOME_QOQ%2COPERATE_INCOME_QOQ_SQ%2CHOLDER_PROFIT%2CHOLDER_PROFIT_SQ%2CHOLDER_PROFIT_QOQ%2CHOLDER_PROFIT_QOQ_SQ%2CPE_TTM%2CPE_TTM_SQ%2CPB_TTM%2CPB_TTM_SQ%2CNET_PROFIT_RATIO%2CNET_PROFIT_RATIO_SQ%2CROE_AVG%2CROE_AVG_SQ%2CROA%2CROA_SQ%2CDIVIDEND_TTM%2CDIVIDEND_LFY%2CDIVI_RATIO%2CDIVIDEND_RATE%2CIS_CNY_CODE&filter=(SECUCODE%3D%22{stock_id}.HK%22)&pageNumber=1&pageSize=1&sortTypes=-1&sortColumns=REPORT_DATE&source=F10&client=PC&v=06695186382178545"
+        
+        response = fetch_url(url, retry=3)
+        if not response:
+            logger.error(f"东方财富API返回空数据: {stock_id}")
+            return None
+        
+        data = response
+        if not data.get('success') or not data.get('result', {}).get('data'):
+            logger.error(f"东方财富API返回错误或无数据: {stock_id}")
+            return None
+        
+        eastmoney_data = data['result']['data'][0]
+        
+        # 转换数据格式
+        result = {
+            "total_market_cap": eastmoney_data.get("TOTAL_MARKET_CAP", 0),  # 总市值
+            "hk_market_cap": eastmoney_data.get("HKSK_MARKET_CAP", 0),  # 港股市值
+            "issued_common_shares": eastmoney_data.get("ISSUED_COMMON_SHARES", 0),  # 已发行普通股
+            "hk_common_shares": eastmoney_data.get("HK_COMMON_SHARES", 0),  # 港股普通股
+            "common_acs": eastmoney_data.get("COMMON_ACS", 0),  # 总权益
+            "pe_ttm": round(eastmoney_data.get("PE_TTM", 0), 2),  # 市盈率TTM（保留两位小数）
+            "pb_ttm": round(eastmoney_data.get("PB_TTM", 0), 2),  # 市净率TTM（保留两位小数）
+            "basic_eps": eastmoney_data.get("BASIC_EPS", 0),  # 基本每股收益
+            "net_profit_ratio": round(eastmoney_data.get("NET_PROFIT_RATIO", 0), 2),  # 净利润率（保留两位小数）
+            "roe_avg": round(eastmoney_data.get("ROE_AVG", 0), 2),  # 平均净资产收益率（保留两位小数）
+            "roa": round(eastmoney_data.get("ROA", 0), 2),  # 资产收益率（保留两位小数）
+            "dividend_ttm": eastmoney_data.get("DIVIDEND_TTM", 0),  # 股息TTM
+            "dividend_rate": round(eastmoney_data.get("DIVIDEND_RATE", 0), 2),  # 股息率（保留两位小数）
+            "operate_income": eastmoney_data.get("OPERATE_INCOME", 0),  # 最新总营收
+            "operate_income_sq": eastmoney_data.get("OPERATE_INCOME_SQ", 0),  # 同比总营收
+            "holder_profit": eastmoney_data.get("HOLDER_PROFIT", 0),  # 最新归母净利润
+            "holder_profit_sq": eastmoney_data.get("HOLDER_PROFIT_SQ", 0),  # 同比归母净利润
+            "stock_name": eastmoney_data.get("SECURITY_NAME_ABBR", ""),  # 股票名称
+            "security_code": eastmoney_data.get("SECURITY_CODE", ""),  # 股票代码
+            "report_date": eastmoney_data.get("REPORT_DATE", ""),  # 报告日期
+        }
+        
+        logger.info(f"成功获取港股{stock_id}详细数据 - 总市值: {result['total_market_cap']}, 已发行股本: {result['issued_common_shares']}")
+        return result
+        
+    except Exception as e:
+        logger.error(f"获取港股{stock_id}详细数据失败: {str(e)}", exc_info=True)
+        return None
+
 # -------------- 核心修复：同步行情获取函数 --------------
 def get_tencent_stock_data(stock_code: str) -> Optional[Dict[str, Any]]:
     """
@@ -335,10 +391,11 @@ def get_stock_quotes(stock_code: str) -> Optional[Dict[str, Any]]:
                 "amount": format_field(core_data[11], lambda x: float(x) if x else 0.0),  # 成交额
                 "priceChange": format_field(core_data[7], lambda x: float(x) if x else 0.0),  # 涨跌额
                 "changePercent": format_field(core_data[8], lambda x: float(x) if x else 0.0)  # 涨跌幅
+                # 新浪港股接口没有直接提供总市值字段，所以不设置marketCap
             }
             
             # 港股没有补充信息和腾讯数据
-            supplement_info = {"industry": ""}
+            supplement_info = {"industry": "--"}
             tencent_data = None
             
             logger.info(f"港股{stock_code}行情解析完成 - 最新价: {core_quotes['currentPrice']}, 昨收: {core_quotes['prevClosePrice']}, 股票名称: {core_quotes['stockName']}")
@@ -663,24 +720,85 @@ def _hk_dupont_analysis_impl(
                     # 如果转换失败，直接返回字符串
                     return str(value)
             
-            # 构建杜邦分析数据条目（保持与A股格式一致）
+            # 获取关键指标用于计算
+            operate_income = item.get("OPERATE_INCOME", "")
+            total_assets = item.get("TOTAL_ASSETS", "")
+            
+            # 计算总资产周转率(次) = 营业总收入 / 总资产
+            total_asset_turnover = ""
+            if operate_income and total_assets and operate_income != 0 and total_assets != 0:
+                try:
+                    total_asset_turnover = float(operate_income) / float(total_assets)
+                except (ValueError, TypeError):
+                    pass
+            
+            # 计算归母净利润（单位：亿元）
+            def format_yuan_to_billion(value):
+                if value is None or value == "":
+                    return ""
+                try:
+                    # 尝试转换为浮点数并转换为亿元（除以100000000）
+                    float_value = float(value)
+                    # 保留两位小数并转换为字符串
+                    return f"{float_value / 100000000:.2f}"
+                except (ValueError, TypeError):
+                    # 如果转换失败，直接返回字符串
+                    return str(value)
+            
+            # 计算税负因素和利息负担
+            # 税负因素 = (1 - 所得税费用/利润总额) * 100
+            tax_factor = ""
+            try:
+                income_tax = float(item.get("INCOME_TAX", "0"))
+                total_profit = float(item.get("TOTAL_PROFIT", item.get("PROFIT", "0")))
+                if total_profit != 0:
+                    tax_factor = f"{((1 - income_tax/total_profit) * 100):.2f}"
+            except (ValueError, TypeError):
+                tax_factor = ""
+            
+            # 利息负担 = (1 - 财务费用/营业利润) * 100
+            interest_factor = ""
+            try:
+                financial_expense = float(item.get("FINANCIAL_EXPENSE", "0"))
+                operate_profit = float(item.get("OPERATE_PROFIT", "0"))
+                if operate_profit != 0:
+                    interest_factor = f"{((1 - financial_expense/operate_profit) * 100):.2f}"
+            except (ValueError, TypeError):
+                interest_factor = ""
+            
+            # 获取营业利润率（前端五因素分析使用经营利润率）
+            operating_margin = format_value(item.get("OPERATE_PROFIT_RATIO", ""))
+            
+            # 构建杜邦分析数据条目（保持与A股格式一致，同时添加前端期望的字段名）
             dupont_item = {
                 "report_date": std_report_date,
+                "report_period": std_report_date,  # 兼容前端使用的'报告期'字段
                 "period_type": period_type,
                 "净资产收益率(%)": format_value(item.get("ROE_AVG", item.get("ROE_AVG_SQ", ""))),
-                "销售净利率(%)": format_value(item.get("NETPROFITMARGIN", "")),
-                "总资产周转率(次)": format_value(item.get("TOTALASSETTURNOVER", "")),
+                "销售净利率(%)": format_value(item.get("NET_PROFIT_RATIO", "")),
+                "总资产周转率(次)": format_value(total_asset_turnover),
                 "权益乘数": format_value(item.get("EQUITY_MULTIPLIER", item.get("ASSETEQUITYRATIO", ""))),
                 "总资产收益率(%)": format_value(item.get("ROA", item.get("ROA_SQ", ""))),
-                "毛利率(%)": format_value(item.get("GROSSMARGIN", "")),
-                "营业利润率(%)": format_value(item.get("OPERATINGMARGIN", "")),
+                "毛利率(%)": format_value(item.get("GROSS_PROFIT_RATIO", "")),
+                "营业利润率(%)": operating_margin,
+                "经营利润率": f"{operating_margin}%",  # 五因素分析所需字段
                 "净利润": format_value(item.get("NET_PROFIT", item.get("NETPROFIT", ""))),
-                "营业总收入": format_value(item.get("TOTAL_OPERATE_INCOME", item.get("OPERATE_INCOME", ""))),
-                "总资产": format_value(item.get("TOTAL_ASSETS", "")),
+                "营业总收入": format_value(operate_income),
+                "总资产": format_value(total_assets),
                 "股东权益": format_value(item.get("TOTAL_PARENT_EQUITY", "")),
                 "每股收益": format_value(item.get("BASIC_EPS", "")),
                 "每股净资产": format_value(item.get("BVPS", "")),
-                "每股经营现金流": format_value(item.get("PER_NETCASH_OPERATE", ""))
+                "每股经营现金流": format_value(item.get("PER_NETCASH_OPERATE", "")),
+                "归母净利润(亿元)": format_yuan_to_billion(item.get("HOLDER_PROFIT", "")),
+                "归母净利润同比(%)": format_value(item.get("HOLDER_PROFIT_YOY", "")),
+                "归母净利润环比(%)": format_value(item.get("HOLDER_PROFIT_QOQ", "")),
+                "考虑税负因素": f"{tax_factor}%",  # 五因素分析所需字段
+                "考虑利息负担": f"{interest_factor}%",  # 五因素分析所需字段
+                "税负因素(%)": format_value(tax_factor),  # 额外添加的税负因素字段
+                "利息负担(%)": format_value(interest_factor),  # 额外添加的利息负担字段
+                # 添加前端期望的A股字段名映射
+                "报告期": std_report_date,  # 前端使用的报告期字段
+                "归属母公司股东净利润": format_yuan_to_billion(item.get("HOLDER_PROFIT", ""))  # 前端使用的归母净利润字段
             }
             
             # 添加所有原始字段（保持全量数据完整性）
@@ -850,7 +968,7 @@ def generate_dupont_chart(
     """生成杜邦分析图表（支持周期筛选，确保同周期对比）"""
     try:
         # 1. 获取杜邦分析数据（含周期类型）
-        dupont_data = sina_dupont_analysis(stock_id, export_excel=False)
+        dupont_data = dupont_analysis(stock_id, export_excel=False)
         logger.info(f"获取到的杜邦分析数据：{dupont_data}")
         if dupont_data.get("error") or not dupont_data.get("full_data"):
             raise HTTPException(status_code=404, detail=dupont_data.get("error") or "未找到杜邦分析数据")
@@ -858,7 +976,16 @@ def generate_dupont_chart(
         # 2. 处理数据（清洗+周期筛选）
         df = pd.DataFrame(dupont_data["full_data"])
         df.columns = df.columns.str.strip()  # 修复列名空格问题
-        df["报告期"] = pd.to_datetime(df["报告期"])  # 转为日期格式
+        
+        # 统一处理A股和港股的数据格式差异
+        # 处理报告期字段（A股用"报告期"，港股用"report_date"）
+        if "report_date" in df.columns:
+            df = df.rename(columns={"report_date": "报告期"})
+        df["报告期"] = pd.to_datetime(df["报告期"])
+        
+        # 处理周期类型字段（A股用"周期类型"，港股用"period_type"）
+        if "period_type" in df.columns:
+            df = df.rename(columns={"period_type": "周期类型"})
         
         # 按周期类型筛选（仅保留同周期数据）
         if cycle_type != "all":
@@ -868,15 +995,32 @@ def generate_dupont_chart(
         
         df = df.sort_values("报告期")  # 按时间升序排列
 
-        # 3. 定义要显示的指标
+        # 3. 定义要显示的指标，支持A股和港股的不同指标名称
         indicator_map = {
             "roe": {"name": "净资产收益率", "color": "#409eff"},
-            "net_profit_margin": {"name": "归属母公司股东的销售净利率", "color": "#67c23a"},
+            "net_profit_margin": {"name": "销售净利率(%)", "color": "#67c23a"},  # 港股默认
             "asset_turnover": {"name": "资产周转率(次)", "color": "#faad14"},
             "equity_multiplier": {"name": "权益乘数", "color": "#f5222d"},
             "interest_burden": {"name": "考虑利息负担", "color": "#8c8c8c"},
             "tax_burden": {"name": "考虑税负因素", "color": "#52c41a"}
         }
+        
+        # 处理指标名称差异
+        # 1. 处理净资产收益率字段（A股用"净资产收益率"，港股用"净资产收益率(%)"）
+        if "净资产收益率(%)" in df.columns:
+            indicator_map["roe"]["name"] = "净资产收益率(%)"
+        
+        # 2. 处理销售净利率字段（A股用"归属母公司股东的销售净利率"，港股用"销售净利率(%)"）
+        if "销售净利率(%)" in df.columns:
+            indicator_map["net_profit_margin"]["name"] = "销售净利率(%)"
+        elif "归属母公司股东的销售净利率" in df.columns:
+            indicator_map["net_profit_margin"]["name"] = "归属母公司股东的销售净利率"
+        
+        # 3. 处理总资产周转率字段（A股用"资产周转率(次)"，港股用"总资产周转率(次)"）
+        if "总资产周转率(次)" in df.columns:
+            indicator_map["asset_turnover"]["name"] = "总资产周转率(次)"
+        elif "资产周转率(次)" in df.columns:
+            indicator_map["asset_turnover"]["name"] = "资产周转率(次)"
         
         # 4. 验证指标类型合法性
         valid_factor_types = ["all", "three", "five"] + list(indicator_map.keys())
@@ -892,23 +1036,49 @@ def generate_dupont_chart(
         # 辅助函数：添加指标曲线
         def add_trace(indicator_key):
             info = indicator_map[indicator_key]
-            if info["name"] not in df.columns:
-                raise HTTPException(
-                    status_code=404, 
-                    detail=f"数据中缺少指标：{info['name']}（可能页面结构变更）"
-                )
+            
+            # 检查指标名称是否存在，支持A股和港股的不同指标名称
+            indicator_name = info["name"]
+            if indicator_name not in df.columns:
+                # 尝试匹配港股的指标名称
+                if indicator_name == "销售净利率(%)" and "净利率(%)" in df.columns:
+                    indicator_name = "净利率(%)"
+                elif indicator_name == "资产周转率(次)" and "总资产周转率(次)" in df.columns:
+                    indicator_name = "总资产周转率(次)"
+                else:
+                    logger.warning(f"数据中缺少指标：{info['name']}，将跳过此指标")
+                    return
+                
+            # 获取指标数据
             # 处理指标值（去除百分号并转为数值）
-            y_values = df[info["name"]].replace("%", "", regex=True).astype(float)
+            y_values = df[indicator_name]
+            # 尝试转换为字符串后处理
+            if y_values.dtype == 'object':
+                y_values = y_values.astype(str).replace("%", "", regex=True).replace("", "NaN").astype(float)
+            # 处理可能的NaN值
+            y_values = pd.to_numeric(y_values, errors='coerce')
+            
+            # 如果所有值都是NaN，则跳过此指标
+            if y_values.isna().all():
+                logger.warning(f"指标：{indicator_name} 的所有值都是NaN，将跳过此指标")
+                return
+                
             # x轴标签：报告期+周期类型（如2023-12-31（年报））
             x_labels = [f"{d.strftime('%Y-%m-%d')}（{t}）" for d, t in zip(df["报告期"], df["周期类型"])]
+            
+            # 根据指标类型设置不同的悬停显示格式
+            hover_format = "%{x}<br>%{y:.2f}%<extra></extra>"  # 默认带百分号
+            if "周转率" in indicator_name or "权益乘数" in indicator_name:
+                hover_format = "%{x}<br>%{y:.4f}<extra></extra>"  # 周转率和权益乘数不带百分号
+            
             fig.add_trace(go.Scatter(
                 x=x_labels,
                 y=y_values,
                 mode="lines+markers",
-                name=info["name"],
+                name=indicator_name,
                 line=dict(color=info["color"], width=2),
                 marker=dict(size=6),
-                hovertemplate="%{x}<br>%{y:.2f}%<extra></extra>"  # 悬停显示周期和数值
+                hovertemplate=hover_format
             ))
 
         # 6. 根据factor_type添加曲线
@@ -1241,6 +1411,8 @@ def get_stock_detail(stock_code: str):
             "marketCap": "--"    # 默认占位符
         }
         
+        # 新浪港股接口没有直接提供总市值字段，保持默认值
+        
         # 4. 如果有腾讯财经数据，替换占位符
         if "tencentData" in base_info_data and base_info_data["tencentData"]:
             tencent_data = base_info_data["tencentData"]
@@ -1272,6 +1444,64 @@ def get_stock_detail(stock_code: str):
             
             if tencent_data["changeRate"] >= 0:
                 base_info_data["coreQuotes"]["changeRate"] = tencent_data["changeRate"]
+        
+        # 5. 对于港股，使用东方财富API获取详细数据
+        if len(stock_code) == 5:  # 港股是5位数字代码
+            try:
+                hk_detail_data = get_hk_stock_detail_from_eastmoney(stock_code)
+                
+                # 填充总市值、股本、市盈率等数据到base_info
+                if hk_detail_data:
+                        # 总市值（单位：元 -> 亿元）
+                        if "total_market_cap" in hk_detail_data and hk_detail_data["total_market_cap"] > 0:
+                            base_info["marketCap"] = f"{hk_detail_data['total_market_cap'] / 100000000:.2f}亿元"
+                        
+                        # 总股本（单位：股 -> 亿股）
+                        if "issued_common_shares" in hk_detail_data and hk_detail_data["issued_common_shares"] > 0:
+                            base_info["totalShares"] = f"{hk_detail_data['issued_common_shares'] / 100000000:.2f}亿股"
+                        
+                        # 流通股本（单位：股 -> 亿股）
+                        if "hk_common_shares" in hk_detail_data and hk_detail_data["hk_common_shares"] > 0:
+                            base_info["floatShares"] = f"{hk_detail_data['hk_common_shares'] / 100000000:.2f}亿股"
+                        
+                        # 在coreQuotes中添加东方财富港股数据
+                        if "pe_ttm" in hk_detail_data and hk_detail_data["pe_ttm"] > 0:
+                            base_info_data["coreQuotes"]["peDynamic"] = hk_detail_data["pe_ttm"]
+                        
+                        if "pe_ttm" in hk_detail_data and hk_detail_data["pe_ttm"] > 0:
+                            base_info_data["coreQuotes"]["peStatic"] = hk_detail_data["pe_ttm"]
+                        
+                        if "pb_ttm" in hk_detail_data and hk_detail_data["pb_ttm"] > 0:
+                            base_info_data["coreQuotes"]["pbRatio"] = hk_detail_data["pb_ttm"]
+                        
+                        # 添加净资产收益率和其他财务数据到coreQuotes
+                        if "roe_avg" in hk_detail_data:
+                            base_info_data["coreQuotes"]["roe"] = hk_detail_data["roe_avg"]
+                        
+                        if "net_profit_ratio" in hk_detail_data:
+                            base_info_data["coreQuotes"]["netProfitRatio"] = hk_detail_data["net_profit_ratio"]
+                        
+                        if "dividend_rate" in hk_detail_data:
+                            base_info_data["coreQuotes"]["dividendRate"] = hk_detail_data["dividend_rate"]
+                        
+                        # 添加最新营收和归母净利润到base_info
+                        if "operate_income" in hk_detail_data and hk_detail_data["operate_income"] != 0:
+                            # 检查数据大小，判断单位是否已经是亿元
+                            if hk_detail_data["operate_income"] > 100000000:  # 如果大于1亿元（以元为单位）
+                                base_info["operateIncome"] = f"{hk_detail_data['operate_income'] / 100000000:.2f}亿元"
+                            else:  # 已经是亿元单位
+                                base_info["operateIncome"] = f"{hk_detail_data['operate_income']:.2f}亿元"
+                        
+                        if "holder_profit" in hk_detail_data and hk_detail_data["holder_profit"] != 0:
+                            # 检查数据大小，判断单位是否已经是亿元
+                            if hk_detail_data["holder_profit"] > 100000000:  # 如果大于1亿元（以元为单位）
+                                base_info["holderProfit"] = f"{hk_detail_data['holder_profit'] / 100000000:.2f}亿元"
+                            else:  # 已经是亿元单位
+                                base_info["holderProfit"] = f"{hk_detail_data['holder_profit']:.2f}亿元"
+            except Exception as e:
+                logger.error(f"获取东方财富港股详情失败: {str(e)}", exc_info=True)
+                # 失败时不影响原有数据
+        
         
         # 处理财务数据，将mllsj从financialData中分离出来，避免模型验证错误
         processed_financial_data = {}
@@ -1526,12 +1756,17 @@ def _get_hk_stock_financial_data(stock_code: str) -> Dict[str, Dict[str, str]]:
             year = report_date[:4]
             
             # 将数值转换为字符串并保留两位小数的辅助函数
-            def format_value(value, default="0.00"):
+            def format_value(value, default="0.00", convert_to_billion=False):
                 if value is None or value == "":
                     return default
                 try:
                     # 尝试转换为浮点数
                     float_value = float(value)
+                    
+                    # 如果需要转换为亿元，除以100000000
+                    if convert_to_billion:
+                        float_value = float_value / 100000000
+                        
                     # 保留两位小数并转换为字符串
                     return f"{float_value:.2f}"
                 except (ValueError, TypeError):
@@ -1540,9 +1775,9 @@ def _get_hk_stock_financial_data(stock_code: str) -> Dict[str, Dict[str, str]]:
             
             # 构建财务指标字典
             indicators = {
-                "revenue": format_value(record.get("OPERATE_INCOME")),
+                "revenue": format_value(record.get("OPERATE_INCOME"), convert_to_billion=True),
                 "revenueGrowth": format_value(record.get("OPERATE_INCOME_YOY")),
-                "netProfit": format_value(record.get("HOLDER_PROFIT")),
+                "netProfit": format_value(record.get("HOLDER_PROFIT"), convert_to_billion=True),
                 "netProfitGrowth": format_value(record.get("HOLDER_PROFIT_YOY")),
                 "eps": format_value(record.get("BASIC_EPS")),
                 "navps": format_value(record.get("BPS")),
@@ -1551,7 +1786,10 @@ def _get_hk_stock_financial_data(stock_code: str) -> Dict[str, Dict[str, str]]:
                 "pb": format_value(record.get("PB_TTM")),
                 "grossMargin": format_value(record.get("GROSS_PROFIT_RATIO")),
                 "netMargin": format_value(record.get("NET_PROFIT_RATIO")),
-                "debtRatio": format_value(record.get("DEBT_ASSET_RATIO"))
+                "debtRatio": format_value(record.get("DEBT_ASSET_RATIO")),
+                # 添加前端需要的字段，转换为亿元
+                "totalRevenue": format_value(record.get("OPERATE_INCOME"), convert_to_billion=True),
+                "netProfitAttribution": format_value(record.get("HOLDER_PROFIT"), convert_to_billion=True)
             }
             
             # 只有在当前年份没有数据或者该记录是年报时才添加到年度数据中

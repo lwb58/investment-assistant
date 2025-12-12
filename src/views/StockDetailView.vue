@@ -726,13 +726,41 @@ const currentFinancialData = computed(() => {
     latestData = financialData.value[latestYear] || {}
   }
   
-  // 如果coreQuotes中有市盈率数据（来自腾讯财经），优先使用
+  // 如果coreQuotes中有数据（来自东方财富），优先使用
   if (stockDetailData.value && stockDetailData.value.coreQuotes) {
     const coreQuotes = stockDetailData.value.coreQuotes
+    
+    // 市盈率
     if (coreQuotes.peDynamic) {
       latestData.pe = coreQuotes.peDynamic
     } else if (coreQuotes.peStatic) {
       latestData.pe = coreQuotes.peStatic
+    }
+    
+    // 净资产收益率
+    if (coreQuotes.roe !== undefined && coreQuotes.roe !== null) {
+      latestData.roe = coreQuotes.roe
+    }
+  }
+  
+  // 如果baseInfo中有数据，优先使用
+  if (stockDetailData.value && stockDetailData.value.baseInfo) {
+    const baseInfo = stockDetailData.value.baseInfo
+    
+    // 总营收
+    if (baseInfo.operateIncome && baseInfo.operateIncome !== '--') {
+      const operateIncomeNum = parseFloat(baseInfo.operateIncome.replace(/[^\d.]/g, ''))
+      if (!isNaN(operateIncomeNum)) {
+        latestData.totalRevenue = operateIncomeNum
+      }
+    }
+    
+    // 归母净利润
+    if (baseInfo.holderProfit && baseInfo.holderProfit !== '--') {
+      const holderProfitNum = parseFloat(baseInfo.holderProfit.replace(/[^\d.]/g, ''))
+      if (!isNaN(holderProfitNum)) {
+        latestData.netProfitAttribution = holderProfitNum
+      }
     }
   }
   
@@ -1795,6 +1823,28 @@ const fetchStockData = async () => {
       // 更新当前价格
       if (stockDetailData.value.coreQuotes.currentPrice) {
         stockInfo.value.price = stockDetailData.value.coreQuotes.currentPrice.toString()
+      }
+      
+      // 使用后端baseInfo中的最新总营收和归母净利润（如果有）
+      if (stockDetailData.value.baseInfo.operateIncome && stockDetailData.value.baseInfo.operateIncome !== '--') {
+        // 提取数字部分并转换为数字类型
+        const operateIncomeNum = parseFloat(stockDetailData.value.baseInfo.operateIncome.replace(/[^\d.]/g, ''))
+        if (!isNaN(operateIncomeNum)) {
+          latestData.totalRevenue = operateIncomeNum
+        }
+      }
+      
+      if (stockDetailData.value.baseInfo.holderProfit && stockDetailData.value.baseInfo.holderProfit !== '--') {
+        // 提取数字部分并转换为数字类型
+        const holderProfitNum = parseFloat(stockDetailData.value.baseInfo.holderProfit.replace(/[^\d.]/g, ''))
+        if (!isNaN(holderProfitNum)) {
+          latestData.netProfitAttribution = holderProfitNum
+        }
+      }
+      
+      // 使用后端coreQuotes中的最新净资产收益率（如果有）
+      if (stockDetailData.value.coreQuotes.roe !== undefined && stockDetailData.value.coreQuotes.roe !== null) {
+        latestData.roe = stockDetailData.value.coreQuotes.roe
       }
       
       // 如果baseInfo中已有总市值数据，则使用该数据，否则显示占位符
