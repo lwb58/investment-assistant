@@ -681,8 +681,11 @@ def _hk_dupont_analysis_impl(
         
         # 2. 发送请求并解析数据
         data = fetch_url(url, timeout=20, retry=3)
-        if not data or "result" not in data or "data" not in data["result"]:
+        if not data:
             result["error"] = "请求失败，未获取到数据"
+            return result
+        if "result" not in data or "data" not in data["result"]:
+            result["error"] = "请求成功，但数据格式不正确"
             return result
         
         indicator_data = data["result"]["data"]
