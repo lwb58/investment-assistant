@@ -356,11 +356,11 @@ def get_stock_quotes_from_eastmoney(stock_code: str) -> Optional[Dict[str, Any]]
             "highPrice": format_field(data.get("f44"), float),  # 最高
             "lowPrice": format_field(data.get("f45"), float),  # 最低
             "volume": format_field(data.get("f48"), int),  # 成交量
-            "amount": format_field(data.get("f183"), float),  # 总市值（使用f183字段，更准确）
+            "amount": format_field(data.get("f47"), float),  # 成交额（使用f47字段）
             "priceChange": round(format_field(data.get("f168"), float) or 0.0, 2),  # 涨跌额
             "changePercent": round((format_field(data.get("f164"), float) or 0.0) / 100, 2),  # 涨跌幅（除以100）
             "turnoverRate": format_field(data.get("f50"), float),  # 换手率
-            "pe": round((format_field(data.get("f170"), float) or 0.0) * 100, 2),  # 市盈率（乘以100）
+            "pe": round(format_field(data.get("f170"), float) or 0.0, 2),  # 市盈率（直接使用）
             "marketCap": format_field(data.get("f183"), float)  # 总市值（使用f183字段）
         }
         
@@ -856,12 +856,22 @@ def _hk_dupont_analysis_impl(
             # 税负因素 = (1 - 所得税费用/利润总额) * 100
             tax_factor = ""
             try:
-                # 尝试获取所得税费用，可能的字段名：INCOME_TAX, TAX_EXPENSE
-                income_tax = float(item.get("INCOME_TAX", item.get("TAX_EXPENSE", "0")))
                 # 尝试获取利润总额，可能的字段名：TOTAL_PROFIT, PROFIT, PRETAX_PROFIT
                 total_profit = float(item.get("TOTAL_PROFIT", item.get("PROFIT", item.get("PRETAX_PROFIT", "0"))))
+                
                 if total_profit != 0:
-                    tax_factor = f"{((1 - income_tax/total_profit) * 100):.2f}"
+                    # 优先尝试获取所得税费用，可能的字段名：INCOME_TAX, TAX_EXPENSE
+                    income_tax = float(item.get("INCOME_TAX", item.get("TAX_EXPENSE", "0")))
+                    
+                    if income_tax > 0:
+                        # 如果有直接的所得税费用数据，使用它计算
+                        tax_factor = f"{((1 - income_tax/total_profit) * 100):.2f}"
+                    else:
+                        # 否则尝试使用TAX_EBT（所得税占税前利润的比例）
+                        tax_ebt = float(item.get("TAX_EBT", "0"))
+                        if tax_ebt > 0:
+                            # TAX_EBT是百分比，需要转换为小数
+                            tax_factor = f"{(100 - tax_ebt):.2f}"
             except (ValueError, TypeError):
                 tax_factor = ""
             
@@ -881,12 +891,27 @@ def _hk_dupont_analysis_impl(
                 # 如果没有找到财务费用字段或值为None，设为0
                 financial_expense = float(financial_expense_value) if financial_expense_value is not None else 0.0
                 
-                # 获取营业利润
-                operate_profit = float(item.get("OPERATE_PROFIT", "0"))
+                # 获取营业利润，尝试多种可能的字段
+                operate_profit = None
+                try:
+                    # 尝试直接获取营业利润
+                    if item.get("OPERATE_PROFIT") is not None:
+                        operate_profit = float(item.get("OPERATE_PROFIT"))
+                    elif item.get("GROSS_PROFIT") is not None and item.get("OPERATE_INCOME") is not None:
+                        # 如果没有直接的营业利润，尝试使用毛利润作为近似值
+                        operate_profit = float(item.get("GROSS_PROFIT"))
+                    elif item.get("NET_PROFIT") is not None:
+                        # 或者使用净利润作为近似值
+                        operate_profit = float(item.get("NET_PROFIT"))
+                    else:
+                        operate_profit = 0.0
+                except (ValueError, TypeError):
+                    operate_profit = 0.0
                 
                 if operate_profit != 0:
                     interest_factor = f"{((1 - financial_expense/operate_profit) * 100):.2f}"
                 else:
+                    # 如果没有可用的利润数据，保持默认值100%
                     interest_factor = "100.00"
             except (ValueError, TypeError) as e:
                 # 如果计算出错，默认设为100%
@@ -898,6 +923,40 @@ def _hk_dupont_analysis_impl(
             # 获取营业利润率（前端五因素分析使用经营利润率）
             # 尝试获取营业利润率，可能的字段名：OPERATE_PROFIT_RATIO, OPERATING_PROFIT_RATIO
             operating_margin = format_value(item.get("OPERATE_PROFIT_RATIO", item.get("OPERATING_PROFIT_RATIO", "")))
+            
+            # 如果没有直接的营业利润率数据，尝试手动计算
+            if not operating_margin:
+                try:
+                    # 尝试获取营业利润
+                    operate_profit_value = item.get("OPERATE_PROFIT")
+                    if operate_profit_value is None:
+                        # 如果营业利润为None，尝试使用其他替代方案
+                        if "GROSS_PROFIT" in item:
+                            # 使用毛利润作为近似值
+                            operate_profit = float(item.get("GROSS_PROFIT", "0"))
+                        elif "NET_PROFIT" in item:
+                            # 使用净利润作为近似值
+                            operate_profit = float(item.get("NET_PROFIT", "0"))
+                        else:
+                            operate_profit = 0.0
+                    else:
+                        try:
+                            operate_profit = float(operate_profit_value)
+                        except (ValueError, TypeError):
+                            operate_profit = 0.0
+                    
+                    # 尝试获取营业总收入
+                    op_income = float(operate_income) if operate_income else float(item.get("OPERATE_INCOME", "0"))
+                    
+                    if op_income != 0:
+                        if operate_profit != 0:
+                            operating_margin = f"{(operate_profit / op_income * 100):.2f}"
+                        elif "GROSS_PROFIT" in item:
+                            # 如果没有营业利润，尝试使用毛利率作为近似值
+                            gross_profit = float(item.get("GROSS_PROFIT", "0"))
+                            operating_margin = f"{(gross_profit / op_income * 100):.2f}"
+                except (ValueError, TypeError):
+                    operating_margin = ""
             
             # 确保销售净利率有值（使用NET_PROFIT_RATIO或手动计算）
             net_profit_ratio = item.get("NET_PROFIT_RATIO", "")
