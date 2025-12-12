@@ -929,7 +929,27 @@ def _a_dupont_analysis_impl(
                 
                 indicator_name = "".join([tag.get_text(strip=True) for tag in key_tags])
                 indicator_value = value_tag.get_text(strip=True)
-                period_indicators[indicator_name] = indicator_value
+                
+                # 修复归母净利润单位问题：将万元转换为亿元（统一与港股格式一致）
+                if "归属母公司股东净利润" in indicator_name:
+                    try:
+                        # 移除千位分隔符
+                        clean_value = indicator_value.replace(",", "")
+                        # 检查是否包含"万"单位
+                        if "万" in clean_value:
+                            # 提取数值部分并转换为亿元（万元/10000）
+                            numeric_part = clean_value.replace("万", "")
+                            float_value = float(numeric_part)
+                            # 转换为亿元并保留两位小数
+                            converted_value = f"{float_value / 10000:.2f}"
+                            period_indicators[indicator_name] = converted_value
+                        else:
+                            period_indicators[indicator_name] = indicator_value
+                    except (ValueError, TypeError):
+                        # 转换失败时保留原始值
+                        period_indicators[indicator_name] = indicator_value
+                else:
+                    period_indicators[indicator_name] = indicator_value
             
             # 过滤无效数据（至少包含核心4个指标）
             core_keys = {"净资产收益率", "归属母公司股东的销售净利率", "资产周转率(次)", "权益乘数"}
