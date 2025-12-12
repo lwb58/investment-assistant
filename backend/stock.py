@@ -789,7 +789,7 @@ def _hk_dupont_analysis_impl(
                 "每股收益": format_value(item.get("BASIC_EPS", "")),
                 "每股净资产": format_value(item.get("BVPS", "")),
                 "每股经营现金流": format_value(item.get("PER_NETCASH_OPERATE", "")),
-                "归母净利润(亿元)": format_yuan_to_billion(item.get("HOLDER_PROFIT", "")),
+                "归母净利润（亿元）": format_yuan_to_billion(item.get("HOLDER_PROFIT", "")),
                 "归母净利润同比(%)": format_value(item.get("HOLDER_PROFIT_YOY", "")),
                 "归母净利润环比(%)": format_value(item.get("HOLDER_PROFIT_QOQ", "")),
                 "考虑税负因素": f"{tax_factor}%",  # 五因素分析所需字段

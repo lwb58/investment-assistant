@@ -747,21 +747,8 @@ const currentFinancialData = computed(() => {
   if (stockDetailData.value && stockDetailData.value.baseInfo) {
     const baseInfo = stockDetailData.value.baseInfo
     
-    // 总营收
-    if (baseInfo.operateIncome && baseInfo.operateIncome !== '--') {
-      const operateIncomeNum = parseFloat(baseInfo.operateIncome.replace(/[^\d.]/g, ''))
-      if (!isNaN(operateIncomeNum)) {
-        latestData.totalRevenue = operateIncomeNum
-      }
-    }
-    
-    // 归母净利润
-    if (baseInfo.holderProfit && baseInfo.holderProfit !== '--') {
-      const holderProfitNum = parseFloat(baseInfo.holderProfit.replace(/[^\d.]/g, ''))
-      if (!isNaN(holderProfitNum)) {
-        latestData.netProfitAttribution = holderProfitNum
-      }
-    }
+    // 不再使用baseInfo中的数据覆盖财务数据，使用杜邦分析数据中的完整历史数据
+    // 这解决了只显示2025Q2数据的问题
   }
   
   return latestData
@@ -1755,11 +1742,11 @@ const fetchStockData = async () => {
     // 财务数据处理（自适应3-5年）
     let financeData = stockDetailData.value.financialData || {}
     
-    // 处理财务数据 - 即使stockDetailData.value.financialData存在，也从杜邦分析数据中提取最新的财务指标
-    // 这样可以确保数据的完整性和一致性
+    // 处理财务数据 - 完全从杜邦分析数据中构建财务数据
+    // 这解决了2024年显示三个点的问题（年度数据和季度数据混合）
     if (dupontData.value && dupontData.value.full_data && stockDetailData.value) {
-      // 首先，使用stockDetailData.value.financialData作为基础数据
-      const newFinanceData = { ...stockDetailData.value.financialData }
+      // 不再使用stockDetailData.value.financialData作为基础数据，避免年度数据和季度数据混合
+      const newFinanceData = {}
       
       // 处理杜邦分析数据中的财务指标
       dupontData.value.full_data.forEach(item => {
@@ -1784,8 +1771,8 @@ const fetchStockData = async () => {
           newFinanceData[reportPeriod].netProfit = parseFloat(netProfit.toFixed(2))
         }
         
-        // 归属母公司股东净利润（单位：万元转亿元）
-        const netProfitAttr = item['归属母公司股东净利润'] ? parseFloat(item['归属母公司股东净利润'].replace(/,/g, '')) / 10000 : 0
+        // 归属母公司股东净利润（单位：亿元，后端已转换）
+        const netProfitAttr = item['归属母公司股东净利润'] ? parseFloat(item['归属母公司股东净利润'].replace(/,/g, '')) : 0
         if (netProfitAttr > 0) {
           newFinanceData[reportPeriod].netProfitAttribution = parseFloat(netProfitAttr.toFixed(2))
         }
@@ -1825,22 +1812,8 @@ const fetchStockData = async () => {
         stockInfo.value.price = stockDetailData.value.coreQuotes.currentPrice.toString()
       }
       
-      // 使用后端baseInfo中的最新总营收和归母净利润（如果有）
-      if (stockDetailData.value.baseInfo.operateIncome && stockDetailData.value.baseInfo.operateIncome !== '--') {
-        // 提取数字部分并转换为数字类型
-        const operateIncomeNum = parseFloat(stockDetailData.value.baseInfo.operateIncome.replace(/[^\d.]/g, ''))
-        if (!isNaN(operateIncomeNum)) {
-          latestData.totalRevenue = operateIncomeNum
-        }
-      }
-      
-      if (stockDetailData.value.baseInfo.holderProfit && stockDetailData.value.baseInfo.holderProfit !== '--') {
-        // 提取数字部分并转换为数字类型
-        const holderProfitNum = parseFloat(stockDetailData.value.baseInfo.holderProfit.replace(/[^\d.]/g, ''))
-        if (!isNaN(holderProfitNum)) {
-          latestData.netProfitAttribution = holderProfitNum
-        }
-      }
+      // 不再使用baseInfo中的数据覆盖财务数据，使用杜邦分析数据中的完整历史数据
+      // 这解决了只显示2025Q2数据的问题
       
       // 使用后端coreQuotes中的最新净资产收益率（如果有）
       if (stockDetailData.value.coreQuotes.roe !== undefined && stockDetailData.value.coreQuotes.roe !== null) {
