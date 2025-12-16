@@ -980,7 +980,7 @@ def _hk_dupont_analysis_impl(
                 "营业利润率": operating_margin,
                 "经营利润率": operating_margin_with_percent,  # 五因素分析所需字段
                 "净利润": format_value(item.get("NET_PROFIT", item.get("NETPROFIT", ""))),
-                "营业总收入": format_value(operate_income),
+                "营业总收入": str(float(operate_income)/10000),
                 "总资产": format_value(total_assets),
                 "股东权益": format_value(item.get("TOTAL_PARENT_EQUITY", "")),
                 "每股收益": format_value(item.get("BASIC_EPS", "")),
