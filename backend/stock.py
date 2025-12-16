@@ -358,9 +358,10 @@ def get_stock_quotes_from_eastmoney(stock_code: str) -> Optional[Dict[str, Any]]
             "volume": format_field(data.get("f48"), int),  # 成交量
             "amount": format_field(data.get("f47"), float),  # 成交额（使用f47字段）
             "priceChange": round(format_field(data.get("f168"), float) or 0.0, 2),  # 涨跌额
-            "changePercent": round((format_field(data.get("f164"), float) or 0.0) / 100, 2),  # 涨跌幅（除以100）
+            "changePercent": round(format_field(data.get("f170"), float) or 0.0, 2),  # 涨跌幅（f170，最新涨跌幅，不需要计算）
+            "changeRate": round(format_field(data.get("f170"), float) or 0.0, 2),  # 涨跌幅（与changePercent保持一致，兼容前端）
             "turnoverRate": format_field(data.get("f50"), float),  # 换手率
-            "pe": round(format_field(data.get("f170"), float) or 0.0, 2),  # 市盈率（直接使用）
+            "pe": round(format_field(data.get("f164"), float) or 0.0, 2),  # 市盈率（f164，正确的市盈率字段）
             "marketCap": format_field(data.get("f183"), float)  # 总市值（使用f183字段）
         }
         
@@ -656,19 +657,10 @@ def enhance_stock_with_quotes(stock: Dict[str, Any]) -> Dict[str, Any]:
         if quote_data and "coreQuotes" in quote_data:
             core_quotes = quote_data["coreQuotes"]
             current_price = core_quotes.get("currentPrice", 0.0)
-            prev_close = core_quotes.get("prevClosePrice", 0.0)
             
-            # 计算涨跌幅（优化逻辑，处理特殊情况）
-            if prev_close > 0.01 and current_price >= 0:
-                change_amount = current_price - prev_close
-                change_rate = (change_amount / prev_close) * 100
-            else:
-                change_amount = 0.0
-                change_rate = 0.0
-                if prev_close <= 0.01:
-                    logger.warning(f"股票{stock_code}昨收盘价无效（{prev_close}），无法计算涨跌幅")
-                else:
-                    logger.info(f"股票{stock_code}当前价为0（可能停牌）")
+            # 直接使用get_stock_quotes返回的涨跌幅和涨跌额数据
+            change_amount = core_quotes.get("priceChange", 0.0)
+            change_rate = core_quotes.get("changeRate", core_quotes.get("changePercent", 0.0))
             
             # 赋值结果（保留两位小数）
             stock_with_quotes["currentPrice"] = round(current_price, 2)
