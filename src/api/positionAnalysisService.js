@@ -37,16 +37,11 @@ class PositionAnalysisService {
             if (quoteData && quoteData.coreQuotes) {
               // 从API获取的真实数据
               currentPrice = quoteData.coreQuotes.currentPrice || 0;
-              const prevClose = quoteData.coreQuotes.prevClosePrice || 0;
               
-              // 复用股票清单模块的涨跌幅计算逻辑
-              if (prevClose > 0.01 && currentPrice >= 0) {
-                changeAmount = currentPrice - prevClose;
-                changeRate = (changeAmount / prevClose) * 100;
-              } else {
-                changeAmount = 0;
-                changeRate = 0;
-              }
+              // 直接使用API返回的涨跌幅数据（避免重复计算）
+              // 优先使用changeRate字段，如果不存在则使用changePercent
+              changeRate = quoteData.coreQuotes.changeRate || quoteData.coreQuotes.changePercent || 0;
+              changeAmount = quoteData.coreQuotes.priceChange || (currentPrice - (quoteData.coreQuotes.prevClosePrice || 0));
               
               // 获取开盘价（如果API提供）
               openingPrice = quoteData.coreQuotes.openPrice || currentPrice;
