@@ -735,6 +735,8 @@ const currentFinancialData = computed(() => {
       latestData.pe = coreQuotes.peDynamic
     } else if (coreQuotes.peStatic) {
       latestData.pe = coreQuotes.peStatic
+    }else{
+      latestData.pe = coreQuotes.pe
     }
     
     // 净资产收益率
