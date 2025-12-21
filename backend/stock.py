@@ -13,6 +13,8 @@ import plotly.express as px
 import plotly.graph_objects as go
 from io import BytesIO
 from functools import wraps
+import requests
+import os
 from util import (
     get_stock_market, parse_sina_hq, format_field, fetch_url,
     cache_with_timeout, get_last_trade_date, sync_cache_with_timeout,
@@ -23,6 +25,24 @@ import re
 import time
 
 logger = logging.getLogger(__name__)
+
+# ---------------- URL常量定义 ----------------
+# 东方财富URL
+EASTMONEY_HK_MAIN_INDICATOR_MAX_URL = "https://datacenter.eastmoney.com/securities/api/data/v1/get?reportName=RPT_CUSTOM_HKF10_FN_MAININDICATORMAX&columns=ORG_CODE%2CSECUCODE%2CSECURITY_CODE%2CSECURITY_NAME_ABBR%2CSECURITY_INNER_CODE%2CREPORT_DATE%2CBASIC_EPS%2CPER_NETCASH_OPERATE%2CBPS%2CBPS_NEDILUTED%2CCOMMON_ACS%2CPER_SHARES%2CISSUED_COMMON_SHARES%2CHK_COMMON_SHARES%2CTOTAL_MARKET_CAP%2CHKSK_MARKET_CAP%2COPERATE_INCOME%2COPERATE_INCOME_SQ%2COPERATE_INCOME_QOQ%2COPERATE_INCOME_QOQ_SQ%2CHOLDER_PROFIT%2CHOLDER_PROFIT_SQ%2CHOLDER_PROFIT_QOQ%2CHOLDER_PROFIT_QOQ_SQ%2CPE_TTM%2CPE_TTM_SQ%2CPB_TTM%2CPB_TTM_SQ%2CNET_PROFIT_RATIO%2CNET_PROFIT_RATIO_SQ%2CROE_AVG%2CROE_AVG_SQ%2CROA%2CROA_SQ%2CDIVIDEND_TTM%2CDIVIDEND_LFY%2CDIVI_RATIO%2CDIVIDEND_RATE%2CIS_CNY_CODE&filter=(SECUCODE%3D%22{stock_id}.HK%22)&pageNumber=1&pageSize=1&sortTypes=-1&sortColumns=REPORT_DATE&source=F10&client=PC&v=06695186382178545"
+EASTMONEY_QUOTE_URL = "https://push2.eastmoney.com/api/qt/stock/get?fields=f57%2Cf58%2Cf43%2Cf44%2Cf45%2Cf46%2Cf47%2Cf48%2Cf50%2Cf164%2Cf168%2Cf170%2Cf171%2Cf179%2Cf183&secid={secid}&ut=bd1d9ddb04089700cf9c27f6f7426281&fltt=2&wbp2u=%7C0%7C0%7C0%7Cweb&v=09371029070054959"
+EASTMONEY_HK_MAIN_INDICATOR_URL = "https://datacenter.eastmoney.com/securities/api/data/v1/get?reportName=RPT_HKF10_FN_MAININDICATOR&columns=ALL&quoteColumns=&filter=(SECUCODE%3D%22{secucode}%22)&pageNumber=1&pageSize=9&sortTypes=-1&sortColumns=STD_REPORT_DATE&source=F10&client=PC&v=040146104118736425"
+
+# 新浪URL
+SINA_DUPONT_ANALYSIS_URL = "https://vip.stock.finance.sina.com.cn/corp/go.php/vFD_DupontAnalysis/stockid/{stock_id}/displaytype/{displaytype}.phtml"
+SINA_QUOTE_URL_HK = "https://hq.sinajs.cn/?_={random_num}&list={sina_list}"
+SINA_QUOTE_URL_A = "https://hq.sinajs.cn/rn={random_num}&list={sina_list}"
+SINA_SEARCH_URL = "https://suggest3.sinajs.cn/suggest/type=&key={encoded_keyword}&name=suggestdata_{timestamp}"
+SINA_FINANCE_SEARCH_URL = "https://biz.finance.sina.com.cn/suggest/lookup_n.php?country=stock&q={stock_code}"
+SINA_SEARCH_SUGGEST_URL = "https://suggest3.sinajs.cn/suggest/type=11&key={stock_code}&name=suggestdata_{random_num}"
+
+# 腾讯URL
+TENCENT_QUOTE_URL = "http://qt.gtimg.cn/q={tencent_code}"
+
 
 # -------------- 统一错误处理装饰器 --------------
 def api_error_handler(func: Callable) -> Callable:
@@ -234,7 +254,7 @@ def get_tencent_stock_data(stock_code: str) -> Optional[Dict[str, Any]]:
     # 构造腾讯财经接口URL
     # 格式：http://qt.gtimg.cn/q=sh600036
     tencent_code = f"{market}{stock_code}"
-    tencent_url = f"http://qt.gtimg.cn/q={tencent_code}"
+    tencent_url = TENCENT_QUOTE_URL.format(tencent_code=tencent_code)
     
     try:
         # 请求数据
@@ -325,7 +345,7 @@ def get_stock_quotes_from_eastmoney(stock_code: str) -> Optional[Dict[str, Any]]
         return None
     
     # 构造东方财富行情接口URL，获取必要的字段
-    eastmoney_url = f"https://push2.eastmoney.com/api/qt/stock/get?fields=f57%2Cf58%2Cf43%2Cf44%2Cf45%2Cf46%2Cf47%2Cf48%2Cf50%2Cf164%2Cf168%2Cf170%2Cf171%2Cf179%2Cf183&secid={secid}&ut=bd1d9ddb04089700cf9c27f6f7426281&fltt=2&wbp2u=%7C0%7C0%7C0%7Cweb&v=09371029070054959"
+    eastmoney_url = EASTMONEY_QUOTE_URL.format(secid=secid)
     
     try:
         # 请求东方财富接口
@@ -416,12 +436,12 @@ def get_stock_quotes(stock_code: str) -> Optional[Dict[str, Any]]:
         random_num = random.random()  # 生成0到1之间的随机浮点数
         full_stock_code = stock_code.zfill(5)  # 确保是5位代码
         sina_list = f"rt_hk{full_stock_code},rt_hk{full_stock_code}_preipo,rt_hkHSI,rt_hkHSI_preipo"
-        sina_url = f"https://hq.sinajs.cn/?_={random_num}&list={sina_list}"
+        sina_url = SINA_QUOTE_URL_HK.format(random_num=random_num, sina_list=sina_list)
     else:
         # A股URL格式
         random_num = int(time.time() * 1000)
         sina_list = f"{market}{stock_code},{market}{stock_code}_i"
-        sina_url = f"https://hq.sinajs.cn/rn={random_num}&list={sina_list}"
+        sina_url = SINA_QUOTE_URL_A.format(random_num=random_num, sina_list=sina_list)
     
     try:
         # 增加重试机制，确保接口访问成功
@@ -438,7 +458,7 @@ def get_stock_quotes(stock_code: str) -> Optional[Dict[str, Any]]:
         
         if market == "rt_hk" and stock_key not in parsed_data:
             logger.info(f"尝试从搜索建议接口获取港股{stock_code}的信息")
-            search_url = f"https://suggest3.sinajs.cn/suggest/type=11&key={stock_code}&name=suggestdata_{random.random()}"
+            search_url = SINA_SEARCH_SUGGEST_URL.format(stock_code=stock_code, random_num=random.random())
             search_data = fetch_url(search_url, is_sina_var=False, retry=2)
             
             if search_data:
@@ -1163,12 +1183,14 @@ def _a_dupont_analysis_impl(
         
         # 4. 导出全量数据到Excel（包含周期类型）
         if export_excel:
+            # 确保data_cache目录存在
+            os.makedirs("data_cache", exist_ok=True)
             df = pd.DataFrame(full_data)
             # 重新排列列：报告期、周期类型在前，核心指标次之
             core_cols = ["报告期", "周期类型", "净资产收益率", "归属母公司股东的销售净利率", "资产周转率(次)", "权益乘数"]
             other_cols = [col for col in df.columns if col not in core_cols]
             df = df[core_cols + other_cols]
-            excel_filename = f"股票{stock_id}_杜邦分析全量数据.xlsx"
+            excel_filename = os.path.join("data_cache", f"股票{stock_id}_杜邦分析全量数据.xlsx")
             df.to_excel(excel_filename, index=False, engine="openpyxl")
             print(f"\n✅ 全量数据已导出到：{excel_filename}")
         

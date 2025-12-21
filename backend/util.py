@@ -10,6 +10,18 @@ import requests
 from functools import lru_cache, wraps
 import logging
 
+# API URL常量
+# 新浪接口
+SINA_FINANCE_API_URL = "https://quotes.sina.cn/cn/api/openapi.php/CompanyFinanceService.getFinanceReport2022"
+SINA_INDUSTRY_URL = "https://hq.sinajs.cn/ran={random_num}&format=json&list=sinaindustry_up,sinaindustry_down"
+SINA_CONCEPT_URL = "https://hq.sinajs.cn/ran={random_num}&format=json&list=si_api4,si_api5,si_api6,si_api7"
+SINA_HTTP_HQ_URL = "http://hq.sinajs.cn/list={code}"
+
+# 腾讯接口
+TENCENT_BKQT_RANK_SH_URL = "https://qt.gtimg.cn/r={random_r}&q=bkqtRank_A_sh"
+TENCENT_BKQT_RANK_SZ_URL = "https://qt.gtimg.cn/r={random_r}&q=bkqtRank_A_sz"
+TENCENT_MINUTE_QUERY_URL = "https://web.ifzq.gtimg.cn/appstock/app/minute/query?_var=min_data_sz399006&code=sz399006&r={random_r}"
+
 # 配置日志（增强详细度，便于排查）
 logging.basicConfig(
     level=logging.INFO,
@@ -285,7 +297,7 @@ class DataSource:
         try:
             # 构造URL，使用固定的getFinanceReport2022接口路径（2022是接口固定标识，不是年份）
             url = (
-                f"https://quotes.sina.cn/cn/api/openapi.php/CompanyFinanceService.getFinanceReport2022"
+                f"{SINA_FINANCE_API_URL}"
                 f"?paperCode={paper_code}&source={report_type}&type=0&page=1&num=10"
             )
             logger.info(f"请求财务数据：{url}")
@@ -470,11 +482,11 @@ class DataSource:
         random_num = round(time.time() * 1000) + 0.1
         
         # 行业接口
-        industry_url = f"https://hq.sinajs.cn/ran={random_num}&format=json&list=sinaindustry_up,sinaindustry_down"
+        industry_url = SINA_INDUSTRY_URL.format(random_num=random_num)
         industry_raw_text = fetch_url(industry_url, is_sina_var=True)
         
         # 概念接口
-        concept_url = f"https://hq.sinajs.cn/ran={random_num}&format=json&list=si_api4,si_api5,si_api6,si_api7"
+        concept_url = SINA_CONCEPT_URL.format(random_num=random_num)
         concept_raw_text = fetch_url(concept_url, is_sina_var=True)
         
         # 提取变量值
@@ -610,7 +622,7 @@ class DataSource:
             random_r = random.random()
 
             # 上证A股
-            sh_response = requests.get(f"https://qt.gtimg.cn/r={random_r}&q=bkqtRank_A_sh", headers=headers, timeout=15, verify=False)
+            sh_response = requests.get(TENCENT_BKQT_RANK_SH_URL.format(random_r=random_r), headers=headers, timeout=15, verify=False)
             sh_response.encoding = "utf-8"
             sh_line = [l for l in sh_response.text.split('\n') if "v_bkqtRank_A_sh" in l][0]
             sh_data = sh_line.split('"')[1].split('~')
@@ -621,7 +633,7 @@ class DataSource:
             sh_volume = round(int(sh_data[9].strip()) / 10000 / 100, 2) if sh_data[9].strip().isdigit() else 0.0
 
             # 深证A股
-            sz_response = requests.get(f"https://qt.gtimg.cn/r={random_r}&q=bkqtRank_A_sz", headers=headers, timeout=15, verify=False)
+            sz_response = requests.get(TENCENT_BKQT_RANK_SZ_URL.format(random_r=random_r), headers=headers, timeout=15, verify=False)
             sz_response.encoding = "utf-8"
             sz_line = [l for l in sz_response.text.split('\n') if "v_bkqtRank_A_sz" in l][0]
             sz_data = sz_line.split('"')[1].split('~')
@@ -632,7 +644,7 @@ class DataSource:
             sz_volume = round(int(sz_data[9].strip()) / 10000 / 100, 2) if sz_data[9].strip().isdigit() else 0.0
 
             # 创业板
-            cyb_response = requests.get(f"https://web.ifzq.gtimg.cn/appstock/app/minute/query?_var=min_data_sz399006&code=sz399006&r={random_r}", headers=headers, timeout=15, verify=False)
+            cyb_response = requests.get(TENCENT_MINUTE_QUERY_URL.format(random_r=random_r), headers=headers, timeout=15, verify=False)
             cyb_response.encoding = "utf-8"
             cyb_text = cyb_response.text.strip().split('=', 1)[1] if '=' in cyb_response.text else '{}'
             cyb_json = json.loads(cyb_text)
@@ -693,7 +705,7 @@ class DataSource:
         
         for key, code in index_codes.items():
             try:
-                response_text = fetch_url(f"http://hq.sinajs.cn/list={code}")
+                response_text = fetch_url(SINA_HTTP_HQ_URL.format(code=code))
                 if not response_text:
                     continue
                 text_data = response_text.split('"')[1].split(',')
