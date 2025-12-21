@@ -7,7 +7,7 @@ import os
 import shutil
 import logging
 from typing import Optional, List
-import db
+from models import db
 
 logger = logging.getLogger(__name__)
 

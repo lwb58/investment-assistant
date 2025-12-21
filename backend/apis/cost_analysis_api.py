@@ -4,8 +4,8 @@ from datetime import datetime
 from uuid import uuid4
 from typing import List, Optional
 import logging
-import db
-from stock import get_stock_quotes
+from models import db
+from services.stock import get_stock_quotes
 
 logger = logging.getLogger(__name__)
 

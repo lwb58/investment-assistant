@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Optional, List, Dict, Union, Any, Callable
 import random
 import logging
-import db
+from models import db
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -15,7 +15,7 @@ from io import BytesIO
 from functools import wraps
 import requests
 import os
-from util import (
+from utils.util import (
     get_stock_market, parse_sina_hq, format_field, fetch_url,
     cache_with_timeout, get_last_trade_date, sync_cache_with_timeout,
     CORE_QUOTES_FIELDS, SUPPLEMENT_FIELDS, DataSource, stock_quote_cache

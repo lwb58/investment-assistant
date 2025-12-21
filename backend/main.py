@@ -1,9 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-import db
-from stock import stock_router, market_router
-from note import note_router
-from cost_analysis_api import position_analysis_router
+from models import db
+from services.stock import stock_router, market_router
+from services.note import note_router
+from apis.cost_analysis_api import position_analysis_router
 
 # -------------- 初始化APP --------------
 app = FastAPI(title="市场概览+笔记+股票清单API", version="1.0")

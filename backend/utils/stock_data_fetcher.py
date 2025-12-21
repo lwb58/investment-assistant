@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 
 # 导入stock.py中的数据获取方法
-from stock import (
+from services.stock import (
     get_hk_stock_detail_from_eastmoney,
     get_stock_quotes_from_eastmoney,
     get_stock_quotes,
