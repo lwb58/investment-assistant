@@ -7,7 +7,7 @@ from typing import List, Dict, Any, Optional
 logger = logging.getLogger(__name__)
 
 # 数据库路径
-DATABASE_PATH = "../stock_notes.db"
+DATABASE_PATH = "database/stock_notes.db"
 
 def get_db_connection():
     """获取数据库连接"""
