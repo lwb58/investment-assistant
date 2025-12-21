@@ -420,6 +420,10 @@ def get_stock_quotes(stock_code: str) -> Optional[Dict[str, Any]]:
     # 优先使用东方财富接口
     eastmoney_data = get_stock_quotes_from_eastmoney(stock_code)
     if eastmoney_data:
+        # 无论东方财富接口是否成功，都调用腾讯财经接口获取市值数据作为参考
+        tencent_data = get_tencent_stock_data(stock_code)
+        if tencent_data:
+            eastmoney_data["tencentData"] = tencent_data
         return eastmoney_data
     
     # 如果东方财富接口失败，降级使用新浪接口
@@ -1708,13 +1712,12 @@ def get_stock_detail(stock_code: str):
         
         # 新浪港股接口没有直接提供总市值字段，保持默认值
         
-        # 4. 如果有腾讯财经数据，替换占位符
+        # 4. 优先使用腾讯财经数据（如果有），因为其市值数据更准确
         if "tencentData" in base_info_data and base_info_data["tencentData"]:
             tencent_data = base_info_data["tencentData"]
             
-            # 替换市值（单位：元）
+            # 替换市值（单位：元 -> 亿元）
             if tencent_data["marketCap"] > 0:
-                # 转换为亿元显示，保留两位小数
                 base_info["marketCap"] = f"{tencent_data['marketCap'] / 100000000:.2f}亿元"
             
             # 替换总股本和流通股（单位：股）
