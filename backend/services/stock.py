@@ -1,5 +1,6 @@
 from urllib.parse import quote
 import asyncio
+from click import utils
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from fastapi.responses import StreamingResponse
@@ -1976,7 +1977,7 @@ def get_stock_financial_data(stock_code: str) -> Dict[str, Dict[str, str]]:
         return _get_hk_stock_financial_data(stock_code)
     # 否则调用util.py中的A股财务数据获取函数
     else:
-        from util import DataSource
+        from utils.util import DataSource
         return DataSource.get_stock_financial_data(stock_code)
 
 
