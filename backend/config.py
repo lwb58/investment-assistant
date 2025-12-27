@@ -1,0 +1,17 @@
+# 应用配置文件
+# 这里存放应用的各种配置常量
+
+# 芝士财富API配置
+CHEESEFORTUNE_FIXED_TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJqdGkiOiI1MjM2QSIsInN1YiI6IlhWb0RhZk1DRmFvNDhZTng2b2Vib1diOENaZ3ovUmlWb3F4STZQU2ZWU245WGVIb1NmWjVTakg2b25wMjVHWGNLOHlGUW4ybmRFamZDVXYrMTdIKzBJMEtjVStUc1BUQmxURnBiYkxDcHNSZGkxQXM2QTdHamZlSTB6Z2o5dDlxIiwiaWF0IjoxNzYwMDEyNTE1LCJleHAiOjIwNzUzNzI1MTV9.H5XN12SBHbCFRxvJ-4mfMntw4nwOuKqJmbC0m8och-U"
+
+# 缓存配置
+CACHE_EXPIRATION_TIME = 30 * 60  # 缓存过期时间，单位：秒 (30分钟)
+
+# API请求配置
+REQUEST_TIMEOUT = 30  # 请求超时时间，单位：秒
+
+# 日志配置
+LOG_LEVEL = "INFO"  # 日志级别：DEBUG, INFO, WARNING, ERROR
+
+# 数据库配置
+DATABASE_PATH = "database/investment.db"  # 数据库文件路径
