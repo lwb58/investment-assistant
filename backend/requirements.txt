@@ -8,3 +8,4 @@ tushare
 baostock
 plotly==6.1.1
 kaleido==0.2.1  # Plotly生成静态图片的必需依赖
+pycryptodomex==3.23.0      # 用于芝士财富API的AES加密
