@@ -140,10 +140,11 @@ def get_notes_by_stock(stock_code: str):
 async def upload_image(file: UploadFile = File(...)):
     """上传图片，按日期分目录保存"""
     try:
-        # 获取backend目录的绝对路径
-        backend_dir = os.path.dirname(os.path.abspath(__file__))
+        # 获取backend目录的绝对路径（当前文件在services目录下，需要向上一层）
+        backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         
-        # 确保backend/picture目录存在（使用相对路径）
+        
+        # 确保backend/picture目录存在
         base_dir = os.path.join(backend_dir, "picture")
         if not os.path.exists(base_dir):
             os.makedirs(base_dir)

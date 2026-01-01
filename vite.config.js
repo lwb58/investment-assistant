@@ -11,6 +11,11 @@ export default defineConfig({
         target: 'http://localhost:8000',
         changeOrigin: true,
         rewrite: (path) => path
+      },
+      '/picture': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+        rewrite: (path) => path
       }
     },
     sourcemap: false

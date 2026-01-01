@@ -1,5 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+import os
 from models import db
 from services.stock import stock_router, market_router
 from services.note import note_router
@@ -21,6 +23,12 @@ app.add_middleware(
 
 # -------------- 初始化数据库 --------------
 db.init_database()
+
+# -------------- 配置静态文件服务 --------------
+# 获取当前文件所在目录
+current_dir = os.path.dirname(os.path.abspath(__file__))
+# 配置/picture路径为静态文件目录
+app.mount("/picture", StaticFiles(directory=os.path.join(current_dir, "picture")), name="picture")
 
 # -------------- 注册路由 --------------
 app.include_router(market_router)  # 市场概览路由
