@@ -283,18 +283,15 @@ def get_tencent_stock_data(stock_code: str) -> Optional[Dict[str, Any]]:
             # 44: 总市值（亿元，可能是旧数据）
             # 45: 流通市值（亿元，约等于总市值）
             # 46: 市净率(PB)
-            return {
+            result= {
                 "currentPrice": float(fields[3]) if fields[3] and fields[3].replace('.', '').isdigit() else 0.0,
                 "marketCap": float(fields[45]) * 100000000 if fields[45] and fields[45].replace('.', '').isdigit() else 0.0,  # 流通市值（亿元转元，约1.1万亿）
-                "floatMarketCap": float(fields[45]) * 100000000 if fields[45] and fields[45].replace('.', '').isdigit() else 0.0,  # 流通市值（亿元转元）
+                "floatMarketCap": float(fields[44]) * 100000000 if fields[45] and fields[45].replace('.', '').isdigit() else 0.0,  # 流通市值（亿元转元）
                 "peDynamic": float(fields[39]) if fields[39] and fields[39].replace('.', '').isdigit() and float(fields[39]) > 0 and float(fields[39]) < 1000 else 0.0,  # 市盈率(7.32)
-                "peStatic": float(fields[39]) if fields[39] and fields[39].replace('.', '').isdigit() and float(fields[39]) > 0 and float(fields[39]) < 1000 else 0.0,  # 暂时使用同一市盈率
                 "pbRatio": float(fields[46]) if fields[46] and fields[46].replace('.', '').isdigit() and float(fields[46]) > 0 else 0.0,  # 市净率(1.00)
                 "changeRate": float(fields[32]) if fields[32] and fields[32].replace('.', '').isdigit() else 0.0,  # 涨跌幅(0.49%)
-                "totalShares": float(fields[45]) * 100000000 / float(fields[3]) if fields[3] and fields[3] != '0.00' and fields[45] else 0.0,  # 市值/价格 = 总股数
-                "floatShares": float(fields[45]) * 100000000 / float(fields[3]) if fields[3] and fields[3] != '0.00' and fields[45] else 0.0,  # 流通市值/价格 = 流通股数
-                "psRatio": float(fields[70]) if fields[70] and fields[70].replace('.', '').isdigit() and float(fields[70]) > 0 else 0.0  # 市销率
-            }
+              }
+            return result
         
     except Exception as e:
         logger.error(f"获取腾讯财经股票{stock_code}数据失败: {str(e)}", exc_info=True)
@@ -599,7 +596,7 @@ def get_stock_quotes(stock_code: str) -> Optional[Dict[str, Any]]:
             # 添加腾讯财经数据（如果获取成功）
             if tencent_data:
                 result["tencentData"] = tencent_data
-        
+        print(f"股票{stock_code}完整行情数据: {result}")
         return result
     
     except Exception as e:
@@ -1721,27 +1718,15 @@ def get_stock_detail(stock_code: str):
             if tencent_data["marketCap"] > 0:
                 base_info["marketCap"] = f"{tencent_data['marketCap'] / 100000000:.2f}亿元"
             
-            # 替换总股本和流通股（单位：股）
-            if tencent_data["totalShares"] > 0:
-                # 转换为亿股显示，保留两位小数
-                base_info["totalShares"] = f"{tencent_data['totalShares'] / 100000000:.2f}亿股"
-            
-            if tencent_data["floatShares"] > 0:
-                # 转换为亿股显示，保留两位小数
-                base_info["floatShares"] = f"{tencent_data['floatShares'] / 100000000:.2f}亿股"
-            
             # 在coreQuotes中添加腾讯财经数据
             if tencent_data["peDynamic"] >= 0:
                 base_info_data["coreQuotes"]["peDynamic"] = tencent_data["peDynamic"]
-            
-            if tencent_data["peStatic"] >= 0:
-                base_info_data["coreQuotes"]["peStatic"] = tencent_data["peStatic"]
             
             # 添加市净率和涨跌幅
             if tencent_data["pbRatio"] >= 0:
                 base_info_data["coreQuotes"]["pbRatio"] = tencent_data["pbRatio"]
             
-            if tencent_data["changeRate"] >= 0:
+            if tencent_data["changeRate"]:
                 base_info_data["coreQuotes"]["changeRate"] = tencent_data["changeRate"]
         
         # 5. 对于港股，使用东方财富API获取详细数据

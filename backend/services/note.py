@@ -116,7 +116,7 @@ def get_notes_by_stock(stock_code: str):
         raise HTTPException(status_code=400, detail="股票代码必须是数字")
     
     # 检查是否为支持的股票代码
-    from util import get_stock_market
+    from utils.util import get_stock_market
     market = get_stock_market(stock_code)
     if not market:
         raise HTTPException(status_code=400, detail="仅支持沪深A（60/00/30开头）和港股（5位数字）")
@@ -140,8 +140,11 @@ def get_notes_by_stock(stock_code: str):
 async def upload_image(file: UploadFile = File(...)):
     """上传图片，按日期分目录保存"""
     try:
-        # 确保backend/picture目录存在
-        base_dir = "d:\\yypt\\xingziyuan\\investment-assistant\\backend\\picture"
+        # 获取backend目录的绝对路径
+        backend_dir = os.path.dirname(os.path.abspath(__file__))
+        
+        # 确保backend/picture目录存在（使用相对路径）
+        base_dir = os.path.join(backend_dir, "picture")
         if not os.path.exists(base_dir):
             os.makedirs(base_dir)
         
@@ -159,7 +162,7 @@ async def upload_image(file: UploadFile = File(...)):
         file_path = os.path.join(date_dir, unique_filename)
         
         # 构建相对路径（用于数据库存储和前端显示）
-        relative_path = f"/backend/picture/{current_date}/{unique_filename}"
+        relative_path = f"/picture/{current_date}/{unique_filename}"
         
         # 保存文件
         with open(file_path, "wb") as buffer:
