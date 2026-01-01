@@ -12,6 +12,10 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path
       }
-    }
+    },
+    sourcemap: false
+  },
+  build: {
+    sourcemap: false
   }
 })
