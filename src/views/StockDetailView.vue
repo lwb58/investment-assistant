@@ -62,7 +62,7 @@
             </div>
 
             <!-- 新增笔记按钮（现代化样式） -->
-            <button class="btn primary flex items-center gap-2 px-4 py-2 rounded-lg shadow-md hover:shadow-lg transition-all duration-300 transform hover:-translate-y-0.5">
+            <button class="btn primary flex items-center gap-2 px-4 py-2 rounded-lg shadow-md hover:shadow-lg transition-all duration-300 transform hover:-translate-y-0.5" @click="openNoteModal('create')">
               <i class="icon text-lg">✏️</i>
               新增笔记
             </button>
@@ -440,32 +440,31 @@
                 </div>
 
                 <!-- 估值逻辑编辑弹窗 -->
-                <div v-if="isEditingValuation" class="modal-backdrop" @click="isEditingValuation = false">
-                  <div class="modal-content w-4/5 max-w-4xl max-h-[90vh] overflow-y-auto" @click.stop>
-                    <div class="modal-header flex justify-between items-center mb-4">
-                      <h3 class="text-lg font-semibold">编辑估值逻辑</h3>
-                      <button class="close-btn" @click="isEditingValuation = false">×</button>
-                    </div>
-                    <div class="valuation-edit-container">
-                      <div class="editor-container">
-                        <MarkdownEditor
-                          ref="markdownEditorRef"
-                          v-model="editedValuationLogic"
-                          height="400px"
-                          placeholder="记录估值逻辑（支持Markdown语法，可直接粘贴图片）"
-                        />
-                      </div>
-                      <div class="flex justify-end gap-2 mt-4">
-                        <button class="btn secondary" @click="isEditingValuation = false">
-                          取消
-                        </button>
-                        <button class="btn primary" @click="saveValuationLogic">
-                          保存
-                        </button>
-                      </div>
+                <!-- 编辑估值逻辑弹窗 -->
+                <el-dialog
+                  v-model="isEditingValuation"
+                  title="编辑估值逻辑"
+                  width="85%"
+                  :fullscreen="false"
+                  append-to-body
+                >
+                  <div class="valuation-edit-container">
+                    <div class="editor-container">
+                      <MarkdownEditor
+                        ref="markdownEditorRef"
+                        v-model="editedValuationLogic"
+                        height="400px"
+                        placeholder="记录估值逻辑（支持Markdown语法，可直接粘贴图片）"
+                        :show-action-buttons="true"
+                      >
+                        <template v-slot:action-buttons>
+                          <el-button @click="isEditingValuation = false">取消</el-button>
+                          <el-button type="primary" @click="saveValuationLogic">保存</el-button>
+                        </template>
+                      </MarkdownEditor>
                     </div>
                   </div>
-                </div>
+                </el-dialog>
 
 
 
@@ -529,7 +528,7 @@
       <el-dialog
         v-model="noteModalOpen"
         :title="noteModalType === 'create' ? '创建股票笔记' : '查看/编辑笔记'"
-        width="500px"
+        width="1200px"
         append-to-body
       >
         <form @submit.prevent="saveNote">
@@ -542,15 +541,6 @@
             />
           </div>
           <div class="form-group mb-4">
-            <label class="form-label block text-sm font-medium text-gray-700 mb-1">笔记内容</label>
-            <MarkdownEditor
-              ref="markdownEditorRef"
-              v-model="noteForm.content"
-              height="400px"
-              placeholder="输入笔记内容（支持Markdown语法，可直接粘贴图片）"
-            />
-          </div>
-          <div class="form-group mb-4">
             <label class="form-label block text-sm font-medium text-gray-700 mb-1">关联股票</label>
             <el-input
               :value="`${stockInfo.code} ${stockInfo.name}`"
@@ -558,13 +548,22 @@
               class="w-full bg-gray-50"
             />
           </div>
+          <div class="form-group mb-4">
+            <label class="form-label block text-sm font-medium text-gray-700 mb-1">笔记内容</label>
+            <MarkdownEditor
+              ref="markdownEditorRef"
+              v-model="noteForm.content"
+              height="400px"
+              placeholder="输入笔记内容（支持Markdown语法，可直接粘贴图片）"
+              :show-action-buttons="true"
+            >
+              <template v-slot:action-buttons>
+                <el-button @click="closeNoteModal">取消</el-button>
+                <el-button type="primary" @click="saveNote">{{ noteModalType === 'create' ? '创建笔记' : '保存修改' }}</el-button>
+              </template>
+            </MarkdownEditor>
+          </div>
         </form>
-        <template #footer>
-          <span class="dialog-footer">
-            <el-button @click="closeNoteModal">取消</el-button>
-            <el-button type="primary" @click="saveNote">{{ noteModalType === 'create' ? '创建笔记' : '保存修改' }}</el-button>
-          </span>
-        </template>
       </el-dialog>
       
 

@@ -236,12 +236,10 @@
           <div class="note-content-rendered" v-html="renderNoteContent(selectedNote?.content || '')"></div>
         </div>
       </div>
-      <template #footer>
-        <span class="dialog-footer">
-          <el-button @click="closeNoteDetail">关闭</el-button>
-          <el-button type="primary" @click="editCurrentNote">编辑</el-button>
-        </span>
-      </template>
+      <div class="flex justify-end gap-2 mt-4">
+        <el-button @click="closeNoteDetail">关闭</el-button>
+        <el-button type="primary" @click="editCurrentNote">编辑</el-button>
+      </div>
     </el-dialog>
 
     <!-- 添加/编辑笔记弹窗 -->
@@ -312,7 +310,7 @@
             placeholder="请输入笔记内容，可直接粘贴图片（粘贴后图片将直接显示在文本中）"
             :show-action-buttons="true"
           >
-            <template #action-buttons>
+            <template v-slot:action-buttons>
               <el-button @click="cancelAddEdit">取消</el-button>
               <el-button type="primary" @click="saveNote">保存</el-button>
             </template>
@@ -329,12 +327,10 @@
       center
     >
       <span>确定要删除笔记 "{{ selectedNoteForDelete?.title }}" 吗？</span>
-      <template #footer>
-        <span class="dialog-footer">
-          <el-button @click="showDeleteConfirm = false">取消</el-button>
-          <el-button type="danger" @click="deleteNote">删除</el-button>
-        </span>
-      </template>
+      <div class="flex justify-end gap-2 mt-4">
+        <el-button @click="showDeleteConfirm = false">取消</el-button>
+        <el-button type="danger" @click="deleteNote">删除</el-button>
+      </div>
     </el-dialog>
   </div>
 </template>
