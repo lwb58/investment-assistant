@@ -37,8 +37,10 @@ class ApiService {
    * @returns {Promise<Array>} 股票列表
    */
   async getStocks(search = '') {
-    const query = search ? `?search=${encodeURIComponent(search)}` : '';
-    return this.request('GET', `/stocks${query}`);
+    if (!search) {
+      return this.request('GET', `/stocks`);
+    }
+    return this.request('GET', `/stocks/search/${encodeURIComponent(search)}`);
   }
 
   /**
@@ -156,8 +158,8 @@ async updateStock(stockId, updateData) {  // 参数名从stockCode改为stockId
   
   // 获取复盘笔记列表（兼容现有代码）
   async getReviewNotes() {
-    // 复盘笔记模块只获取普通笔记，不包含利好利空分析
-    return this.request('GET', `/notes?note_type=note`);
+    // 获取所有类型的笔记，包括估值逻辑笔记
+    return this.request('GET', `/notes`);
   }
 
   /**
@@ -179,6 +181,35 @@ async updateStock(stockId, updateData) {  // 参数名从stockCode改为stockId
    */
   async deleteNote(noteId) {
     return this.request('DELETE', `/notes/${noteId}`);
+  }
+
+  /**
+   * 获取所有标签
+   * @param {string} userId - 用户ID（可选）
+   * @returns {Promise<Array>} 标签列表
+   */
+  async getTags(userId = null) {
+    let url = `/tags`;
+    if (userId) {
+      url += `?user_id=${userId}`;
+    }
+    return this.request('GET', url);
+  }
+
+  /**
+   * 创建新标签
+   * @param {string} tagName - 标签名称
+   * @param {string} userId - 用户ID（可选）
+   * @returns {Promise<Object>} 创建的标签
+   */
+  async createTag(tagName, userId = null) {
+    const body = { name: tagName };
+    if (userId) {
+      body.userId = userId;
+    }
+    return this.request('POST', `/tags`, {
+      body: JSON.stringify(body)
+    });
   }
 
   /**
@@ -234,7 +265,8 @@ async updateStock(stockId, updateData) {  // 参数名从stockCode改为stockId
         }),
         stockCode: data.stockCode,
         stockName: '',
-        type: 'pros_cons'  // 指定笔记类型为利好利空分析
+        type: 'pros_cons',  // 指定笔记类型为利好利空分析
+        source: '估值逻辑'  // 添加来源字段，标识该笔记来自估值逻辑
       };
       
       // 如果提供了现有笔记ID，则直接更新
@@ -265,25 +297,7 @@ async updateStock(stockId, updateData) {  // 参数名从stockCode改为stockId
     }
   }
   
-  /**
-   * 获取股票估值逻辑数据
-   * @param {string} stockCode - 股票代码
-   * @returns {Promise<Object>} 估值逻辑数据
-   */
-  async getStockValuation(stockCode) {
-    return this.request('GET', `/stocks/valuation/${stockCode}`);
-  }
-  
-  /**
-   * 保存股票估值逻辑数据
-   * @param {Object} valuationData - 估值逻辑数据
-   * @returns {Promise<Object>} 保存结果
-   */
-  async saveStockValuation(valuationData) {
-    return this.request('POST', `/stocks/valuation`, {
-      body: JSON.stringify(valuationData)
-    });
-  }
+
 }
 
 // 导出单例实例

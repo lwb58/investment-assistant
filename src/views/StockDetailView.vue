@@ -449,6 +449,9 @@
                   append-to-body
                 >
                   <div class="valuation-edit-container">
+
+
+
                     <div class="editor-container">
                       <MarkdownEditor
                         ref="markdownEditorRef"
@@ -456,10 +459,11 @@
                         height="400px"
                         placeholder="记录估值逻辑（支持Markdown语法，可直接粘贴图片）"
                         :show-action-buttons="true"
+                        :tags="'估值逻辑'"
                       >
                         <template v-slot:action-buttons>
-                          <el-button @click="isEditingValuation = false">取消</el-button>
-                          <el-button type="primary" @click="saveValuationLogic">保存</el-button>
+                           <el-button @click="isEditingValuation = false">取消</el-button> 
+                           <el-button type="primary" @click="saveValuationLogic">保存</el-button> 
                         </template>
                       </MarkdownEditor>
                     </div>
@@ -543,9 +547,9 @@
           <div class="form-group mb-4">
             <label class="form-label block text-sm font-medium text-gray-700 mb-1">关联股票</label>
             <el-input
-              :value="`${stockInfo.code} ${stockInfo.name}`"
-              disabled
-              class="w-full bg-gray-50"
+              v-model="noteForm.stockCode"
+              placeholder="输入股票代码（如：600036）"
+              class="w-full"
             />
           </div>
           <div class="form-group mb-4">
@@ -556,6 +560,9 @@
               height="400px"
               placeholder="输入笔记内容（支持Markdown语法，可直接粘贴图片）"
               :show-action-buttons="true"
+              :tags="'股票笔记'"
+              :stockCode="noteForm.stockCode"
+              :stockName="noteForm.stockName"
             >
               <template v-slot:action-buttons>
                 <el-button @click="closeNoteModal">取消</el-button>
@@ -1211,6 +1218,7 @@ const markdownEditorRef = ref(null) // 编辑器组件引用
 const editedValuationLogic = ref('') // 编辑中的估值逻辑内容
 
 
+
 // 新增：利好利空与总结
 const prosPoints = ref('') // 利好点
 const consPoints = ref('') // 利空点
@@ -1266,7 +1274,9 @@ const noteModalType = ref('create')
 const noteForm = ref({
   id: '',
   title: '',
-  content: ''
+  content: '',
+  stockCode: '',
+  stockName: ''
 })
 
 // 加载状态
@@ -1888,8 +1898,11 @@ const fetchStockNotes = async () => {
   try {
     const notes = await apiService.getNotesByStockCode(stockCode.value)
     
-    // 过滤掉利好利空类型的笔记，只显示其他笔记
-    stockNotes.value = (notes || []).filter(note => !note.title.startsWith('[利好利空]'))
+    // 过滤掉利好利空和估值逻辑类型的笔记，只显示普通笔记
+    stockNotes.value = (notes || []).filter(note => 
+      !note.title.startsWith('[利好利空]') && 
+      !note.title.startsWith('[估值逻辑]')
+    )
     
     // 查找利好利空类型的笔记并加载数据
     const prosConsNote = notes.find(note => note.title.startsWith('[利好利空]'))
@@ -1930,26 +1943,32 @@ const fetchStockNotes = async () => {
   }
 }
 
-// 获取估值逻辑数据
+// 获取估值逻辑数据（从笔记中获取）
 const fetchValuationLogic = async () => {
   try {
-    const data = await apiService.getStockValuation(stockCode.value)
-    if (data) {
-      valuationLogic.value = data.valuationContent || ''
-      tradingPlan.value = data.tradingPlan || ''
-      
-      // 解析交易计划数据并设置到对应的响应式变量中
-      if (data.tradingPlan) {
-        try {
-          const parsedTradingPlan = JSON.parse(data.tradingPlan)
-          buyPoint.value = parsedTradingPlan.buyPoint || ''
-          maxLossRate.value = parsedTradingPlan.maxLossRate || ''
-          expectedGrowthRate.value = parsedTradingPlan.expectedGrowthRate || ''
-          investmentDuration.value = parsedTradingPlan.investmentDuration || ''
-          // 注意：maxLossPoint和expectedPoint是计算属性，会自动根据其他变量计算
-        } catch (parseError) {
-          console.error('解析交易计划数据失败:', parseError)
+    const notes = await apiService.getNotesByStockCode(stockCode.value)
+    const valuationNote = notes.find(note => note.title.startsWith('[估值逻辑]'))
+    if (valuationNote) {
+      try {
+        const valuationData = JSON.parse(valuationNote.content)
+        valuationLogic.value = valuationData.valuationContent || ''
+        tradingPlan.value = valuationData.tradingPlan || ''
+        
+        // 解析交易计划数据并设置到对应的响应式变量中
+        if (valuationData.tradingPlan) {
+          try {
+            const parsedTradingPlan = JSON.parse(valuationData.tradingPlan)
+            buyPoint.value = parsedTradingPlan.buyPoint || ''
+            maxLossRate.value = parsedTradingPlan.maxLossRate || ''
+            expectedGrowthRate.value = parsedTradingPlan.expectedGrowthRate || ''
+            investmentDuration.value = parsedTradingPlan.investmentDuration || ''
+            // 注意：maxLossPoint和expectedPoint是计算属性，会自动根据其他变量计算
+          } catch (parseError) {
+            console.error('解析交易计划数据失败:', parseError)
+          }
         }
+      } catch (parseError) {
+        console.error('解析估值逻辑数据失败:', parseError)
       }
     }
   } catch (err) {
@@ -1963,15 +1982,32 @@ const openValuationEdit = () => {
   isEditingValuation.value = true
 }
 
-// 保存估值逻辑
+// 保存估值逻辑（保存为笔记）
 const saveValuationLogic = async () => {
   try {
-    await apiService.saveStockValuation({
-      stockCode: stockCode.value,
+    const notes = await apiService.getNotesByStockCode(stockCode.value)
+    const existingValuationNote = notes.find(note => note.title.startsWith('[估值逻辑]'))
+    
+    const valuationData = {
+      title: `[估值逻辑] ${stockInfo.value.code}`,
+      content: JSON.stringify({
+        valuationContent: editedValuationLogic.value,
+        tradingPlan: tradingPlan.value
+      }),
+      stockCode: stockInfo.value.code,
       stockName: stockInfo.value.name,
-      valuationContent: editedValuationLogic.value,
-      tradingPlan: tradingPlan.value
-    })
+      type: 'valuation',  // 指定笔记类型为估值逻辑
+      source: '估值逻辑'  // 设置来源为估值逻辑
+    }
+    
+    if (existingValuationNote) {
+      // 更新现有笔记
+      await apiService.updateNote(existingValuationNote.id, valuationData)
+    } else {
+      // 创建新笔记
+      await apiService.addNote(valuationData)
+    }
+    
     await fetchValuationLogic() // 刷新数据
     isEditingValuation.value = false
     alert('估值逻辑保存成功！')
@@ -2014,13 +2050,29 @@ const saveInvestmentPlan = async () => {
       investmentDuration: investmentDuration.value
     }
     
-    // 使用现有的saveStockValuation方法保存交易计划
-    await apiService.saveStockValuation({
-      stockCode: stockCode.value,
+    // 从笔记中保存交易计划
+    const notes = await apiService.getNotesByStockCode(stockCode.value)
+    const existingValuationNote = notes.find(note => note.title.startsWith('[估值逻辑]'))
+    
+    const valuationData = {
+      title: `[估值逻辑] ${stockInfo.value.code}`,
+      content: JSON.stringify({
+        valuationContent: valuationLogic.value,
+        tradingPlan: JSON.stringify(tradingPlan)
+      }),
+      stockCode: stockInfo.value.code,
       stockName: stockInfo.value.name,
-      valuationContent: valuationLogic.value,
-      tradingPlan: JSON.stringify(tradingPlan)
-    })
+      type: 'valuation',  // 指定笔记类型为估值逻辑
+      source: '估值逻辑'  // 设置来源为估值逻辑
+    }
+    
+    if (existingValuationNote) {
+      // 更新现有笔记
+      await apiService.updateNote(existingValuationNote.id, valuationData)
+    } else {
+      // 创建新笔记
+      await apiService.addNote(valuationData)
+    }
 
     await fetchValuationLogic() // 刷新数据
     alert('投资计划保存成功！')
@@ -2163,7 +2215,9 @@ const openNoteModal = (type, note = null) => {
     noteForm.value = {
       id: '',
       title: `【${stockInfo.value.code} ${stockInfo.value.name}】${new Date().toLocaleDateString()} 笔记`,
-      content: ''
+      content: '',
+      stockCode: stockInfo.value.code,
+      stockName: stockInfo.value.name
     }
   } else if (note) {
     noteForm.value = { ...note }
@@ -2172,15 +2226,16 @@ const openNoteModal = (type, note = null) => {
 
 const closeNoteModal = () => {
   noteModalOpen.value = false
-  noteForm.value = { id: '', title: '', content: '' }
+  noteForm.value = { id: '', title: '', content: '', stockCode: '', stockName: '' }
 }
 
 const saveNote = async () => {
   try {
     const noteData = {
       ...noteForm.value,
-      stockCode: stockInfo.value.code,
-      stockName: stockInfo.value.name
+      stockCode: noteForm.value.stockCode || stockInfo.value.code,
+      stockName: noteForm.value.stockName || stockInfo.value.name,
+      source: '股票详情'  // 添加来源字段，标识该笔记来自股票详情页
     }
     noteModalType.value === 'create'
       ? await apiService.addNote(noteData)
@@ -2874,62 +2929,14 @@ onUnmounted(() => {
   gap: 0.75rem;
 }
 
-/* 模态框样式 */
-  .modal-backdrop {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0, 0, 0, 0.5);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 1000;
-  }
 
-  .modal-content {
-    background-color: white;
-    border-radius: var(--border-radius-base);
-    padding: var(--spacing-xl);
-    box-shadow: var(--shadow-medium);
-    position: relative;
-  }
-
-  .modal-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: var(--spacing-lg);
-    padding-bottom: var(--spacing-md);
-    border-bottom: 1px solid var(--border-color);
-  }
-
-  .close-btn {
-    background: none;
-    border: none;
-    font-size: 24px;
-    cursor: pointer;
-    color: var(--text-tertiary);
-    padding: 0;
-    width: 30px;
-    height: 30px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 50%;
-    transition: var(--transition-base);
-  }
-
-  .close-btn:hover {
-    background-color: var(--bg-secondary);
-    color: var(--text-primary);
-  }
 
   /* Markdown预览样式 */
   .markdown-preview {
     line-height: 1.6;
   }
+
+
 
   .markdown-preview h1 {
     font-size: 24px;

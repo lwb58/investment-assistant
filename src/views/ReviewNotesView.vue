@@ -166,6 +166,17 @@
           </template>
         </el-table-column>
         <el-table-column
+          prop="source"
+          label="来源"
+          width="120"
+        >
+          <template #default="scope">
+            <el-tag size="small" type="info" effect="plain">
+              {{ scope.row.source || '未知' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column
           label="操作"
           width="180"
           fixed="right"
@@ -309,6 +320,7 @@
             height="400px"
             placeholder="请输入笔记内容，可直接粘贴图片（粘贴后图片将直接显示在文本中）"
             :show-action-buttons="true"
+            :tags="'复盘笔记'"
           >
             <template v-slot:action-buttons>
               <el-button @click="cancelAddEdit">取消</el-button>
@@ -533,7 +545,8 @@ async function saveNote() {
     const noteData = {
       ...noteForm,
       stockCode: noteForm.relatedStock.join(',') || '',
-      stockName: stockNames || ''
+      stockName: stockNames || '',
+      source: '复盘笔记'  // 添加来源字段，标识该笔记来自复盘笔记页
     };
     
     if (editingNote.value) {

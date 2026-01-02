@@ -44,8 +44,19 @@ def init_database(notes_storage: List[Dict[str, Any]] = None, stock_storage: Lis
                 table_exists = False
         
         # 创建笔记表，包含关联股票字段
+        # 创建标签表（独立于notes表的存在）
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS tags (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE,
+                create_time TEXT NOT NULL,
+                update_time TEXT NOT NULL
+            )
+        ''')
+        
         if not table_exists:
             logger.info("创建新的notes表")
+            # 创建笔记表
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS notes (
                     id TEXT PRIMARY KEY,
@@ -53,7 +64,8 @@ def init_database(notes_storage: List[Dict[str, Any]] = None, stock_storage: Lis
                     content TEXT NOT NULL,
                     stock_code TEXT DEFAULT '',
                     stock_name TEXT DEFAULT '',
-                    type TEXT DEFAULT 'note',  -- note: 普通笔记, pros_cons: 利好利空分析
+                    type TEXT DEFAULT 'note',  -- note: 普通笔记, pros_cons: 利好利空分析, valuation: 估值逻辑
+                    tags TEXT DEFAULT '',  -- 标签，使用逗号分隔
                     create_time TEXT NOT NULL,
                     update_time TEXT NOT NULL
                 )
@@ -69,6 +81,9 @@ def init_database(notes_storage: List[Dict[str, Any]] = None, stock_storage: Lis
             if 'stock_name' not in columns:
                 logger.info("添加stock_name字段到notes表")
                 cursor.execute("ALTER TABLE notes ADD COLUMN stock_name TEXT DEFAULT ''")
+            if 'tags' not in columns:
+                logger.info("添加tags字段到notes表")
+                cursor.execute("ALTER TABLE notes ADD COLUMN tags TEXT DEFAULT ''")
             if 'type' not in columns:
                 logger.info("添加type字段到notes表")
                 cursor.execute("ALTER TABLE notes ADD COLUMN type TEXT DEFAULT 'note'")
@@ -182,20 +197,115 @@ def init_database(notes_storage: List[Dict[str, Any]] = None, stock_storage: Lis
         logger.info("数据库初始化完成")
 
 # 笔记相关操作
+def get_all_tags(user_id: Optional[str] = None):
+    """
+    获取所有标签，支持按用户ID过滤
+    :param user_id: 用户ID，可选
+    :return: 标签列表
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    if user_id:
+        query = "SELECT * FROM tags WHERE user_id = ? ORDER BY name ASC"
+        cursor.execute(query, (user_id,))
+    else:
+        query = "SELECT * FROM tags ORDER BY name ASC"
+        cursor.execute(query)
+    
+    rows = cursor.fetchall()
+    
+    tags = []
+    for row in rows:
+        row_dict = dict(row)
+        tags.append({
+            "id": row_dict["id"],
+            "name": row_dict["name"],
+            "userId": row_dict["user_id"],
+            "createTime": row_dict["create_time"],
+            "updateTime": row_dict["update_time"]
+        })
+    
+    conn.close()
+    return tags
+
+
+def create_tag(tag_name: str, user_id: Optional[str] = None):
+    """
+    创建标签
+    :param tag_name: 标签名称
+    :param user_id: 用户ID，可选
+    :return: 创建的标签
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # 检查标签是否已存在
+    if user_id:
+        cursor.execute("SELECT * FROM tags WHERE name = ? AND user_id = ?", (tag_name, user_id))
+    else:
+        cursor.execute("SELECT * FROM tags WHERE name = ? AND user_id IS NULL", (tag_name,))
+    
+    existing_tag = cursor.fetchone()
+    
+    if existing_tag:
+        conn.close()
+        row_dict = dict(existing_tag)
+        return {
+            "id": row_dict["id"],
+            "name": row_dict["name"],
+            "userId": row_dict["user_id"],
+            "createTime": row_dict["create_time"],
+            "updateTime": row_dict["update_time"]
+        }
+    
+    # 创建新标签
+    import uuid
+    tag_id = str(uuid.uuid4())
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    cursor.execute(
+        "INSERT INTO tags (id, name, create_time, update_time, user_id) VALUES (?, ?, ?, ?, ?)",
+        (tag_id, tag_name, now, now, user_id)
+    )
+    conn.commit()
+    conn.close()
+    
+    # 返回创建的标签
+    return {
+        "id": tag_id,
+        "name": tag_name,
+        "userId": user_id,
+        "createTime": now,
+        "updateTime": now
+    }
+
+
 def get_all_notes(stock_code: Optional[str] = None, note_type: Optional[str] = None) -> List[Dict[str, Any]]:
     """获取所有笔记，可按股票代码和类型筛选"""
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    if stock_code and note_type:
-        cursor.execute("SELECT * FROM notes WHERE stock_code = ? AND type = ? ORDER BY create_time DESC", (stock_code, note_type))
-    elif stock_code:
-        cursor.execute("SELECT * FROM notes WHERE stock_code = ? ORDER BY create_time DESC", (stock_code,))
-    elif note_type:
-        cursor.execute("SELECT * FROM notes WHERE type = ? ORDER BY create_time DESC", (note_type,))
-    else:
-        cursor.execute("SELECT * FROM notes ORDER BY create_time DESC")
+    query = "SELECT * FROM notes WHERE 1=1"
+    params = []
     
+    if stock_code:
+        # 支持按多个股票代码过滤
+        if "," in stock_code:
+            stock_codes = stock_code.split(",")
+            placeholders = ",".join(["?"] * len(stock_codes))
+            query += f" AND stock_code IN ({placeholders})"
+            params.extend(stock_codes)
+        else:
+            query += " AND (stock_code = ? OR stock_code LIKE ? OR stock_code LIKE ? OR stock_code LIKE ?)"
+            params.extend([stock_code, f"{stock_code},%", f"%,{stock_code}", f"%,{stock_code},%"])
+    
+    if note_type:
+        query += " AND type = ?"
+        params.append(note_type)
+    
+    query += " ORDER BY update_time DESC"
+    cursor.execute(query, params)
     rows = cursor.fetchall()
     conn.close()
     
@@ -209,7 +319,9 @@ def get_all_notes(stock_code: Optional[str] = None, note_type: Optional[str] = N
             "content": row_dict["content"],
             "stockCode": row_dict["stock_code"],
             "stockName": row_dict["stock_name"],
-            "type": row_dict["type"],  # 添加type字段
+            "type": row_dict["type"],
+            "source": row_dict.get("source", ""),
+            "tags": row_dict.get("tags", ""),
             "createTime": row_dict["create_time"],
             "updateTime": row_dict["update_time"]
         })
@@ -236,6 +348,8 @@ def get_note_by_id(note_id: str) -> Optional[Dict[str, Any]]:
         "stockCode": row_dict["stock_code"],
         "stockName": row_dict["stock_name"],
         "type": row_dict["type"],  # 添加type字段
+        "source": row_dict.get("source", ""),  # 添加source字段
+        "tags": row_dict.get("tags", ""),  # 添加tags字段
         "createTime": row_dict["create_time"],
         "updateTime": row_dict["update_time"]
     }
@@ -249,21 +363,25 @@ def create_note(note_data: Dict[str, Any]) -> Dict[str, Any]:
     stock_code = note_data.get("stock_code", note_data.get("stockCode", ""))
     stock_name = note_data.get("stock_name", note_data.get("stockName", ""))
     note_type = note_data.get("type", "note")  # 默认值为"note"
+    source = note_data.get("source", note_data.get("source", ""))  # 获取来源字段
+    tags = note_data.get("tags", note_data.get("tags", ""))  # 获取标签字段
     create_time = note_data.get("create_time", note_data.get("createTime", datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
     update_time = note_data.get("update_time", note_data.get("updateTime", datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
     
     cursor.execute(
-        "INSERT INTO notes (id, title, content, stock_code, stock_name, type, create_time, update_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO notes (id, title, content, stock_code, stock_name, type, source, tags, create_time, update_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (note_data["id"], note_data["title"], note_data["content"], 
-         stock_code, stock_name, note_type, create_time, update_time)
+         stock_code, stock_name, note_type, source, tags, create_time, update_time)
     )
     conn.commit()
     conn.close()
     
-    # 返回的数据中包含type字段
+    # 返回的数据中包含type、source和tags字段
     return {
         **note_data,
         "type": note_type,
+        "source": source,  # 添加来源字段到返回结果
+        "tags": tags,  # 添加标签字段到返回结果
         "stockCode": stock_code,
         "stockName": stock_name,
         "createTime": create_time,
@@ -295,6 +413,9 @@ def update_note(note_id: str, update_data: Dict[str, Any]) -> Optional[Dict[str,
         stock_code = update_data.get("stock_code", update_data.get("stockCode", ""))
         update_fields.append("stock_code = ?")
         update_values.append(stock_code)
+    if "tags" in update_data:
+        update_fields.append("tags = ?")
+        update_values.append(update_data["tags"])
     if "stock_name" in update_data or "stockName" in update_data:
         stock_name = update_data.get("stock_name", update_data.get("stockName", ""))
         update_fields.append("stock_name = ?")
@@ -303,6 +424,10 @@ def update_note(note_id: str, update_data: Dict[str, Any]) -> Optional[Dict[str,
     if "type" in update_data:
         update_fields.append("type = ?")
         update_values.append(update_data["type"])
+    # 支持source字段的更新
+    if "source" in update_data:
+        update_fields.append("source = ?")
+        update_values.append(update_data["source"])
     
     # 总是更新update_time
     update_fields.append("update_time = ?")

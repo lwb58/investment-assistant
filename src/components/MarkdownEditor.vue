@@ -7,6 +7,49 @@
         :defaultConfig="toolbarConfig"
         :mode="mode"
       />
+      <!-- 标签选择区域 -->
+      <div class="tags-section">
+        <el-tag
+          v-for="tag in defaultTags"
+          :key="tag"
+          :type="editorTags.includes(tag) ? 'primary' : 'info'"
+          size="small"
+          @click="toggleTag(tag)"
+          class="tag-option"
+        >
+          {{ tag }}
+        </el-tag>
+        <el-input
+          v-model="newTag"
+          placeholder="添加新标签"
+          size="small"
+          class="new-tag-input"
+          @keyup.enter="addCustomTag"
+        />
+        <el-button
+          type="success"
+          size="small"
+          @click="addCustomTag"
+          :disabled="!newTag"
+          class="add-tag-btn"
+        >
+          添加
+        </el-button>
+      </div>
+      <div class="selected-tags" v-if="editorTags">
+        <el-tag
+          v-for="tag in editorTags.split(',')"
+          :key="tag"
+          type="primary"
+          closable
+          size="small"
+          @close="removeTag(tag)"
+          class="selected-tag"
+        >
+          {{ tag }}
+        </el-tag>
+      </div>
+
       <Editor
         class="markdown-editor__content"
         :style="{ height: height }"
@@ -39,7 +82,7 @@
 </template>
 
 <script setup>
-import { ref, shallowRef, watch, onBeforeUnmount } from 'vue'
+import { ref, shallowRef, watch, onBeforeUnmount, onMounted } from 'vue'
 import { Editor, Toolbar } from '@wangeditor/editor-for-vue'
 import '@wangeditor/editor/dist/css/style.css'
 import apiService from '../api/apiService'
@@ -57,6 +100,27 @@ const props = defineProps({
   height: {
     type: String,
     default: '300px'
+  },
+  // 笔记相关属性
+  title: {
+    type: String,
+    default: ''
+  },
+  stockCode: {
+    type: String,
+    default: ''
+  },
+  stockName: {
+    type: String,
+    default: ''
+  },
+  noteType: {
+    type: String,
+    default: 'note'
+  },
+  source: {
+    type: String,
+    default: ''
   },
   // 操作按钮相关配置
   showActionButtons: {
@@ -78,6 +142,10 @@ const props = defineProps({
   saveButtonText: {
     type: String,
     default: '保存'
+  },
+  tags: {
+    type: String,
+    default: ''
   }
 })
 
@@ -89,6 +157,13 @@ const editorRef = shallowRef()
 
 // 本地内容
 const localValue = ref(props.modelValue || '')
+// 标签相关
+const editorTags = ref(props.tags || '')
+const newTag = ref('')
+// 从数据库加载的标签列表
+const defaultTags = ref(['估值分析']) // 确保包含估值分析标签
+
+
 
 // 工具栏配置
 const toolbarConfig = {
@@ -188,6 +263,28 @@ const handleCreated = (editor) => {
   editorRef.value = editor // 记录 editor 实例，重要！
 }
 
+// 加载标签列表
+const loadTags = async () => {
+  try {
+    const response = await apiService.getTags()
+    if (response.success && response.data) {
+      // 确保包含估值分析标签
+      const tagNames = response.data.map(tag => tag.name)
+      if (!tagNames.includes('估值分析')) {
+        tagNames.unshift('估值分析')
+      }
+      defaultTags.value = tagNames
+    }
+  } catch (error) {
+    console.error('加载标签失败:', error)
+  }
+}
+
+// 组件挂载时加载标签
+onMounted(() => {
+  loadTags()
+})
+
 // 组件销毁时，也及时销毁编辑器
 onBeforeUnmount(() => {
   const editor = editorRef.value
@@ -200,9 +297,68 @@ const handleCancel = () => {
   emit('cancel')
 }
 
+// 切换标签选择
+const toggleTag = (tag) => {
+  let tagsArray = editorTags.value ? editorTags.value.split(',') : []
+  const index = tagsArray.indexOf(tag)
+  
+  if (index > -1) {
+    tagsArray.splice(index, 1)
+  } else {
+    tagsArray.push(tag)
+  }
+  
+  editorTags.value = tagsArray.join(',')
+}
+
+// 添加自定义标签
+const addCustomTag = async () => {
+  if (!newTag.value.trim()) return
+  
+  let tagsArray = editorTags.value ? editorTags.value.split(',') : []
+  const tag = newTag.value.trim()
+  
+  if (!tagsArray.includes(tag)) {
+    tagsArray.push(tag)
+    editorTags.value = tagsArray.join(',')
+    
+    // 保存新标签到数据库
+    try {
+      await apiService.createTag(tag)
+      // 更新标签列表
+      await loadTags()
+    } catch (error) {
+      console.error('保存标签失败:', error)
+    }
+  }
+  
+  newTag.value = ''
+}
+
+// 移除标签
+const removeTag = (tag) => {
+  let tagsArray = editorTags.value ? editorTags.value.split(',') : []
+  const index = tagsArray.indexOf(tag)
+  
+  if (index > -1) {
+    tagsArray.splice(index, 1)
+    editorTags.value = tagsArray.join(',')
+  }
+}
+
+
+
 // 处理保存按钮点击
 const handleSave = () => {
-  emit('save', localValue.value)
+  emit('save', {
+    title: props.title,
+    content: localValue.value,
+    stockCode: props.stockCode,
+    stockName: props.stockName,
+    type: props.noteType,
+    source: props.source,
+    tags: editorTags.value
+  })
 }
 
 // 暴露方法
@@ -244,6 +400,45 @@ defineExpose({
 
 .markdown-editor__content {
   overflow-y: hidden;
+}
+
+/* 标签样式 */
+.tags-section {
+  display: flex;
+  align-items: center;
+  margin: 10px 0;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 0 10px;
+}
+
+.tag-option {
+  cursor: pointer;
+  margin-right: 5px;
+  margin-bottom: 5px;
+}
+
+.new-tag-input {
+  width: 150px;
+  margin-right: 10px;
+}
+
+.add-tag-btn {
+  white-space: nowrap;
+}
+
+.selected-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 0 10px 10px;
+}
+
+
+
+.selected-tag {
+  margin-right: 10px;
+  margin-bottom: 10px;
 }
 
 /* 操作按钮样式 */
