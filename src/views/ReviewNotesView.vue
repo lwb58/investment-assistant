@@ -306,7 +306,7 @@
           </div>
         </el-form-item>
         <el-form-item label="内容" prop="content">
-          <markdown-editor
+          <MarkdownEditor
             v-model="noteForm.content"
             height="400px"
             placeholder="请输入笔记内容，可直接粘贴图片（粘贴后图片将直接显示在文本中）"
@@ -316,7 +316,7 @@
               <el-button @click="cancelAddEdit">取消</el-button>
               <el-button type="primary" @click="saveNote">保存</el-button>
             </template>
-          </markdown-editor>
+          </MarkdownEditor>
         </el-form-item>
       </el-form>
     </el-dialog>
