@@ -525,51 +525,47 @@
         </div>
       </div>
 
-      <!-- 笔记模态框（紧凑样式） -->
-      <teleport to="body">
-        <div v-if="noteModalOpen"
-          class="modal-backdrop fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-3">
-          <div class="modal-container bg-white rounded-lg shadow-lg w-full max-w-md max-h-[85vh] flex flex-col">
-            <div class="modal-header p-2.5 border-b border-gray-200 flex justify-between items-center">
-              <h3 class="modal-title text-base font-semibold">
-                {{ noteModalType === 'create' ? '创建股票笔记' : '查看/编辑笔记' }}
-              </h3>
-              <button class="modal-close text-gray-500 hover:text-gray-700" @click="closeNoteModal">
-                ✕
-              </button>
-            </div>
-            <div class="modal-body p-2.5 flex-1 overflow-y-auto">
-              <form @submit.prevent="saveNote">
-                <div class="form-group mb-2.5">
-                  <label class="form-label block text-sm font-medium text-gray-700 mb-0.5">笔记标题</label>
-                  <input v-model="noteForm.title" type="text"
-                    class="form-input w-full px-2.5 py-1.5 border border-gray-200 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent text-sm"
-                    placeholder="输入笔记标题（关联股票：{{ stockInfo.code }} {{ stockInfo.name }}）" required>
-                </div>
-                <div class="form-group mb-2.5">
-                  <label class="form-label block text-sm font-medium text-gray-700 mb-0.5">笔记内容</label>
-                  <MarkdownEditor v-model="noteForm.content" placeholder="输入笔记内容（分析、操作计划等）" />
-                </div>
-                <div class="form-group mb-2.5">
-                  <label class="form-label block text-sm font-medium text-gray-700 mb-0.5">关联股票</label>
-                  <div
-                    class="form-control bg-gray-50 px-2.5 py-1.5 border border-gray-200 rounded-md text-gray-700 text-sm">
-                    {{ stockInfo.code }} {{ stockInfo.name }}
-                  </div>
-                </div>
-                <div class="form-actions flex justify-end gap-1.5 mt-3">
-                  <button type="button" class="btn btn-secondary btn-xs px-3 py-1.5 rounded-md" @click="closeNoteModal">
-                    取消
-                  </button>
-                  <button type="submit" class="btn primary btn-xs px-3 py-1.5 rounded-md">
-                    {{ noteModalType === 'create' ? '创建笔记' : '保存修改' }}
-                  </button>
-                </div>
-              </form>
-            </div>
+      <!-- 笔记模态框（使用Element Plus Dialog） -->
+      <el-dialog
+        v-model="noteModalOpen"
+        :title="noteModalType === 'create' ? '创建股票笔记' : '查看/编辑笔记'"
+        width="500px"
+        append-to-body
+      >
+        <form @submit.prevent="saveNote">
+          <div class="form-group mb-4">
+            <label class="form-label block text-sm font-medium text-gray-700 mb-1">笔记标题</label>
+            <el-input v-model="noteForm.title"
+              placeholder="输入笔记标题（关联股票：{{ stockInfo.code }} {{ stockInfo.name }}）"
+              required
+              class="w-full"
+            />
           </div>
-        </div>
-      </teleport>
+          <div class="form-group mb-4">
+            <label class="form-label block text-sm font-medium text-gray-700 mb-1">笔记内容</label>
+            <MarkdownEditor
+              ref="markdownEditorRef"
+              v-model="noteForm.content"
+              height="400px"
+              placeholder="输入笔记内容（支持Markdown语法，可直接粘贴图片）"
+            />
+          </div>
+          <div class="form-group mb-4">
+            <label class="form-label block text-sm font-medium text-gray-700 mb-1">关联股票</label>
+            <el-input
+              :value="`${stockInfo.code} ${stockInfo.name}`"
+              disabled
+              class="w-full bg-gray-50"
+            />
+          </div>
+        </form>
+        <template #footer>
+          <span class="dialog-footer">
+            <el-button @click="closeNoteModal">取消</el-button>
+            <el-button type="primary" @click="saveNote">{{ noteModalType === 'create' ? '创建笔记' : '保存修改' }}</el-button>
+          </span>
+        </template>
+      </el-dialog>
       
 
       
@@ -646,6 +642,7 @@ import apiService from '../api/apiService.js'
 import Chart from 'chart.js/auto'
 import ChartDataLabels from 'chartjs-plugin-datalabels'
 import MarkdownEditor from '../components/MarkdownEditor.vue'
+import { ElDialog, ElInput, ElButton } from 'element-plus'
 
 // 注册数据标签插件
 Chart.register(ChartDataLabels)
@@ -2665,9 +2662,7 @@ onUnmounted(() => {
   background-color: white;
   border-radius: 6px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  width: 100%;
-  max-width: 480px;
-  max-height: 85vh;
+  width: 85%;
   display: flex;
   flex-direction: column;
 }
