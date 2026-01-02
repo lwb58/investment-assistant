@@ -2879,8 +2879,8 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 0.75rem;
 }
-<style scoped>
-  /* 模态框样式 */
+
+/* 模态框样式 */
   .modal-backdrop {
     position: fixed;
     top: 0;
@@ -2986,10 +2986,5 @@ onUnmounted(() => {
   /* 估值逻辑编辑弹窗样式 */
   .valuation-edit-container {
     width: 100%;
-  }
-
-  .valuation-edit-container .vm-editor {
-    border-radius: var(--border-radius-small);
-    overflow: hidden;
   }
   </style>

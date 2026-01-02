@@ -306,13 +306,11 @@
           </div>
         </el-form-item>
         <el-form-item label="内容" prop="content">
-          <div class="rich-text-editor">
-            <markdown-editor
-              v-model="noteForm.content"
-              height="400px"
-              placeholder="请输入笔记内容，可直接粘贴图片（粘贴后图片将直接显示在文本中）"
-            />
-          </div>
+          <markdown-editor
+            v-model="noteForm.content"
+            height="400px"
+            placeholder="请输入笔记内容，可直接粘贴图片（粘贴后图片将直接显示在文本中）"
+          />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -1242,14 +1240,7 @@ onMounted(() => {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
 
-.rich-text-editor {
-  position: relative;
-}
-
-.el-textarea__inner:focus {
-  border-color: #409eff !important;
-  box-shadow: 0 0 0 3px rgba(64, 158, 255, 0.1) !important;
-}
+/* .rich-text-editor 样式已移至 MarkdownEditor 组件内部 */
 
 /* 按钮样式优化 */
 .el-button {

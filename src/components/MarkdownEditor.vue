@@ -1,14 +1,15 @@
 <template>
   <div class="markdown-editor">
-    <div style="border: 1px solid #ccc">
+    <div class="markdown-editor__container">
       <Toolbar
-        style="border-bottom: 1px solid #ccc"
+        class="markdown-editor__toolbar"
         :editor="editorRef"
         :defaultConfig="toolbarConfig"
         :mode="mode"
       />
       <Editor
-        style="height: 300px; overflow-y: hidden;"
+        class="markdown-editor__content"
+        :style="{ height: height }"
         v-model="localValue"
         :defaultConfig="editorConfig"
         :mode="mode"
@@ -167,8 +168,31 @@ defineExpose({
 </script>
 
 <style scoped>
+/* Markdown Editor 组件样式 */
 .markdown-editor {
   width: 100%;
   margin: 0 auto;
+  position: relative;
+}
+
+.markdown-editor__container {
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-small);
+  overflow: hidden;
+  transition: var(--transition-base);
+}
+
+.markdown-editor__container:focus-within {
+  border-color: var(--border-color-hover);
+  box-shadow: 0 0 0 3px rgba(24, 144, 255, 0.1);
+}
+
+.markdown-editor__toolbar {
+  border-bottom: 1px solid var(--border-color);
+  background-color: var(--bg-tertiary);
+}
+
+.markdown-editor__content {
+  overflow-y: hidden;
 }
 </style>
