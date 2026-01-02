@@ -1600,7 +1600,7 @@ def search_stocks(keyword: str):
                 logger.warning(f"股票数据字段不足：{item}")
                 continue
             
-            stock_name = fields[0]
+            stock_name = fields[4]
             stock_type = fields[1]
             stock_code = fields[2]
             full_code = fields[3]
