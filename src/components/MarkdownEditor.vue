@@ -16,6 +16,25 @@
         @onCreated="handleCreated"
       />
     </div>
+    <!-- 可选的操作按钮区域 -->
+    <div v-if="showActionButtons" class="markdown-editor__actions">
+      <slot name="action-buttons">
+        <button 
+          v-if="showCancelButton" 
+          class="markdown-editor__button markdown-editor__button--cancel"
+          @click="handleCancel"
+        >
+          {{ cancelButtonText }}
+        </button>
+        <button 
+          v-if="showSaveButton" 
+          class="markdown-editor__button markdown-editor__button--save"
+          @click="handleSave"
+        >
+          {{ saveButtonText }}
+        </button>
+      </slot>
+    </div>
   </div>
 </template>
 
@@ -38,11 +57,32 @@ const props = defineProps({
   height: {
     type: String,
     default: '300px'
+  },
+  // 操作按钮相关配置
+  showActionButtons: {
+    type: Boolean,
+    default: false
+  },
+  showCancelButton: {
+    type: Boolean,
+    default: true
+  },
+  showSaveButton: {
+    type: Boolean,
+    default: true
+  },
+  cancelButtonText: {
+    type: String,
+    default: '取消'
+  },
+  saveButtonText: {
+    type: String,
+    default: '保存'
   }
 })
 
 // Emits
-const emit = defineEmits(['update:modelValue'])
+const emit = defineEmits(['update:modelValue', 'cancel', 'save'])
 
 // 编辑器实例，必须用 shallowRef
 const editorRef = shallowRef()
@@ -155,6 +195,16 @@ onBeforeUnmount(() => {
   editor.destroy()
 })
 
+// 处理取消按钮点击
+const handleCancel = () => {
+  emit('cancel')
+}
+
+// 处理保存按钮点击
+const handleSave = () => {
+  emit('save', localValue.value)
+}
+
 // 暴露方法
 defineExpose({
   getEditor: () => editorRef.value,
@@ -194,5 +244,43 @@ defineExpose({
 
 .markdown-editor__content {
   overflow-y: hidden;
+}
+
+/* 操作按钮样式 */
+.markdown-editor__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.markdown-editor__button {
+  padding: 8px 16px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-small);
+  cursor: pointer;
+  font-size: 14px;
+  transition: all var(--transition-base);
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.markdown-editor__button:hover {
+  border-color: var(--border-color-hover);
+}
+
+.markdown-editor__button--cancel:hover {
+  background-color: var(--bg-secondary);
+}
+
+.markdown-editor__button--save {
+  background-color: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
+}
+
+.markdown-editor__button--save:hover {
+  background-color: var(--primary-color-hover);
+  border-color: var(--primary-color-hover);
 }
 </style>

@@ -310,15 +310,15 @@
             v-model="noteForm.content"
             height="400px"
             placeholder="请输入笔记内容，可直接粘贴图片（粘贴后图片将直接显示在文本中）"
-          />
+            :show-action-buttons="true"
+          >
+            <template #action-buttons>
+              <el-button @click="cancelAddEdit">取消</el-button>
+              <el-button type="primary" @click="saveNote">保存</el-button>
+            </template>
+          </markdown-editor>
         </el-form-item>
       </el-form>
-      <template #footer>
-        <span class="dialog-footer">
-          <el-button @click="cancelAddEdit">取消</el-button>
-          <el-button type="primary" @click="saveNote">保存</el-button>
-        </span>
-      </template>
     </el-dialog>
 
     <!-- 删除确认弹窗 -->
