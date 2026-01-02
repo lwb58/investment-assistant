@@ -546,11 +546,65 @@
           </div>
           <div class="form-group mb-4">
             <label class="form-label block text-sm font-medium text-gray-700 mb-1">关联股票</label>
-            <el-input
-              v-model="noteForm.stockCode"
-              placeholder="输入股票代码（如：600036）"
-              class="w-full"
-            />
+            <!-- 股票搜索 -->
+            <div class="relative" ref="searchContainerRef">
+              <div class="flex items-center space-x-2">
+                <div class="flex-1">
+                  <!-- 带标签的输入框 -->
+                  <div class="flex flex-wrap items-center border-[var(--border-color)] rounded-md px-3 py-2 bg-white focus-within:border-transparent" ref="searchInputContainerRef">
+                    <!-- 已选股票标签 -->
+                    <div
+                      v-for="stock in selectedStocks"
+                      :key="stock.stockCode"
+                      class="inline-flex items-center px-1.5 py-1.5 rounded-md bg-[#e6f7ff] text-[#9370db] text-sm font-medium mr-2 mb-0.5 border border-[#91d5ff]"
+                    >
+                      {{ stock.stockCode }} {{ stock.stockName }}
+                      <button
+                        @click="removeStock(stock.stockCode)"
+                        class="ml-1 text-[#7b68ee] hover:text-white focus:outline-none w-4 h-4 flex items-center justify-center text-xs rounded-full hover:bg-[#7b68ee] transition-colors duration-150"
+                      >
+                        ×
+                      </button>
+                    </div>
+                    <!-- 输入框 -->
+                    <input
+                      v-model="stockSearchKeyword"
+                      placeholder="输入股票代码或名称，点击查询按钮搜索"
+                      class="flex-1 min-w-0 outline-none text-gray-700 text-sm py-1"
+                      @focus="handleSearchFocus"
+                    />
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  class="bg-gradient-to-r from-purple-600 to-purple-700 text-white px-4 py-2 rounded-md hover:from-purple-700 hover:to-purple-800 transition-all shadow-md hover:shadow-lg whitespace-nowrap"
+                  @click="handleStockSearch"
+                  :disabled="!stockSearchKeyword.trim()"
+                >
+                  {{ searching ? '查询中...' : '查询' }}
+                </button>
+              </div>
+              <!-- 搜索结果下拉框 - 直接放在relative容器内 -->
+              <div
+                v-if="showSearchResults && stockSearchResults.length > 0"
+                class="absolute z-50 left-0 mt-1 bg-white rounded-md shadow-lg max-h-60 overflow-y-auto"
+                style="position: absolute; z-index: 2000; width: calc(100% - 120px); max-height: 200px; overflow-y: auto; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); top: 100%; background-color: white; opacity: 1; border: none;"
+                ref="searchResultsRef"
+              >
+                <div
+                  v-for="stock in stockSearchResults"
+                  :key="stock.stockCode"
+                  class="px-4 py-2 hover:bg-purple-50 cursor-pointer transition-colors"
+                  @mousedown.prevent="selectStockSearchResult(stock)"
+                >
+                  <div class="flex items-center">
+                    <span class="font-medium text-purple-700">{{ stock.stockCode }}</span>
+                    <span class="ml-2 text-gray-700">{{ stock.stockName }}</span>
+                    <span v-if="stock.industry" class="ml-2 text-xs text-gray-500">{{ stock.industry }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
           <div class="form-group mb-4">
             <label class="form-label block text-sm font-medium text-gray-700 mb-1">笔记内容</label>
@@ -1269,6 +1323,42 @@ const mllsjData = ref(null)
 
 // 笔记相关
 const stockNotes = ref([])
+// 股票搜索相关状态
+const stockSearchKeyword = ref('')
+const stockSearchResults = ref([])
+const showSearchResults = ref(false)
+const selectedStocks = ref([])
+const searching = ref(false)
+
+// 搜索相关的DOM引用
+const searchContainerRef = ref(null)
+const searchInputContainerRef = ref(null)
+const searchResultsRef = ref(null)
+
+// 点击外部区域关闭搜索结果的处理函数
+const handleClickOutside = (event) => {
+  // 检查点击是否在搜索容器、输入框容器或搜索结果内部
+  if (showSearchResults.value && 
+      searchContainerRef.value && 
+      !searchContainerRef.value.contains(event.target) &&
+      searchInputContainerRef.value &&
+      !searchInputContainerRef.value.contains(event.target) &&
+      searchResultsRef.value &&
+      !searchResultsRef.value.contains(event.target)) {
+    showSearchResults.value = false
+  }
+}
+
+// 组件挂载时添加点击事件监听器
+onMounted(() => {
+  document.addEventListener('click', handleClickOutside)
+})
+
+// 组件卸载时移除点击事件监听器
+onUnmounted(() => {
+  document.removeEventListener('click', handleClickOutside)
+})
+
 const noteModalOpen = ref(false)
 const noteModalType = ref('create')
 const noteForm = ref({
@@ -2211,6 +2301,12 @@ const addCompetitor = async () => {
 const openNoteModal = (type, note = null) => {
   noteModalType.value = type
   noteModalOpen.value = true
+  // 重置股票搜索状态
+  stockSearchKeyword.value = ''
+  stockSearchResults.value = []
+  showSearchResults.value = false
+  selectedStocks.value = []
+  
   if (type === 'create') {
     noteForm.value = {
       id: '',
@@ -2219,14 +2315,114 @@ const openNoteModal = (type, note = null) => {
       stockCode: stockInfo.value.code,
       stockName: stockInfo.value.name
     }
+    // 默认添加当前股票到已选列表
+    selectedStocks.value = [{
+      stockCode: stockInfo.value.code,
+      stockName: stockInfo.value.name
+    }]
   } else if (note) {
     noteForm.value = { ...note }
+    // 如果有股票代码，添加到已选列表
+    if (note.stockCode) {
+      selectedStocks.value = [{
+        stockCode: note.stockCode,
+        stockName: note.stockName
+      }]
+    }
+  }
+}
+
+// 处理搜索框聚焦
+const handleSearchFocus = () => {
+  if (stockSearchResults.value.length > 0) {
+    showSearchResults.value = true
+  }
+}
+
+// 股票搜索功能
+const handleStockSearch = async () => {
+  if (!stockSearchKeyword.value.trim()) {
+    stockSearchResults.value = []
+    showSearchResults.value = false
+    return
+  }
+  
+  searching.value = true
+  try {
+    // 调用接口搜索股票
+    console.log('开始搜索股票:', stockSearchKeyword.value.trim())
+    const results = await apiService.getStocks(stockSearchKeyword.value.trim())
+    console.log('API返回原始数据:', results)
+    // 处理API返回结果，兼容不同的数据结构
+    let searchResults = []
+    if (Array.isArray(results)) {
+      searchResults = results
+    } else if (results && results.stocks && Array.isArray(results.stocks)) {
+      searchResults = results.stocks
+    } else if (results && results.data && Array.isArray(results.data)) {
+      searchResults = results.data
+    }
+    console.log('提取的搜索结果:', searchResults)
+    stockSearchResults.value = searchResults
+    console.log('搜索结果数量:', stockSearchResults.value.length)
+    // 强制显示搜索结果
+    showSearchResults.value = true
+    console.log('showSearchResults设置为:', showSearchResults.value)
+    console.log('下拉框显示条件:', showSearchResults.value && stockSearchResults.value.length > 0)
+  } catch (error) {
+    console.error('股票搜索失败:', error)
+    stockSearchResults.value = []
+    showSearchResults.value = false
+  } finally {
+    searching.value = false
+    console.log('搜索完成，searching设置为:', searching.value)
+  }
+}
+
+// 选择股票搜索结果
+const selectStockSearchResult = (stock) => {
+  // 检查是否已选择该股票
+  const existingIndex = selectedStocks.value.findIndex(item => item.stockCode === stock.stockCode)
+  if (existingIndex === -1) {
+    // 添加到已选列表
+    selectedStocks.value.push(stock)
+    // 更新笔记表单的股票信息
+    // 如果是第一个选择的股票，更新主股票信息
+    if (selectedStocks.value.length === 1) {
+      noteForm.value.stockCode = stock.stockCode
+      noteForm.value.stockName = stock.stockName
+    }
+    // 清空搜索输入，准备输入下一个
+    stockSearchKeyword.value = ''
+    // 选择股票后关闭搜索结果
+    showSearchResults.value = false
+  }
+}
+
+// 移除已选股票
+const removeStock = (stockCode) => {
+  const index = selectedStocks.value.findIndex(item => item.stockCode === stockCode)
+  if (index > -1) {
+    selectedStocks.value.splice(index, 1)
+    // 如果移除的是当前主股票，更新主股票信息
+    if (noteForm.value.stockCode === stockCode && selectedStocks.value.length > 0) {
+      noteForm.value.stockCode = selectedStocks.value[0].stockCode
+      noteForm.value.stockName = selectedStocks.value[0].stockName
+    } else if (selectedStocks.value.length === 0) {
+      noteForm.value.stockCode = ''
+      noteForm.value.stockName = ''
+    }
   }
 }
 
 const closeNoteModal = () => {
   noteModalOpen.value = false
   noteForm.value = { id: '', title: '', content: '', stockCode: '', stockName: '' }
+  // 重置股票搜索状态
+  stockSearchKeyword.value = ''
+  stockSearchResults.value = []
+  showSearchResults.value = false
+  selectedStocks.value = []
 }
 
 const saveNote = async () => {
