@@ -529,7 +529,7 @@ function handleSearchFocus() {
 }
 
 // 股票搜索方法
-  async function handleStockSearch() {
+async function handleStockSearch() {
   try {
     if (!searchKeyword.value.trim()) {
       searchResults.value = [];
@@ -538,8 +538,24 @@ function handleSearchFocus() {
     }
     
     const results = await apiService.getStocks(searchKeyword.value.trim());
-    searchResults.value = results;
+    console.log('API返回的搜索结果:', results);
+    
+    // 处理API返回结果，兼容不同的数据结构
+    let searchResultsData = [];
+    if (Array.isArray(results)) {
+      searchResultsData = results;
+    } else if (results && results.stocks && Array.isArray(results.stocks)) {
+      searchResultsData = results.stocks;
+    } else if (results && results.data && Array.isArray(results.data)) {
+      searchResultsData = results.data;
+    }
+    
+    searchResults.value = searchResultsData;
+    console.log('处理后的搜索结果:', searchResults.value);
+    console.log('searchResults.length:', searchResults.value.length);
     showSearchResults.value = true;
+    console.log('showSearchResults设置为:', showSearchResults.value);
+    console.log('下拉框显示条件:', showSearchResults.value && searchResults.value.length > 0);
   } catch (error) {
     console.error('股票搜索失败:', error);
     ElMessage.error('股票搜索失败');
@@ -627,7 +643,7 @@ async function saveNote() {
     cancelAddEdit();
     
     // 应用当前的筛选条件
-    applyFilters();
+    handleSearch();
     
   } catch (error) {
     console.error('保存笔记失败:', error);
