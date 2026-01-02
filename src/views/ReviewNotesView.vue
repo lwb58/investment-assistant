@@ -615,12 +615,16 @@ async function saveNote() {
     const editorContent = editorInstance ? editorInstance.getContent() : noteForm.content;
     const editorTags = editorInstance ? editorInstance.getTags() : noteForm.tags;
     
+    // 收集所有已选择股票的代码和名称
+    const stockCodes = selectedStocks.value.map(stock => stock.stockCode).join(',');
+    const stockNames = selectedStocks.value.map(stock => stock.stockName).join(',');
+    
     const noteData = {
       ...noteForm,
       content: editorContent,
       tags: editorTags,
-      stockCode: noteForm.stockCode || '',
-      stockName: noteForm.stockName || '',
+      stockCode: stockCodes || '',
+      stockName: stockNames || '',
       source: '复盘笔记'  // 添加来源字段，标识该笔记来自复盘笔记页
     };
     
