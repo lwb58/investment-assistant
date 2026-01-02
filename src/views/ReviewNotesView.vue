@@ -273,42 +273,61 @@
         </el-form-item>
         <el-form-item label="关联股票" prop="relatedStock">
           <div class="stock-search-container">
-            <!-- 已选择的股票标签 -->
-            <div class="selected-stocks">
-              <el-tag
-                v-for="code in noteForm.relatedStock"
-                :key="code"
-                closable
-                @close="removeStock(code)"
-                class="stock-tag"
-              >
-                {{ getStockLabel(code) }}
-              </el-tag>
-            </div>
-            
-            <!-- 搜索输入框 -->
-            <div class="search-input-wrapper" ref="searchInputWrapper">
-              <el-input
+            <!-- 股票搜索 -->
+            <div class="relative">
+              <div class="flex items-center space-x-2">
+                <div class="flex-1">
+                  <!-- 带标签的输入框 -->
+                  <div class="flex flex-wrap items-center border border-gray-300 rounded-md px-3 py-2 bg-white focus-within:border-transparent">
+                    <!-- 已选股票标签 -->
+                    <div
+                      v-for="stock in selectedStocks"
+                      :key="stock.stockCode"
+                      class="inline-flex items-center px-1.5 py-1.5 rounded-md bg-[#e6f7ff] text-[#9370db] text-sm font-medium mr-2 mb-0.5 border border-[#91d5ff]"
+                    >
+                      {{ stock.stockCode }} {{ stock.stockName }}
+                      <button
+                        @click="removeStock(stock.stockCode)"
+                        class="ml-1 text-[#7b68ee] hover:text-white focus:outline-none w-4 h-4 flex items-center justify-center text-xs rounded-full hover:bg-[#7b68ee] transition-colors duration-150"
+                      >
+                        ×
+                      </button>
+                    </div>
+                    <!-- 输入框 -->
+                    <input
                 v-model="searchKeyword"
-                placeholder="输入股票代码或名称搜索"
-                @input="handleStockSearch"
-                @focus="handleStockSearch"
-                @blur="closeSearchResults"
-                clearable
-                style="width: 100%"
+                placeholder="输入股票代码或名称，点击查询按钮搜索"
+                class="flex-1 min-w-0 outline-none text-gray-700 text-sm py-1"
+                @focus="handleSearchFocus"
               />
-              
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  class="bg-gradient-to-r from-purple-600 to-purple-700 text-white px-4 py-2 rounded-md hover:from-purple-700 hover:to-purple-800 transition-all shadow-md hover:shadow-lg whitespace-nowrap"
+                  @click="handleStockSearch"
+                  :disabled="!searchKeyword.trim()"
+                >
+                  查询
+                </button>
+              </div>
               <!-- 搜索结果下拉框 -->
-              <div v-if="showSearchResults && searchResults.length > 0" class="search-results">
+              <div
+                v-if="showSearchResults && searchResults.length > 0"
+                class="absolute z-50 left-0 mt-1 bg-white rounded-md shadow-lg max-h-60 overflow-y-auto"
+                style="width: calc(100% - 120px); max-height: 200px; overflow-y: auto; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); top: 100%; background-color: white; opacity: 1; border: none;"
+              >
                 <div
                   v-for="stock in searchResults"
                   :key="stock.stockCode"
-                  class="search-result-item"
+                  class="px-4 py-2 hover:bg-purple-50 cursor-pointer transition-colors"
                   @mousedown.prevent="selectSearchResult(stock)"
                 >
-                  <span class="stock-code">{{ stock.stockCode }}</span>
-                  <span class="stock-name">{{ stock.stockName }}</span>
-                  <span v-if="stock.industry" class="stock-industry">{{ stock.industry }}</span>
+                  <div class="flex items-center">
+                    <span class="font-medium text-purple-700">{{ stock.stockCode }}</span>
+                    <span class="ml-2 text-gray-700">{{ stock.stockName }}</span>
+                    <span v-if="stock.industry" class="ml-2 text-xs text-gray-500">{{ stock.industry }}</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -316,11 +335,11 @@
         </el-form-item>
         <el-form-item label="内容" prop="content">
           <MarkdownEditor
+            ref="markdownEditorRef"
             v-model="noteForm.content"
             height="400px"
             placeholder="请输入笔记内容，可直接粘贴图片（粘贴后图片将直接显示在文本中）"
             :show-action-buttons="true"
-            :tags="noteForm.tags"
           >
             <template v-slot:action-buttons>
               <el-button @click="cancelAddEdit">取消</el-button>
@@ -380,10 +399,13 @@ const selectedNoteForDelete = ref(null);
 const noteForm = reactive({
   title: '',
   content: '',
-  relatedStock: [],
+  stockCode: '',
+  stockName: '',
   tags: '复盘笔记'
 });
 const noteFormRef = ref(null);
+// 编辑器组件引用
+const markdownEditorRef = ref(null);
 const noteFormRules = {
   title: [
     { required: true, message: '请输入笔记标题', trigger: 'blur' },
@@ -395,10 +417,12 @@ const noteFormRules = {
   ]
 };
 // 已选择股票的完整信息
-const selectedStocksInfo = ref([]);
+const selectedStocks = ref([]);
 // 搜索结果相关
 const showSearchResults = ref(false);
 const searchResults = ref([]);
+const searchContainerRef = ref(null);
+const searchInputContainerRef = ref(null);
 
 // 获取笔记列表
 async function fetchNotes() {
@@ -470,12 +494,42 @@ function closeNoteDetail() {
 // 编辑当前笔记
 function editCurrentNote() {
   if (selectedNote.value) {
-    editNote(selectedNote.value);
+    editingNote.value = selectedNote.value;
+    noteForm.title = selectedNote.value.title;
+    noteForm.content = selectedNote.value.content;
+    noteForm.stockCode = selectedNote.value.stockCode || '';
+    noteForm.stockName = selectedNote.value.stockName || '';
+    noteForm.tags = selectedNote.value.tags || '复盘笔记';
+    
+    // 重新加载股票的完整信息
+    selectedStocks.value = [];
+    if (noteForm.stockCode) {
+      // 尝试从API获取股票完整信息
+      apiService.getStocks(noteForm.stockCode).then(results => {
+        if (results.length > 0) {
+          selectedStocks.value.push(results[0]);
+        }
+      }).catch(error => {
+        console.error('获取股票信息失败:', error);
+      });
+    }
+    
+    showNoteModal.value = true;
+    showNoteDetail.value = false;
+  }
+}
+
+
+
+// 处理搜索框获取焦点
+function handleSearchFocus() {
+  if (searchKeyword.value.trim()) {
+    handleStockSearch();
   }
 }
 
 // 股票搜索方法
-async function handleStockSearch() {
+  async function handleStockSearch() {
   try {
     if (!searchKeyword.value.trim()) {
       searchResults.value = [];
@@ -495,10 +549,13 @@ async function handleStockSearch() {
 // 选择搜索结果
 function selectSearchResult(stock) {
   // 检查是否已选择该股票
-  if (!noteForm.relatedStock.includes(stock.stockCode)) {
-    noteForm.relatedStock.push(stock.stockCode);
-    // 存储股票的完整信息
-    selectedStocksInfo.value.push(stock);
+  if (!selectedStocks.value.some(item => item.stockCode === stock.stockCode)) {
+    selectedStocks.value.push(stock);
+    // 如果是第一个选择的股票，设置为主关联股票
+    if (selectedStocks.value.length === 1) {
+      noteForm.stockCode = stock.stockCode;
+      noteForm.stockName = stock.stockName;
+    }
   }
   searchKeyword.value = '';
   searchResults.value = [];
@@ -507,20 +564,21 @@ function selectSearchResult(stock) {
 
 // 移除选中的股票
 function removeStock(stockCode) {
-  const index = noteForm.relatedStock.indexOf(stockCode);
+  const index = selectedStocks.value.findIndex(item => item.stockCode === stockCode);
   if (index > -1) {
-    noteForm.relatedStock.splice(index, 1);
-    // 同时移除股票的完整信息
-    selectedStocksInfo.value = selectedStocksInfo.value.filter(stock => stock.stockCode !== stockCode);
+    selectedStocks.value.splice(index, 1);
+    // 如果移除的是当前主股票，更新主股票信息
+    if (noteForm.stockCode === stockCode && selectedStocks.value.length > 0) {
+      noteForm.stockCode = selectedStocks.value[0].stockCode;
+      noteForm.stockName = selectedStocks.value[0].stockName;
+    } else if (selectedStocks.value.length === 0) {
+      noteForm.stockCode = '';
+      noteForm.stockName = '';
+    }
   }
 }
 
-// 关闭搜索结果
-function closeSearchResults() {
-  setTimeout(() => {
-    showSearchResults.value = false;
-  }, 200);
-}
+
 
 // 取消添加/编辑
 function cancelAddEdit() {
@@ -536,39 +594,44 @@ async function saveNote() {
       await noteFormRef.value.validate();
     }
     
-    // 构建股票名称字符串，与股票代码顺序对应
-    const stockNames = noteForm.relatedStock.map(code => {
-      // 优先从selectedStocksInfo中获取完整的股票名称
-      const stockInfo = selectedStocksInfo.value.find(stock => stock.stockCode === code);
-      return stockInfo ? stockInfo.stockName : '';
-    }).join(',');
+    // 从MarkdownEditor组件获取最新的内容和标签数据
+    const editorInstance = markdownEditorRef.value;
+    const editorContent = editorInstance ? editorInstance.getContent() : noteForm.content;
+    const editorTags = editorInstance ? editorInstance.getTags() : noteForm.tags;
     
     const noteData = {
       ...noteForm,
-      stockCode: noteForm.relatedStock.join(',') || '',
-      stockName: stockNames || '',
+      content: editorContent,
+      tags: editorTags,
+      stockCode: noteForm.stockCode || '',
+      stockName: noteForm.stockName || '',
       source: '复盘笔记'  // 添加来源字段，标识该笔记来自复盘笔记页
     };
     
+    let response;
     if (editingNote.value) {
       // 更新笔记
-      await apiService.updateReviewNote(editingNote.value.id, noteData);
+      response = await apiService.updateReviewNote(editingNote.value.id, noteData);
+      notes.value = notes.value.map(note => 
+        note.id === editingNote.value.id ? { ...note, ...response } : note
+      );
       ElMessage.success('更新成功');
     } else {
-      // 添加新笔记
-      await apiService.createReviewNote(noteData);
+      // 创建新笔记
+      response = await apiService.createReviewNote(noteData);
+      notes.value.unshift(response);
       ElMessage.success('创建成功');
     }
     
-    showNoteModal.value = false;
-    editingNote.value = null;
-    resetForm();
+    // 关闭弹窗并重置表单
+    cancelAddEdit();
     
-    // 重新获取笔记列表
-    fetchNotes();
+    // 应用当前的筛选条件
+    applyFilters();
+    
   } catch (error) {
-    console.error('保存失败:', error);
-    if (error.response && error.response.status === 400) {
+    console.error('保存笔记失败:', error);
+    if (error.response && error.response.data && error.response.data.detail) {
       ElMessage.error(error.response.data.detail || '保存失败');
     } else {
       ElMessage.error('保存失败，请重试');
@@ -604,6 +667,8 @@ function handleTableRowClick(row) {
   viewNote(row);
 }
 
+
+
 // 获取股票名称
 function getStockLabel(stockCode) {
   // 首先处理多个股票代码的情况
@@ -634,7 +699,7 @@ function getStockLabel(stockCode) {
   }
   
   // 再从已选择的股票信息中查找
-  const selectedStock = selectedStocksInfo.value.find(s => s.stockCode === stockCode);
+  const selectedStock = selectedStocks.value.find(s => s.stockCode === stockCode);
   if (selectedStock) {
     return selectedStock.stockName;
   }
@@ -644,7 +709,7 @@ function getStockLabel(stockCode) {
 }
 
 // 渲染笔记内容
-function renderNoteContent(content) {
+  function renderNoteContent(content) {
   if (!content) return '';
   
   // 简单替换换行和加粗
@@ -693,11 +758,12 @@ function editNote(note) {
   editingNote.value = note;
   noteForm.title = note.title;
   noteForm.content = note.content;
-  noteForm.relatedStock = note.stockCode ? note.stockCode.split(',') : [];
+  noteForm.stockCode = note.stockCode || '';
+  noteForm.stockName = note.stockName || '';
   noteForm.tags = note.tags || '复盘笔记';
   
   // 初始化已选择股票的完整信息
-  selectedStocksInfo.value = [];
+  selectedStocks.value = [];
   if (note.stockCode) {
     const stockCodes = note.stockCode.split(',');
     // 填充关联股票信息，优先使用本地数据和note中的stockName
@@ -705,7 +771,7 @@ function editNote(note) {
        // 先从本地availableStocks查找
        const localStock = availableStocks.find(s => s.value === code);
        if (localStock) {
-        selectedStocksInfo.value.push({
+        selectedStocks.value.push({
           stockCode: code,
           stockName: localStock.label
         });
@@ -720,7 +786,7 @@ function editNote(note) {
           }
         }
         // 直接使用本地信息或从note中获取的信息，避免调用API
-        selectedStocksInfo.value.push({
+        selectedStocks.value.push({
           stockCode: code,
           stockName: stockName
         });
@@ -734,22 +800,29 @@ function editNote(note) {
   showNoteModal.value = true;
   // 如果打开了详情弹窗，先关闭
   closeNoteDetail();
+  
+  // 给编辑器设置标签
+  setTimeout(() => {
+    if (markdownEditorRef.value) {
+      markdownEditorRef.value.setTags(note.tags || '复盘笔记');
+    }
+  }, 0);
 }
 
 // 重置表单
 function resetForm() {
   noteForm.title = '';
   noteForm.content = '';
-  noteForm.relatedStock = [];
-  // 重置已选择股票的完整信息
-  selectedStocksInfo.value = [];
+  noteForm.stockCode = '';
+  noteForm.stockName = '';
+  noteForm.tags = '复盘笔记';
+  selectedStocks.value = [];
   searchKeyword.value = '';
   searchResults.value = [];
   showSearchResults.value = false;
   if (noteFormRef.value) {
     noteFormRef.value.resetFields();
   }
-  // 不再需要维护单独的图片列表
 }
 
 // 组件挂载时获取笔记列表
@@ -1367,10 +1440,6 @@ onMounted(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-}
-
-.stock-tag {
-  margin-right: 8px;
 }
 
 .search-input-wrapper {

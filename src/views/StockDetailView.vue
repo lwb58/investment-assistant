@@ -326,15 +326,33 @@
                   <!-- 笔记列表（紧凑间距） -->
                   <div v-if="stockNotes.length > 0" class="notes-list space-y-2 max-h-48 overflow-y-auto pr-1">
                     <div
-                      class="note-item p-2 bg-gray-50 rounded-lg border border-gray-100 cursor-pointer hover:bg-gray-100 transition-colors"
-                      v-for="(note, index) in stockNotes" :key="note.id" @click="openNoteModal('view', note)">
-                      <div class="note-title font-medium text-sm truncate">{{ note.title }}</div>
-                      <div class="note-meta text-xs text-gray-500 mt-0.5 flex justify-between">
-                        <span>{{ formatDate(note.createTime) }}</span>
-                        <span>{{ formatDate(note.updateTime) }}</span>
-                      </div>
-                      <div class="note-content text-xs text-gray-600 mt-1 line-clamp-2">
-                        {{ note.content }}
+                      class="note-item p-3 bg-gray-50 rounded-lg border border-gray-100 cursor-pointer hover:bg-gray-100 transition-colors"
+                      v-for="(note, index) in stockNotes" :key="note.id">
+                      <div class="flex justify-between items-start">
+                        <div class="flex-1" @click="openNoteModal('view', note)">
+                          <div class="note-title font-medium text-sm truncate">{{ note.title }}</div>
+                          <div class="note-meta text-xs text-gray-500 mt-0.5 flex justify-between">
+                            <span>{{ formatDate(note.createTime) }}</span>
+                            <span>{{ formatDate(note.updateTime) }}</span>
+                          </div>
+                          <div class="note-content text-xs text-gray-600 mt-1 line-clamp-2">
+                            {{ note.content }}
+                          </div>
+                        </div>
+                        <div class="flex space-x-1 ml-2">
+                          <button 
+                            @click.stop="openNoteModal('edit', note)" 
+                            class="text-blue-500 hover:text-blue-700 p-1 rounded hover:bg-blue-50"
+                            title="编辑">
+                            <i class="icon">✏️</i>
+                          </button>
+                          <button 
+                            @click.stop="confirmDeleteNote(note.id)" 
+                            class="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50"
+                            title="删除">
+                            <i class="icon">🗑️</i>
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -459,7 +477,6 @@
                         height="400px"
                         placeholder="记录估值逻辑（支持Markdown语法，可直接粘贴图片）"
                         :show-action-buttons="true"
-                        :tags="'估值逻辑'"
                       >
                         <template v-slot:action-buttons>
                            <el-button @click="isEditingValuation = false">取消</el-button> 
@@ -614,7 +631,6 @@
               height="400px"
               placeholder="输入笔记内容（支持Markdown语法，可直接粘贴图片）"
               :show-action-buttons="true"
-              :tags="'股票笔记'"
               :stockCode="noteForm.stockCode"
               :stockName="noteForm.stockName"
             >
@@ -702,7 +718,7 @@ import apiService from '../api/apiService.js'
 import Chart from 'chart.js/auto'
 import ChartDataLabels from 'chartjs-plugin-datalabels'
 import MarkdownEditor from '../components/MarkdownEditor.vue'
-import { ElDialog, ElInput, ElButton } from 'element-plus'
+import { ElDialog, ElInput, ElButton, ElMessageBox, ElMessage } from 'element-plus'
 
 // 注册数据标签插件
 Chart.register(ChartDataLabels)
@@ -2428,6 +2444,26 @@ const removeStock = (stockCode) => {
   }
 }
 
+// 确认删除笔记
+const confirmDeleteNote = (noteId) => {
+  ElMessageBox.confirm('确定要删除这条笔记吗？此操作不可恢复。', '删除确认', {
+    confirmButtonText: '删除',
+    cancelButtonText: '取消',
+    type: 'warning'
+  }).then(async () => {
+    try {
+      await apiService.deleteNote(noteId)
+      ElMessage.success('笔记删除成功')
+      await fetchStockNotes() // 刷新笔记列表
+    } catch (err) {
+      console.error('删除笔记失败:', err)
+      ElMessage.error('删除失败，请稍后重试')
+    }
+  }).catch(() => {
+    // 用户取消删除
+  })
+}
+
 const closeNoteModal = () => {
   noteModalOpen.value = false
   noteForm.value = { id: '', title: '', content: '', stockCode: '', stockName: '' }
@@ -2458,10 +2494,10 @@ const saveNote = async () => {
       : await apiService.updateNote(noteForm.value.id, noteData)
     await fetchStockNotes()
     closeNoteModal()
-    alert('笔记保存成功！')
+    ElMessage.success('笔记保存成功！')
   } catch (err) {
     console.error('保存笔记失败:', err)
-    alert('保存失败，请稍后重试')
+    ElMessage.error('保存失败，请稍后重试')
   }
 }
 
