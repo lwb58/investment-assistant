@@ -66,6 +66,7 @@ def init_database(notes_storage: List[Dict[str, Any]] = None, stock_storage: Lis
                     stock_code TEXT DEFAULT '',
                     stock_name TEXT DEFAULT '',
                     type TEXT DEFAULT 'note',  -- note: 普通笔记, pros_cons: 利好利空分析, valuation: 估值逻辑
+                    source TEXT DEFAULT '',  -- 来源字段
                     tags TEXT DEFAULT '',  -- 标签，使用逗号分隔
                     create_time TEXT NOT NULL,
                     update_time TEXT NOT NULL
@@ -88,6 +89,9 @@ def init_database(notes_storage: List[Dict[str, Any]] = None, stock_storage: Lis
             if 'type' not in columns:
                 logger.info("添加type字段到notes表")
                 cursor.execute("ALTER TABLE notes ADD COLUMN type TEXT DEFAULT 'note'")
+            if 'source' not in columns:
+                logger.info("添加source字段到notes表")
+                cursor.execute("ALTER TABLE notes ADD COLUMN source TEXT DEFAULT ''")
         
         conn.commit()
         logger.info("notes表结构初始化成功")
