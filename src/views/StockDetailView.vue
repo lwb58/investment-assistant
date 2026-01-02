@@ -2313,13 +2313,20 @@ const openNoteModal = (type, note = null) => {
       title: `【${stockInfo.value.code} ${stockInfo.value.name}】${new Date().toLocaleDateString()} 笔记`,
       content: '',
       stockCode: stockInfo.value.code,
-      stockName: stockInfo.value.name
+      stockName: stockInfo.value.name,
+      tags: '' // 初始化空标签
     }
     // 默认添加当前股票到已选列表
     selectedStocks.value = [{
       stockCode: stockInfo.value.code,
       stockName: stockInfo.value.name
     }]
+    // 给编辑器设置默认标签
+    setTimeout(() => {
+      if (markdownEditorRef.value) {
+        markdownEditorRef.value.setTags('')
+      }
+    }, 0)
   } else if (note) {
     noteForm.value = { ...note }
     // 如果有股票代码，添加到已选列表
@@ -2329,6 +2336,12 @@ const openNoteModal = (type, note = null) => {
         stockName: note.stockName
       }]
     }
+    // 给编辑器设置现有标签
+    setTimeout(() => {
+      if (markdownEditorRef.value) {
+        markdownEditorRef.value.setTags(note.tags || '')
+      }
+    }, 0)
   }
 }
 
@@ -2427,11 +2440,18 @@ const closeNoteModal = () => {
 
 const saveNote = async () => {
   try {
+    // 从MarkdownEditor组件获取最新的内容和标签数据
+    const editorInstance = markdownEditorRef.value;
+    const editorContent = editorInstance ? editorInstance.getContent() : noteForm.value.content;
+    const editorTags = editorInstance ? editorInstance.getTags() : noteForm.value.tags;
+    
     const noteData = {
       ...noteForm.value,
+      content: editorContent,
       stockCode: noteForm.value.stockCode || stockInfo.value.code,
       stockName: noteForm.value.stockName || stockInfo.value.name,
-      source: '股票详情'  // 添加来源字段，标识该笔记来自股票详情页
+      source: '股票详情',  // 添加来源字段，标识该笔记来自股票详情页
+      tags: editorTags  // 使用从编辑器获取的最新标签
     }
     noteModalType.value === 'create'
       ? await apiService.addNote(noteData)

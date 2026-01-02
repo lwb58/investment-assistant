@@ -374,6 +374,12 @@ defineExpose({
   },
   getContent: () => {
     return localValue.value
+  },
+  getTags: () => {
+    return editorTags.value
+  },
+  setTags: (tags) => {
+    editorTags.value = tags
   }
 })
 </script>
