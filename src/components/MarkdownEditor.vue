@@ -163,6 +163,11 @@ const newTag = ref('')
 // 从数据库加载的标签列表
 const defaultTags = ref(['估值分析']) // 确保包含估值分析标签
 
+// 监听tags属性变化
+watch(() => props.tags, (newTags) => {
+  editorTags.value = newTags || ''
+}, { immediate: true })
+
 
 
 // 工具栏配置
@@ -266,10 +271,10 @@ const handleCreated = (editor) => {
 // 加载标签列表
 const loadTags = async () => {
   try {
-    const response = await apiService.getTags()
-    if (response.success && response.data) {
+    const tags = await apiService.getTags()
+    if (tags && Array.isArray(tags)) {
       // 确保包含估值分析标签
-      const tagNames = response.data.map(tag => tag.name)
+      const tagNames = tags.map(tag => tag.name)
       if (!tagNames.includes('估值分析')) {
         tagNames.unshift('估值分析')
       }

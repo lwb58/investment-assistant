@@ -320,7 +320,7 @@
             height="400px"
             placeholder="请输入笔记内容，可直接粘贴图片（粘贴后图片将直接显示在文本中）"
             :show-action-buttons="true"
-            :tags="'复盘笔记'"
+            :tags="noteForm.tags"
           >
             <template v-slot:action-buttons>
               <el-button @click="cancelAddEdit">取消</el-button>
@@ -380,7 +380,8 @@ const selectedNoteForDelete = ref(null);
 const noteForm = reactive({
   title: '',
   content: '',
-  relatedStock: []
+  relatedStock: [],
+  tags: '复盘笔记'
 });
 const noteFormRef = ref(null);
 const noteFormRules = {
@@ -693,6 +694,7 @@ function editNote(note) {
   noteForm.title = note.title;
   noteForm.content = note.content;
   noteForm.relatedStock = note.stockCode ? note.stockCode.split(',') : [];
+  noteForm.tags = note.tags || '复盘笔记';
   
   // 初始化已选择股票的完整信息
   selectedStocksInfo.value = [];

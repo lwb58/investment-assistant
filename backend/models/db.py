@@ -49,6 +49,7 @@ def init_database(notes_storage: List[Dict[str, Any]] = None, stock_storage: Lis
             CREATE TABLE IF NOT EXISTS tags (
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL UNIQUE,
+                user_id TEXT DEFAULT NULL,
                 create_time TEXT NOT NULL,
                 update_time TEXT NOT NULL
             )
