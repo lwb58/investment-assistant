@@ -221,10 +221,22 @@
     <!-- 笔记详情弹窗 -->
     <el-dialog
       v-model="showNoteDetail"
-      :title="selectedNote?.title || '笔记详情'"
       width="700px"
       :before-close="closeNoteDetail"
+      :fullscreen="noteDetailFullscreen"
     >
+      <template #title>
+        <div class="flex justify-between items-center w-full">
+          <span>{{ selectedNote?.title || '笔记详情' }}</span>
+          <el-button
+            type="text"
+            @click="toggleNoteDetailFullscreen"
+            class="note-detail-fullscreen-btn"
+          >
+            {{ noteDetailFullscreen ? '退出全屏' : '全屏查看' }}
+          </el-button>
+        </div>
+      </template>
       <div class="note-detail">
         <div class="note-meta">
           <span>创建时间: {{ formatDate(selectedNote?.createTime) }}</span>
@@ -395,7 +407,13 @@ const showNoteModal = ref(false);
 const showDeleteConfirm = ref(false);
 const editingNote = ref(null);
 const selectedNote = ref(null);
+const noteDetailFullscreen = ref(false);
 const selectedNoteForDelete = ref(null);
+
+// 切换笔记详情全屏模式
+const toggleNoteDetailFullscreen = () => {
+  noteDetailFullscreen.value = !noteDetailFullscreen.value;
+};
 const noteForm = reactive({
   title: '',
   content: '',
@@ -748,11 +766,50 @@ function getStockLabel(stockCode) {
   html = html.replace(/^- (.*$)/gm, '<li>$1</li>');
   // 替换图片标记为图片标签 - 现在直接使用Base64数据
   html = html.replace(/\[图片:([^\]]+)\]/g, (match, imgData) => {
-    // 直接使用Base64数据作为图片源
-    return `<img src="${imgData}" class="content-image" alt="笔记图片" />`;
+    // 直接使用Base64数据作为图片源，并添加样式和点击事件
+    return `<img src="${imgData}" class="content-image" alt="笔记图片" onclick="handleImageClick(this)" style="cursor: pointer; max-width: 100%; height: auto;" />`;
   });
   
   return html;
+}
+
+// 图片点击处理函数，用于全屏查看
+function handleImageClick(imgElement) {
+  const imgSrc = imgElement.src;
+  // 创建全屏查看容器
+  const fullscreenContainer = document.createElement('div');
+  fullscreenContainer.className = 'image-fullscreen-container';
+  fullscreenContainer.innerHTML = `
+    <div class="image-fullscreen-overlay" onclick="closeImageFullscreen()"></div>
+    <div class="image-fullscreen-content">
+      <img src="${imgSrc}" class="fullscreen-image" alt="全屏查看" />
+    </div>
+    <button class="image-fullscreen-close" onclick="closeImageFullscreen()">×</button>
+  `;
+  document.body.appendChild(fullscreenContainer);
+  // 添加active类以触发过渡动画
+  setTimeout(() => {
+    fullscreenContainer.classList.add('active');
+  }, 10);
+  // 添加键盘事件监听
+  document.addEventListener('keydown', handleKeyDown);
+}
+
+// 关闭全屏查看
+function closeImageFullscreen() {
+  const fullscreenContainer = document.querySelector('.image-fullscreen-container');
+  if (fullscreenContainer) {
+    document.body.removeChild(fullscreenContainer);
+    // 移除键盘事件监听
+    document.removeEventListener('keydown', handleKeyDown);
+  }
+}
+
+// 键盘事件处理
+function handleKeyDown(e) {
+  if (e.key === 'Escape') {
+    closeImageFullscreen();
+  }
 }
 
 // 处理搜索
@@ -846,12 +903,108 @@ function resetForm() {
 }
 
 // 组件挂载时获取笔记列表
-onMounted(() => {
-  fetchNotes();
+onMounted(async () => {
+  await fetchNotes();
+  
+  // 将图片处理函数暴露到全局
+  window.handleImageClick = handleImageClick;
+  window.closeImageFullscreen = closeImageFullscreen;
+  window.handleKeyDown = handleKeyDown;
 });
 </script>
 
 <style scoped>
+/* 图片全屏查看样式优化 */
+.image-fullscreen-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 9999;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.3s ease;
+}
+
+.image-fullscreen-container.active {
+  opacity: 1;
+  visibility: visible;
+}
+
+.image-fullscreen-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(15, 23, 42, 0.95); /* 更深更现代的黑色背景 */
+  backdrop-filter: blur(5px); /* 添加背景模糊效果 */
+  transition: all 0.3s ease;
+}
+
+.image-fullscreen-content {
+  position: relative;
+  z-index: 10000;
+  max-width: 95%;
+  max-height: 95%;
+  transform: scale(0.9);
+  transition: all 0.3s ease;
+}
+
+.image-fullscreen-container.active .image-fullscreen-content {
+  transform: scale(1);
+}
+
+.fullscreen-image {
+  max-width: 100%;
+  max-height: 90vh;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5); /* 增强阴影效果 */
+  transition: all 0.3s ease;
+}
+
+/* 关闭按钮优化 */
+.image-fullscreen-close {
+  position: fixed;
+  top: 40px;
+  right: 40px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  color: white;
+  font-size: 32px;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(10px);
+}
+
+.image-fullscreen-close:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.5);
+  transform: scale(1.1);
+  box-shadow: 0 4px 16px rgba(255, 255, 255, 0.3);
+}
+
+/* 笔记内容中的图片样式 */
+.content-image {
+  border-radius: 4px;
+  margin: 10px 0;
+  transition: transform 0.3s ease;
+}
+
+.content-image:hover {
+  transform: scale(1.02);
+}
 .notes-container {
   padding: 24px;
   background-color: #f8f9fa;
@@ -1310,6 +1463,28 @@ onMounted(() => {
   background-clip: text;
 }
 
+/* 笔记详情全屏按钮样式 */
+.note-detail-fullscreen-btn {
+  padding: 8px 16px !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  color: #409eff !important;
+  border-radius: 6px !important;
+  transition: all 0.3s ease;
+}
+
+.note-detail-fullscreen-btn:hover {
+  background-color: rgba(64, 158, 255, 0.1) !important;
+  color: #66b1ff !important;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(64, 158, 255, 0.2);
+}
+
+.note-detail-fullscreen-btn:focus {
+  background-color: rgba(64, 158, 255, 0.15) !important;
+  box-shadow: 0 2px 12px rgba(64, 158, 255, 0.25);
+}
+
 .el-dialog__body {
   padding: 32px !important;
 }
@@ -1401,6 +1576,80 @@ onMounted(() => {
 }
 
 /* 移除旧的图片预览样式，因为图片现在直接在文本中展示 */
+
+/* 笔记内容渲染区域的图片样式 */
+.note-content-rendered {
+  max-width: 100%;
+  overflow-x: auto;
+  line-height: 1.8;
+  font-size: 16px;
+}
+
+.note-content-rendered img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  margin: 16px auto;
+  display: block;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+}
+
+.note-content-rendered img:hover {
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+}
+
+/* 全屏模式下的整体样式优化 */
+.el-dialog--fullscreen {
+  background-color: #f5f7fa;
+  background-image: linear-gradient(135deg, #f5f7fa 0%, #e9ecef 100%);
+  transition: all 0.3s ease;
+}
+
+.el-dialog--fullscreen .el-dialog__header {
+  background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+  padding: 28px 40px !important;
+  border-bottom: 2px solid #e9ecef;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+}
+
+.el-dialog--fullscreen .el-dialog__title {
+  font-size: 26px !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.5px;
+}
+
+.el-dialog--fullscreen .el-dialog__body {
+  padding: 40px !important;
+  overflow-y: auto;
+  max-height: calc(100vh - 200px);
+}
+
+.el-dialog--fullscreen .note-content-rendered {
+  max-width: 100%;
+  background-color: white;
+  padding: 40px;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  margin: 0 auto;
+  max-width: 900px;
+}
+
+.el-dialog--fullscreen .note-content-rendered img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 12px;
+  margin: 20px auto;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+}
+
+/* 全屏模式下的底部按钮样式 */
+.el-dialog--fullscreen .el-dialog__footer {
+  background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+  padding: 24px 40px !important;
+  border-top: 2px solid #e9ecef;
+  box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.05);
+}
 
 /* 股票标签样式 */
 .stock-tag {

@@ -1,5 +1,5 @@
 <template>
-  <div class="markdown-editor">
+  <div class="markdown-editor" :class="{ 'markdown-editor--fullscreen': isFullscreen }">
     <div class="markdown-editor__container">
       <Toolbar
         class="markdown-editor__toolbar"
@@ -58,25 +58,25 @@
         :mode="mode"
         @onCreated="handleCreated"
       />
-    </div>
-    <!-- 可选的操作按钮区域 -->
-    <div v-if="showActionButtons" class="markdown-editor__actions">
-      <slot name="action-buttons">
-        <button 
-          v-if="showCancelButton" 
-          class="markdown-editor__button markdown-editor__button--cancel"
-          @click="handleCancel"
-        >
-          {{ cancelButtonText }}
-        </button>
-        <button 
-          v-if="showSaveButton" 
-          class="markdown-editor__button markdown-editor__button--save"
-          @click="handleSave"
-        >
-          {{ saveButtonText }}
-        </button>
-      </slot>
+      <!-- 可选的操作按钮区域 -->
+      <div v-if="showActionButtons" class="markdown-editor__actions">
+        <slot name="action-buttons">
+          <button 
+            v-if="showCancelButton" 
+            class="markdown-editor__button markdown-editor__button--cancel"
+            @click="handleCancel"
+          >
+            {{ cancelButtonText }}
+          </button>
+          <button 
+            v-if="showSaveButton" 
+            class="markdown-editor__button markdown-editor__button--save"
+            @click="handleSave"
+          >
+            {{ saveButtonText }}
+          </button>
+        </slot>
+      </div>
     </div>
   </div>
 </template>
@@ -163,6 +163,9 @@ const newTag = ref('')
 // 从数据库加载的标签列表
 const defaultTags = ref(['估值分析']) // 确保包含估值分析标签
 
+// 全屏模式状态
+const isFullscreen = ref(false)
+
 // 监听tags属性变化
 watch(() => props.tags, (newTags) => {
   editorTags.value = newTags || ''
@@ -173,7 +176,7 @@ watch(() => props.tags, (newTags) => {
 // 工具栏配置
 const toolbarConfig = {
   // 配置工具栏，可根据需求调整
-  excludeKeys: ['fullScreen', 'codeBlock', 'splitScreen']
+  excludeKeys: ['codeBlock', 'splitScreen']
 }
 
 // 编辑器配置
@@ -266,6 +269,20 @@ watch(() => localValue.value, (newVal) => {
 // 编辑器创建完成
 const handleCreated = (editor) => {
   editorRef.value = editor // 记录 editor 实例，重要！
+  
+  // 监听编辑器的全屏切换事件
+  editor.on('fullscreen', (newVal) => {
+    isFullscreen.value = newVal
+    
+    // 更新页面样式以适应全屏模式
+    if (newVal) {
+      document.body.style.overflow = 'hidden'
+      document.body.style.height = '100%'
+    } else {
+      document.body.style.overflow = ''
+      document.body.style.height = ''
+    }
+  })
 }
 
 // 加载标签列表
@@ -453,11 +470,89 @@ defineExpose({
 }
 
 /* 操作按钮样式 */
-.markdown-editor__actions {
+.markdown-editor:not(.markdown-editor--fullscreen) .markdown-editor__actions {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
   margin-top: 16px;
+  padding: 0 16px 16px;
+}
+
+/* 全屏模式样式优化 */
+.markdown-editor--fullscreen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 9999;
+  background: linear-gradient(135deg, #f5f7fa 0%, #e9ecef 100%);
+  padding: 40px;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.markdown-editor--fullscreen .markdown-editor__container {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  max-width: 1200px;
+  margin: 0 auto;
+  background-color: white;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+}
+
+.markdown-editor--fullscreen .markdown-editor__header {
+  padding: 24px 32px;
+  border-bottom: 2px solid #e9ecef;
+  background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+}
+
+.markdown-editor--fullscreen .markdown-editor__title {
+  font-size: 24px;
+  font-weight: 700;
+  margin-bottom: 16px;
+  color: #1a1a1a;
+  background: linear-gradient(135deg, #409eff 0%, #67c23a 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.markdown-editor--fullscreen .markdown-editor__content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 32px 32px;
+}
+
+/* 全屏模式下的标签选择区 */
+.markdown-editor--fullscreen .markdown-editor__tags {
+  padding: 16px 32px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+/* 全屏模式下的操作按钮 */
+.markdown-editor--fullscreen .markdown-editor__actions {
+  padding: 20px 32px;
+  border-top: 2px solid #e9ecef;
+  background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+  margin-top: 0;
+}
+
+/* 编辑器中图片的样式 */
+:deep(.w-e-content img) {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+  margin: 10px 0;
+  cursor: pointer;
+  transition: transform 0.3s ease;
+}
+
+:deep(.w-e-content img:hover) {
+  transform: scale(1.02);
 }
 
 .markdown-editor__button {
