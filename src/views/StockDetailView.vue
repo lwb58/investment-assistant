@@ -329,7 +329,7 @@
                       class="note-item p-3 bg-gray-50 rounded-lg border border-gray-100 cursor-pointer hover:bg-gray-100 transition-colors"
                       v-for="(note, index) in stockNotes" :key="note.id">
                       <div class="flex justify-between items-start">
-                        <div class="flex-1" @click="openNoteModal('view', note)">
+                        <div class="flex-1" @click="viewNote(note)">
                           <div class="note-title font-medium text-sm truncate">{{ note.title }}</div>
                           <div class="note-meta text-xs text-gray-500 mt-0.5 flex justify-between">
                             <span>{{ formatDate(note.createTime) }}</span>
@@ -486,6 +486,41 @@
                     </div>
                   </div>
                 </el-dialog>
+
+    <!-- 笔记详情查看弹窗 -->
+    <el-dialog
+      v-model="showNoteDetail"
+      :title="selectedNote?.title || '笔记详情'"
+      width="700px"
+      :before-close="closeNoteDetail"
+    >
+      <div class="note-detail">
+        <div class="note-meta">
+          <span>创建时间: {{ formatDate(selectedNote?.createTime) }}</span>
+          <span>更新时间: {{ formatDate(selectedNote?.updateTime) }}</span>
+        </div>
+        <div class="note-content-detail">
+          <div v-if="selectedNote?.stockCode" class="related-stock-info">
+            <el-tag
+              v-for="stockCode in selectedNote.stockCode.split(',')"
+              :key="stockCode"
+              size="small"
+              effect="plain"
+              type="primary"
+              class="mr-1 mb-1"
+            >
+              <i class="el-icon-finished"></i>
+              {{ getStockLabel(stockCode) }}
+            </el-tag>
+          </div>
+          <div class="note-content-rendered" v-html="parseMarkdown(selectedNote?.content || '')"></div>
+        </div>
+      </div>
+      <div class="flex justify-end gap-2 mt-4">
+        <el-button @click="closeNoteDetail">关闭</el-button>
+        <el-button type="primary" @click="editCurrentNote">编辑</el-button>
+      </div>
+    </el-dialog>
 
 
 
@@ -1377,6 +1412,8 @@ onUnmounted(() => {
 
 const noteModalOpen = ref(false)
 const noteModalType = ref('create')
+const showNoteDetail = ref(false) // 笔记详情查看弹窗
+const selectedNote = ref(null) // 当前查看的笔记
 const noteForm = ref({
   id: '',
   title: '',
@@ -2053,10 +2090,13 @@ const fetchStockNotes = async () => {
 const fetchValuationLogic = async () => {
   try {
     const notes = await apiService.getNotesByStockCode(stockCode.value)
+    console.log('获取到的笔记列表:', notes)
     const valuationNote = notes.find(note => note.title.startsWith('[估值逻辑]'))
+    console.log('找到的估值逻辑笔记:', valuationNote)
     if (valuationNote) {
       try {
         const valuationData = JSON.parse(valuationNote.content)
+        console.log('解析后的估值数据:', valuationData)
         valuationLogic.value = valuationData.valuationContent || ''
         tradingPlan.value = valuationData.tradingPlan || ''
         
@@ -2141,6 +2181,16 @@ const parseMarkdown = (text) => {
   // 列表
   html = html.replace(/^- (.*$)/gm, '<li>$1</li>')
   return html
+}
+
+// 获取股票标签
+const getStockLabel = (stockCode) => {
+  // 先从已选择的股票信息中查找
+  const selectedStock = selectedStocks.value.find(s => s.stockCode === stockCode)
+  if (selectedStock) {
+    return selectedStock.stockName
+  }
+  return stockCode
 }
 
 // 保存投资计划（合并交易计划和预测数据）
@@ -2310,6 +2360,26 @@ const addCompetitor = async () => {
   } catch (err) {
     console.error('添加友商失败:', err)
     alert('添加失败，请稍后重试')
+  }
+}
+
+// 查看笔记详情
+const viewNote = (note) => {
+  selectedNote.value = { ...note }
+  showNoteDetail.value = true
+}
+
+// 关闭笔记详情
+const closeNoteDetail = () => {
+  showNoteDetail.value = false
+  selectedNote.value = null
+}
+
+// 从详情页面编辑笔记
+const editCurrentNote = () => {
+  if (selectedNote.value) {
+    openNoteModal('edit', selectedNote.value)
+    showNoteDetail.value = false
   }
 }
 
@@ -2971,6 +3041,15 @@ onUnmounted(() => {
   width: 85%;
   display: flex;
   flex-direction: column;
+}
+
+.modal-content {
+  background-color: white;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  padding: 1rem;
 }
 
 .modal-header {
