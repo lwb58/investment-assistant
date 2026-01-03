@@ -115,11 +115,7 @@
                     <i class="icon">💡</i> 估值逻辑
                   </a>
                 </li>
-                <li>
-                  <a href="#competitor-analysis" class="nav-item block px-3 py-2 text-sm rounded-lg hover:bg-primary/10 hover:text-primary transition-all duration-300 flex items-center gap-2">
-                    <i class="icon">🏢</i> 竞争对手
-                  </a>
-                </li>
+
                 <li>
                   <a href="#investment-forecast" class="nav-item block px-3 py-2 text-sm rounded-lg hover:bg-primary/10 hover:text-primary transition-all duration-300 flex items-center gap-2">
                     <i class="icon">🎯</i> 投资预测
@@ -529,51 +525,7 @@
 
               <!-- 右侧：占6列 -->
               <div class="space-y-2">
-                <!-- 友商录入卡片 -->
-                <div id="competitor-analysis" class="card p-4 border border-gray-200 rounded-xl shadow-md bg-white hover:shadow-lg transition-all duration-300 mb-6">
-                  <div class="card-header mb-1">
-                    <h3 class="card-title text-sm font-semibold flex items-center gap-1.5 text-gray-800">
-                      <i class="icon text-primary">🤝</i> 友商录入
-                    </h3>
-                  </div>
-                  <div class="competitors-container space-y-2">
-                    <div v-if="competitors.length > 0" class="competitor-list space-y-2 max-h-48 overflow-y-auto pr-1">
-                      <div
-                        class="competitor-item p-2 bg-gray-50 rounded-lg border border-gray-100 flex items-center justify-between cursor-pointer hover:bg-gray-100 transition-colors"
-                        v-for="(competitor, index) in competitors" :key="index"
-                        @click="goToCompetitorDetail(competitor.code)">
-                        <div class="competitor-info flex items-center gap-1.5">
-                          <div
-                            class="competitor-rank w-5 h-5 flex items-center justify-center bg-primary/10 text-primary rounded-full text-xs">
-                            {{ index + 1 }}
-                          </div>
-                          <div class="competitor-details min-w-0">
-                            <div class="competitor-name font-medium text-sm truncate">{{ competitor.name }}</div>
-                            <div class="competitor-code text-xs text-gray-500">{{ competitor.code }}</div>
-                          </div>
-                        </div>
-                        <div class="competitor-action text-primary text-xs">
-                          查看详情 →
-                        </div>
-                      </div>
-                    </div>
-                    <div v-else class="empty-state py-3 text-center">
-                      <p class="empty-text text-xs text-gray-500">暂无友商数据</p>
-                    </div>
-                    <div class="add-competitor-form grid grid-cols-2 gap-2">
-                      <input v-model="newCompetitor.name" type="text"
-                        class="form-input px-2 py-2 border border-gray-100 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent text-sm"
-                        placeholder="友商名称">
-                      <input v-model="newCompetitor.code" type="text"
-                        class="form-input px-2 py-2 border border-gray-100 rounded-md focus:outline-none focus:ring-1.5 focus:ring-primary focus:border-transparent text-sm"
-                        placeholder="友商代码">
-                      <button class="btn primary col-span-2 py-2" @click="addCompetitor"
-                        :disabled="!newCompetitor.name || !newCompetitor.code">
-                        添加友商
-                      </button>
-                    </div>
-                  </div>
-                </div>
+
               </div>
             </div>
           </div> <!-- 修复：闭合主要内容区域的外层div -->
@@ -1316,7 +1268,7 @@ const isEditingValuation = ref(false) // 是否处于编辑模式
 const buyPoint = ref('') // 买入点
 const maxLossRate = ref('') // 最大亏损跌幅
 const expectedGrowthRate = ref('') // 预期涨幅
-const competitors = ref([]) // 竞争对手
+
 
 // 编辑器相关状态
 const markdownEditorRef = ref(null) // 编辑器组件引用
@@ -1332,8 +1284,7 @@ const consPoints = ref('') // 利空点
 
 const investmentDuration = ref('') // 投资时长
 
-// 友商录入
-const newCompetitor = ref({ name: '', code: '' }) // 新友商表单
+
 
 // 计算属性：自动计算预期目标点位
 const expectedPoint = computed(() => {
@@ -1843,10 +1794,7 @@ watch(stockCode, (newCode) => {
 // 返回上一页
 const goBack = () => router.back()
 
-// 跳转到竞争对手详情页
-const goToCompetitorDetail = (code) => {
-  router.push(`/stock/${code}/detail`)
-}
+
 
 // 获取股票所有数据（单接口）
 const fetchStockData = async () => {
@@ -1886,8 +1834,7 @@ const fetchStockData = async () => {
       totalShares: stockDetailData.value.baseInfo.totalShares || '0',
       floatShares: stockDetailData.value.baseInfo.floatShares || '0',
       marketCap: stockDetailData.value.baseInfo.marketCap || '0',
-      topShareholders: stockDetailData.value.topShareholders || [],
-      competitors: stockDetailData.value.competitors || [] // 竞争对手数据
+      topShareholders: stockDetailData.value.topShareholders || []
     }
 
     // 财务数据处理（自适应3-5年）
@@ -1986,7 +1933,7 @@ const fetchStockData = async () => {
     // consPoints.value = data.prosCons?.consPoints || ''
 
     // 竞争对手数据
-    competitors.value = stockDetailData.value.competitors || []
+    
     
     // 毛利率和净利率季度数据
     mllsjData.value = stockDetailData.value.mllsj || {}
@@ -2307,7 +2254,7 @@ const handleScroll = () => {
     { id: '#top', offset: 0 },
     { id: '#financial-trends', offset: 200 },
     { id: '#dupont-analysis', offset: 200 },
-    { id: '#competitor-analysis', offset: 200 },
+  
     { id: '#financial-indicators', offset: 200 },
     { id: '#investment-forecast', offset: 200 },
     { id: '#related-notes', offset: 200 }
@@ -2340,28 +2287,7 @@ const handleScroll = () => {
   lastScrollTop = scrollTop;
 };
 
-// 添加友商
-const addCompetitor = async () => {
-  try {
-    if (!newCompetitor.value.name || !newCompetitor.value.code) {
-      alert('请填写友商名称和代码')
-      return
-    }
 
-    await apiService.addCompetitor({
-      stockCode: stockCode.value,
-      competitor: newCompetitor.value
-    })
-
-    // 更新友商列表
-    competitors.value.push({ ...newCompetitor.value })
-    newCompetitor.value = { name: '', code: '' }
-    alert('友商添加成功！')
-  } catch (err) {
-    console.error('添加友商失败:', err)
-    alert('添加失败，请稍后重试')
-  }
-}
 
 // 查看笔记详情
 const viewNote = (note) => {
@@ -3157,76 +3083,7 @@ onUnmounted(() => {
   margin-bottom: 0.75rem;
 }
 
-/* 竞争对手样式（现代化，卡片式） */
-.competitor-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
 
-.competitor-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 1rem 1.25rem;
-  background: linear-gradient(135deg, var(--bg-card), var(--bg-secondary));
-  border: 1px solid var(--gray-200);
-  border-radius: var(--border-radius);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  cursor: pointer;
-  box-shadow: var(--shadow-sm);
-}
-
-.competitor-item:hover {
-  background: linear-gradient(135deg, var(--primary-light), var(--bg-card));
-  border-color: var(--primary-color);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
-}
-
-.competitor-info {
-  display: flex;
-  align-items: center;
-  gap: 1.5rem;
-}
-
-.competitor-rank {
-  width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background-color: var(--primary-light);
-  color: var(--primary-color);
-  border-radius: 50%;
-  font-size: 0.75rem;
-  font-weight: 600;
-}
-
-.competitor-details {
-  min-width: 0;
-}
-
-.competitor-name {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.competitor-code {
-  font-size: 0.75rem;
-  color: var(--text-tertiary);
-  margin-top: 0.125rem;
-}
-
-.competitor-action {
-  font-size: 0.75rem;
-  color: var(--primary-color);
-  font-weight: 500;
-}
 
 /* 财务趋势图表样式（现代化） */
 .chart-group {
