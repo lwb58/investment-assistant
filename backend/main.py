@@ -45,4 +45,4 @@ app.include_router(transaction_analysis_router)  # 交割单分析模块路由
 # -------------- 启动服务 --------------
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8001, reload=False)
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=False)
