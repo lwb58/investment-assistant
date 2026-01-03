@@ -250,6 +250,23 @@ async updateStock(stockId, updateData) {  // 参数名从stockCode改为stockId
   }
 
   /**
+   * 获取交割单中的股票列表
+   * @returns {Promise<Array>} 交割单中的股票列表
+   */
+  async getTransactionStocks() {
+    return this.request('GET', `/transaction/stocks`);
+  }
+
+  /**
+   * 分析交割单数据
+   * @param {string} stockCode - 股票代码
+   * @returns {Promise<Object>} 交割单分析结果
+   */
+  async analyzeTransactions(stockCode) {
+    return this.request('GET', `/transaction/analyze?stockCode=${encodeURIComponent(stockCode)}`);
+  }
+
+  /**
    * 保存利好利空分析
    * @param {Object} data - 利好利空数据
    * @param {number} existingNoteId - 已有的利好利空笔记ID（可选）

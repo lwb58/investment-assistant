@@ -7,6 +7,7 @@ import ReviewNotesView from '../views/ReviewNotesView.vue'
 import MarketOverviewView from '../views/MarketOverviewView.vue'
 import SettingsView from '../views/SettingsView.vue'
 import PositionAnalysisView from '../views/PositionAnalysisView.vue'
+import TransactionAnalysisView from '../views/TransactionAnalysisView.vue'
 
 const routes = [
   {
@@ -52,6 +53,14 @@ const routes = [
     component: PositionAnalysisView,
     meta: {
       title: '持仓分析'
+    }
+  },
+  {
+    path: '/transaction-analysis',
+    name: 'TransactionAnalysis',
+    component: TransactionAnalysisView,
+    meta: {
+      title: '交割单分析'
     }
   },
   {

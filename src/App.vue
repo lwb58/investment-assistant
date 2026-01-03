@@ -37,6 +37,14 @@
             <span class="nav-icon">📊</span>
             <span class="nav-text">持仓分析</span>
           </router-link>
+          <router-link 
+          to="/transaction-analysis" 
+          class="nav-item"
+          active-class="active"
+        >
+          <span class="nav-icon">📉</span>
+          <span class="nav-text">交割单分析</span>
+        </router-link>
         <!-- 添加系统配置菜单项 -->
         <router-link 
           to="/settings" 
@@ -62,6 +70,7 @@
             <span v-if="currentPath === '/stock-list'">股票清单</span>
             <span v-else-if="currentPath === '/review-notes'">复盘笔记</span>
             <span v-else-if="currentPath === '/position-analysis'">持仓分析</span>
+            <span v-else-if="currentPath === '/transaction-analysis'">交割单分析</span>
             <span v-else-if="currentPath.includes('/stock-detail')">股票详情</span>
             <span v-else>首页</span>
           </div>
