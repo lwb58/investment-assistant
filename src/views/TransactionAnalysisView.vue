@@ -21,7 +21,7 @@
               v-for="stock in availableStocks"
               :key="stock.value || Math.random().toString()"
               :label="stock.label"
-              :value="stock.value || ''"
+              :value="String(stock.value || '')"
             />
           </el-select>
         </el-form-item>
@@ -48,7 +48,10 @@
           <el-table-column prop="stockName" label="股票名称" width="150" />
           <el-table-column prop="tradeType" label="交易类型" width="100">
             <template #default="scope">
-              <el-tag :type="scope.row.tradeType === '买入' ? 'success' : 'danger'">
+              <el-tag 
+                :type="getTradeTypeTagType(scope.row.tradeType)"
+                :style="getTradeTypeTagStyle(scope.row.tradeType)"
+              >
                 {{ scope.row.tradeType }}
               </el-tag>
             </template>
@@ -73,7 +76,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import * as echarts from 'echarts'
 import apiService from '../api/apiService'
 import { ElMessage as elMessage } from 'element-plus'
@@ -86,19 +89,58 @@ const availableStocks = ref([])
 const transactionChart = ref(null)
 let chartInstance = null
 
+// 根据交易类型获取标签类型
+const getTradeTypeTagType = (tradeType) => {
+  switch(tradeType) {
+    case '买入':
+      return 'success'; // 绿色
+    case '证券买入':
+      return 'danger'; // 红色
+    default:
+      return ''; // 默认不使用预定义类型
+  }
+}
+
+// 根据交易类型获取标签样式
+const getTradeTypeTagStyle = (tradeType) => {
+  switch(tradeType) {
+    case '证券卖出':
+      return 'background-color: #333333; border-color: #333333; color: white;'; // 黑色背景
+    case '卖出':
+      return 'background-color: #333333; border-color: #333333; color: white;'; // 黑色背景
+    default:
+      return ''; // 默认不使用自定义样式
+  }
+}
+
 // 获取可用股票列表
 const fetchAvailableStocks = async () => {
   try {
+    console.log('开始调用getTransactionStocks API')
     const result = await apiService.getTransactionStocks()
     console.log('Transaction stocks result:', result)
-    availableStocks.value = result.stocks.map(stock => ({
-      value: stock.code,
-      label: `${stock.code} - ${stock.name}`
-    }))
-    console.log('Available stocks:', availableStocks.value)
+    console.log('Options data:', result.options)
+    console.log('Options data length:', result.options ? result.options.length : 0)
+    
+    if (result.options && Array.isArray(result.options)) {
+      availableStocks.value = result.options
+      console.log('Available stocks:', availableStocks.value)
+      console.log('Available stocks length:', availableStocks.value.length)
+      
+      // 如果有股票数据，默认选择第一个
+      if (availableStocks.value.length > 0 && !selectedStock.value) {
+        selectedStock.value = availableStocks.value[0].value
+        console.log('默认选择第一个股票:', selectedStock.value)
+      }
+    } else {
+      console.error('API返回的数据格式不正确:', result)
+      availableStocks.value = []
+    }
   } catch (error) {
     console.error('获取股票列表失败:', error)
+    console.error('Error details:', error.response ? error.response.data : error.message)
     elMessage.error('获取股票列表失败')
+    availableStocks.value = []
   }
 }
 
@@ -118,7 +160,10 @@ const analyzeTransactions = async () => {
   try {
     const response = await apiService.analyzeTransactions(selectedStock.value)
     analysisData.value = response.data
-    renderChart()
+    // 使用nextTick确保DOM更新完成后再渲染图表
+    nextTick(() => {
+      renderChart()
+    })
   } catch (error) {
     console.error('分析交割单失败:', error)
     elMessage.error('分析交割单失败')
@@ -130,6 +175,12 @@ const analyzeTransactions = async () => {
 // 渲染交易图表
 const renderChart = () => {
   if (!analysisData.value || analysisData.value.length === 0) return
+  
+  // 确保DOM已经完全加载
+  if (!transactionChart.value) {
+    console.error('交易图表DOM元素未找到')
+    return
+  }
 
   if (!chartInstance) {
     chartInstance = echarts.init(transactionChart.value)
@@ -137,61 +188,151 @@ const renderChart = () => {
 
   // 处理数据
   const dates = analysisData.value.map(item => item.tradeDate)
-  const buyPrices = analysisData.value.map(item => item.tradeType === '买入' ? item.price : null)
-  const sellPrices = analysisData.value.map(item => item.tradeType === '卖出' ? item.price : null)
-  const quantities = analysisData.value.map(item => item.quantity)
+  
+  // 分离买入和卖出数据，并处理负数量
+  const buyPrices = []
+  const sellPrices = []
+  const quantities = []
+  
+  analysisData.value.forEach(item => {
+    if (item.tradeType === '买入' || item.tradeType === '证券买入') {
+      buyPrices.push(item.price)
+      sellPrices.push(null)
+      quantities.push(item.quantity)
+    } else if (item.tradeType === '卖出' || item.tradeType === '证券卖出') {
+      buyPrices.push(null)
+      sellPrices.push(item.price)
+      quantities.push(Math.abs(item.quantity)) // 显示卖出数量的绝对值
+    } else {
+      buyPrices.push(null)
+      sellPrices.push(null)
+      quantities.push(0)
+    }
+  })
 
   const option = {
     title: {
-      text: '股票交易价格趋势',
-      left: 'center'
+      text: '股票交易价格与数量趋势',
+      left: 'center',
+      textStyle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: '#333'
+      }
     },
     tooltip: {
       trigger: 'axis',
+      backgroundColor: 'rgba(255, 255, 255, 0.95)',
+      borderColor: '#ddd',
+      borderWidth: 1,
+      textStyle: {
+        color: '#333'
+      },
       formatter: function(params) {
-        let result = params[0].axisValue + '<br/>'
-        params.forEach(param => {
-          if (param.value) {
-            result += `${param.seriesName}: ${param.value}`
-            if (param.seriesName.includes('价格')) {
-              result += '元'
-            } else if (param.seriesName.includes('数量')) {
-              result += '股'
-            }
-            result += '<br/>'
-          }
-        })
-        return result
+        const validParams = params.filter(param => param.value)
+        if (validParams.length === 0) return ''
+        
+        return `
+          <div style="padding: 8px;">
+            <strong>${validParams[0].axisValue}</strong><br/>
+            ${validParams.map(param => {
+              const unit = param.seriesName.includes('价格') ? '元' : '股'
+              return `
+                <div style="margin-top: 4px;">
+                  <span style="display: inline-block; width: 10px; height: 10px; background: ${param.color}; border-radius: 50%; margin-right: 5px;"></span>
+                  ${param.seriesName}: <strong>${param.value}${unit}</strong>
+                </div>
+              `
+            }).join('')}
+          </div>
+        `
       }
     },
     legend: {
       data: ['买入价格', '卖出价格', '交易数量'],
-      bottom: 10
+      bottom: 0,
+      textStyle: {
+        fontSize: 12
+      },
+      padding: [0, 0, 10, 0]
     },
     grid: {
       left: '3%',
       right: '4%',
-      bottom: '15%',
+      bottom: '20%',
+      top: '15%',
       containLabel: true
     },
     xAxis: {
       type: 'category',
       boundaryGap: false,
       data: dates,
+      axisLine: {
+        lineStyle: {
+          color: '#e0e0e0'
+        }
+      },
       axisLabel: {
-        rotate: 45
+        rotate: 45,
+        fontSize: 11,
+        color: '#666'
+      },
+      splitLine: {
+        show: true,
+        lineStyle: {
+          color: '#f5f5f5',
+          type: 'dashed'
+        }
       }
     },
     yAxis: [
       {
         type: 'value',
         name: '价格 (元)',
-        position: 'left'
+        position: 'left',
+        axisLine: {
+          lineStyle: {
+            color: '#52c41a'
+          }
+        },
+        axisLabel: {
+          formatter: '{value}',
+          color: '#666',
+          fontSize: 11
+        },
+        splitLine: {
+          show: true,
+          lineStyle: {
+            color: '#f5f5f5',
+            type: 'dashed'
+          }
+        },
+        nameTextStyle: {
+          color: '#333',
+          fontSize: 12
+        }
       },
       {
         type: 'value',
         name: '数量 (股)',
-        position: 'right'
+        position: 'right',
+        axisLine: {
+          lineStyle: {
+            color: '#1890ff'
+          }
+        },
+        axisLabel: {
+          formatter: '{value}',
+          color: '#666',
+          fontSize: 11
+        },
+        splitLine: {
+          show: false
+        },
+        nameTextStyle: {
+          color: '#333',
+          fontSize: 12
+        }
       }
     ],
     series: [
@@ -200,26 +341,80 @@ const renderChart = () => {
         type: 'line',
         data: buyPrices,
         symbol: 'circle',
-        symbolSize: 8,
+        symbolSize: 10,
         color: '#52c41a',
-        smooth: true
+        smooth: true,
+        lineStyle: {
+          width: 3,
+          color: '#52c41a'
+        },
+        itemStyle: {
+          color: '#52c41a',
+          borderColor: '#fff',
+          borderWidth: 2
+        },
+        areaStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: 'rgba(82, 196, 26, 0.3)' },
+            { offset: 1, color: 'rgba(82, 196, 26, 0.05)' }
+          ])
+        }
       },
       {
         name: '卖出价格',
         type: 'line',
         data: sellPrices,
         symbol: 'circle',
-        symbolSize: 8,
+        symbolSize: 10,
         color: '#ff4d4f',
-        smooth: true
+        smooth: true,
+        lineStyle: {
+          width: 3,
+          color: '#ff4d4f'
+        },
+        itemStyle: {
+          color: '#ff4d4f',
+          borderColor: '#fff',
+          borderWidth: 2
+        },
+        areaStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: 'rgba(255, 77, 79, 0.3)' },
+            { offset: 1, color: 'rgba(255, 77, 79, 0.05)' }
+          ])
+        }
       },
       {
         name: '交易数量',
         type: 'bar',
         data: quantities,
         yAxisIndex: 1,
-        color: '#1890ff',
-        opacity: 0.3
+        itemStyle: {
+          color: function(params) {
+            // 为买入和卖出数量设置不同颜色
+            const index = params.dataIndex
+            if (buyPrices[index] !== null) {
+              return '#1890ff' // 买入数量为蓝色
+            } else if (sellPrices[index] !== null) {
+              return '#fa8c16' // 卖出数量为橙色
+            } else {
+              return '#d9d9d9' // 其他为灰色
+            }
+          },
+          opacity: 0.8
+        },
+        emphasis: {
+          itemStyle: {
+            opacity: 1
+          }
+        },
+        label: {
+          show: true,
+          position: 'top',
+          formatter: '{c}股',
+          fontSize: 11,
+          color: '#666'
+        }
       }
     ]
   }
