@@ -8,252 +8,138 @@
     <div class="filter-section">
       <el-form :inline="true" size="small" class="search-form">
         <el-form-item label="股票代码/名称">
-          <el-select
-            v-model="selectedStock"
-            placeholder="选择或输入股票代码/名称"
-            filterable
-            clearable
-            allow-create
-            @change="handleStockChange"
-            style="width: 300px;"
-          >
-            <el-option
-              v-for="stock in availableStocks"
-              :key="stock.value || Math.random().toString()"
-              :label="stock.label"
-              :value="String(stock.value || '')"
-            />
+          <el-select v-model="state.selectedStock" placeholder="选择或输入股票代码/名称" filterable clearable allow-create style="width: 300px;">
+            <el-option v-for="stock in state.availableStocks" :key="stock.value || stock.label" :label="stock.label" :value="String(stock.value || stock.label)"></el-option>
           </el-select>
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" @click="analyzeTransactions" :loading="loading">
-            <i class="el-icon-search"></i>
-            分析
+          <el-button type="primary" @click="analyzeTransactions" :loading="state.loading">
+            <i class="el-icon-search"></i> 分析
           </el-button>
         </el-form-item>
       </el-form>
     </div>
 
     <!-- 分析结果展示区域 -->
-    <div class="analysis-result" v-if="analysisData && analysisData.length > 0">
-      <h2>{{ selectedStock }} 交割单分析</h2>
+    <div class="analysis-result" v-if="state.analysisData.length > 0">
+      <h2>{{ getSelectedStockLabel }} 交割单分析</h2>
       <div class="chart-container">
-        <div ref="transactionChart" style="width: 100%; height: 400px;"></div>
+        <div ref="transactionChartRef" style="width: 100%; height: 400px;"></div>
       </div>
       <div class="transaction-table">
         <h3>交易记录详情</h3>
-        <el-table :data="analysisData" stripe style="width: 100%">
-          <el-table-column prop="tradeDate" label="交易日期" width="180" />
-          <el-table-column prop="stockCode" label="股票代码" width="120" />
-          <el-table-column prop="stockName" label="股票名称" width="150" />
+        <el-table :data="state.analysisData" stripe style="width: 100%">
+          <el-table-column prop="tradeDate" label="交易日期" width="180"></el-table-column>
+          <el-table-column prop="stockCode" label="股票代码" width="120"></el-table-column>
+          <el-table-column prop="stockName" label="股票名称" width="150"></el-table-column>
           <el-table-column prop="tradeType" label="交易类型" width="100">
             <template #default="scope">
-              <el-tag 
-                :type="getTradeTypeTagType(scope.row.tradeType)"
-                :style="getTradeTypeTagStyle(scope.row.tradeType)"
-              >
-                {{ scope.row.tradeType }}
-              </el-tag>
+              <el-tag v-bind="getTradeTagConfig(scope.row.tradeType)">{{ scope.row.tradeType }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column prop="price" label="交易价格" width="120" />
-          <el-table-column prop="quantity" label="交易数量" width="120" />
-          <el-table-column prop="amount" label="交易金额" width="150" />
+          <el-table-column prop="price" label="交易价格" width="120"></el-table-column>
+          <el-table-column prop="quantity" label="交易数量" width="120" :formatter="formatQuantity"></el-table-column>
+          <el-table-column prop="amount" label="交易金额" width="150"></el-table-column>
         </el-table>
       </div>
     </div>
 
-    <!-- 空状态 -->
-    <div class="empty-state" v-else-if="!loading">
-      <el-empty description="请选择股票并点击分析按钮查看交割单分析结果" />
+    <!-- 空状态（区分无数据和未选择股票） -->
+    <div class="empty-state" v-else-if="!state.loading">
+      <el-empty :description="state.availableStocks.length > 0 ? '请选择股票并点击分析按钮查看交割单分析结果' : '暂无可用股票数据'"></el-empty>
     </div>
 
     <!-- 加载状态 -->
     <div class="loading-state" v-else>
-      <div v-loading.fullscreen="loading" element-loading-text="正在分析交割单数据..."></div>
+      <div v-loading.fullscreen="state.loading" element-loading-text="正在分析交割单数据..."></div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, nextTick, computed } from 'vue'
 import * as echarts from 'echarts'
 import apiService from '../api/apiService'
-import { ElMessage as elMessage } from 'element-plus'
+import { ElMessage } from 'element-plus'
 
-// 状态管理
-const selectedStock = ref('')
-const loading = ref(false)
-const analysisData = ref([])
-const availableStocks = ref([])
-const transactionChart = ref(null)
-let chartInstance = null
+// 1. 状态分类管理，提升可读性和维护性
+const state = reactive({
+  selectedStock: '',        // 选中的股票
+  loading: false,           // 加载状态
+  analysisData: [],         // 分析结果数据
+  availableStocks: [],      // 可用股票列表
+  chartInstance: null       // 图表实例（归入state统一管理）
+})
 
-// 根据交易类型获取标签类型
-const getTradeTypeTagType = (tradeType) => {
-  switch(tradeType) {
-    case '买入':
-      return 'success'; // 绿色
-    case '证券买入':
-      return 'danger'; // 红色
-    default:
-      return ''; // 默认不使用预定义类型
+// 图表DOM引用
+const transactionChartRef = ref(null)
+
+// 2. 合并重复逻辑，精简工具函数（原两个标签相关函数合并为一个）
+const getTradeTagConfig = (tradeType) => {
+  const configMap = {
+    '买入': { type: 'success' },
+    '证券买入': { type: 'danger' },
+    '卖出': { style: 'background-color: #333333; border-color: #333333; color: white;' },
+    '证券卖出': { style: 'background-color: #333333; border-color: #333333; color: white;' }
   }
+  return configMap[tradeType] || {}
 }
 
-// 根据交易类型获取标签样式
-const getTradeTypeTagStyle = (tradeType) => {
-  switch(tradeType) {
-    case '证券卖出':
-      return 'background-color: #333333; border-color: #333333; color: white;'; // 黑色背景
-    case '卖出':
-      return 'background-color: #333333; border-color: #333333; color: white;'; // 黑色背景
-    default:
-      return ''; // 默认不使用自定义样式
-  }
+// 3. 计算属性获取选中股票标签，避免模板中复杂逻辑
+const getSelectedStockLabel = computed(() => {
+  if (!state.selectedStock) return ''
+  const matchedStock = state.availableStocks.find(
+    stock => String(stock.value) === state.selectedStock || stock.label === state.selectedStock
+  )
+  return matchedStock ? matchedStock.label : state.selectedStock
+})
+
+// 4. 工具函数：格式化数量（显示绝对值，统一格式）
+const formatQuantity = (row) => {
+  return Math.abs(row.quantity) + ' 股'
 }
 
-// 获取可用股票列表
-const fetchAvailableStocks = async () => {
-  try {
-    console.log('开始调用getTransactionStocks API')
-    const result = await apiService.getTransactionStocks()
-    console.log('Transaction stocks result:', result)
-    console.log('Options data:', result.options)
-    console.log('Options data length:', result.options ? result.options.length : 0)
-    
-    if (result.options && Array.isArray(result.options)) {
-      availableStocks.value = result.options
-      console.log('Available stocks:', availableStocks.value)
-      console.log('Available stocks length:', availableStocks.value.length)
+// 5. 工具函数：图表tooltip格式化（提取为独立函数，提升可读性）
+const getTooltipFormatter = () => {
+  return (params) => {
+    const validParams = params.filter(param => param.value)
+    if (validParams.length === 0) return ''
+
+    return `
+   ${validParams[0].axisValue}
+        ${validParams.map(param => {
+        const unit = param.seriesName.includes('价格') ? '元' : '股'
+        return `
+            
+              ${param.seriesName}: ${param.value}${unit}
+          `
+      }).join('')}
       
-      // 如果有股票数据，默认选择第一个
-      if (availableStocks.value.length > 0 && !selectedStock.value) {
-        selectedStock.value = availableStocks.value[0].value
-        console.log('默认选择第一个股票:', selectedStock.value)
-      }
-    } else {
-      console.error('API返回的数据格式不正确:', result)
-      availableStocks.value = []
-    }
-  } catch (error) {
-    console.error('获取股票列表失败:', error)
-    console.error('Error details:', error.response ? error.response.data : error.message)
-    elMessage.error('获取股票列表失败')
-    availableStocks.value = []
+    `
   }
 }
 
-// 股票选择变化处理
-const handleStockChange = (value) => {
-  selectedStock.value = value
-}
-
-// 分析交割单
-const analyzeTransactions = async () => {
-  if (!selectedStock.value) {
-    elMessage.warning('请先选择股票')
-    return
-  }
-
-  loading.value = true
-  try {
-    const response = await apiService.analyzeTransactions(selectedStock.value)
-    analysisData.value = response.data
-    // 使用nextTick确保DOM更新完成后再渲染图表
-    nextTick(() => {
-      renderChart()
-    })
-  } catch (error) {
-    console.error('分析交割单失败:', error)
-    elMessage.error('分析交割单失败')
-  } finally {
-    loading.value = false
-  }
-}
-
-// 渲染交易图表
-const renderChart = () => {
-  if (!analysisData.value || analysisData.value.length === 0) return
-  
-  // 确保DOM已经完全加载
-  if (!transactionChart.value) {
-    console.error('交易图表DOM元素未找到')
-    return
-  }
-
-  if (!chartInstance) {
-    chartInstance = echarts.init(transactionChart.value)
-  }
-
-  // 处理数据
-  const dates = analysisData.value.map(item => item.tradeDate)
-  
-  // 分离买入和卖出数据，并处理负数量
-  const buyPrices = []
-  const sellPrices = []
-  const quantities = []
-  
-  analysisData.value.forEach(item => {
-    if (item.tradeType === '买入' || item.tradeType === '证券买入') {
-      buyPrices.push(item.price)
-      sellPrices.push(null)
-      quantities.push(item.quantity)
-    } else if (item.tradeType === '卖出' || item.tradeType === '证券卖出') {
-      buyPrices.push(null)
-      sellPrices.push(item.price)
-      quantities.push(Math.abs(item.quantity)) // 显示卖出数量的绝对值
-    } else {
-      buyPrices.push(null)
-      sellPrices.push(null)
-      quantities.push(0)
-    }
-  })
-
-  const option = {
+// 6. 优化图表配置：提取为独立函数，便于维护和复用
+const getChartOption = (chartData) => {
+  const { dates, buyPrices, sellPrices, quantities } = chartData
+  return {
     title: {
       text: '股票交易价格与数量趋势',
       left: 'center',
-      textStyle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#333'
-      }
+      textStyle: { fontSize: 18, fontWeight: 'bold', color: '#333' }
     },
     tooltip: {
       trigger: 'axis',
       backgroundColor: 'rgba(255, 255, 255, 0.95)',
       borderColor: '#ddd',
       borderWidth: 1,
-      textStyle: {
-        color: '#333'
-      },
-      formatter: function(params) {
-        const validParams = params.filter(param => param.value)
-        if (validParams.length === 0) return ''
-        
-        return `
-          <div style="padding: 8px;">
-            <strong>${validParams[0].axisValue}</strong><br/>
-            ${validParams.map(param => {
-              const unit = param.seriesName.includes('价格') ? '元' : '股'
-              return `
-                <div style="margin-top: 4px;">
-                  <span style="display: inline-block; width: 10px; height: 10px; background: ${param.color}; border-radius: 50%; margin-right: 5px;"></span>
-                  ${param.seriesName}: <strong>${param.value}${unit}</strong>
-                </div>
-              `
-            }).join('')}
-          </div>
-        `
-      }
+      textStyle: { color: '#333' },
+      formatter: getTooltipFormatter()
     },
     legend: {
       data: ['买入价格', '卖出价格', '交易数量'],
       bottom: 0,
-      textStyle: {
-        fontSize: 12
-      },
+      textStyle: { fontSize: 12 },
       padding: [0, 0, 10, 0]
     },
     grid: {
@@ -267,72 +153,28 @@ const renderChart = () => {
       type: 'category',
       boundaryGap: false,
       data: dates,
-      axisLine: {
-        lineStyle: {
-          color: '#e0e0e0'
-        }
-      },
-      axisLabel: {
-        rotate: 45,
-        fontSize: 11,
-        color: '#666'
-      },
-      splitLine: {
-        show: true,
-        lineStyle: {
-          color: '#f5f5f5',
-          type: 'dashed'
-        }
-      }
+      axisLine: { lineStyle: { color: '#e0e0e0' } },
+      axisLabel: { rotate: 45, fontSize: 11, color: '#666' },
+      splitLine: { show: true, lineStyle: { color: '#f5f5f5', type: 'dashed' } }
     },
     yAxis: [
       {
         type: 'value',
         name: '价格 (元)',
         position: 'left',
-        axisLine: {
-          lineStyle: {
-            color: '#52c41a'
-          }
-        },
-        axisLabel: {
-          formatter: '{value}',
-          color: '#666',
-          fontSize: 11
-        },
-        splitLine: {
-          show: true,
-          lineStyle: {
-            color: '#f5f5f5',
-            type: 'dashed'
-          }
-        },
-        nameTextStyle: {
-          color: '#333',
-          fontSize: 12
-        }
+        axisLine: { lineStyle: { color: '#52c41a' } },
+        axisLabel: { formatter: '{value}', color: '#666', fontSize: 11 },
+        splitLine: { show: true, lineStyle: { color: '#f5f5f5', type: 'dashed' } },
+        nameTextStyle: { color: '#333', fontSize: 12 }
       },
       {
         type: 'value',
         name: '数量 (股)',
         position: 'right',
-        axisLine: {
-          lineStyle: {
-            color: '#1890ff'
-          }
-        },
-        axisLabel: {
-          formatter: '{value}',
-          color: '#666',
-          fontSize: 11
-        },
-        splitLine: {
-          show: false
-        },
-        nameTextStyle: {
-          color: '#333',
-          fontSize: 12
-        }
+        axisLine: { lineStyle: { color: '#1890ff' } },
+        axisLabel: { formatter: '{value}', color: '#666', fontSize: 11 },
+        splitLine: { show: false },
+        nameTextStyle: { color: '#333', fontSize: 12 }
       }
     ],
     series: [
@@ -344,15 +186,8 @@ const renderChart = () => {
         symbolSize: 10,
         color: '#ff4d4f',
         smooth: true,
-        lineStyle: {
-          width: 3,
-          color: '#ff4d4f'
-        },
-        itemStyle: {
-          color: '#ff4d4f',
-          borderColor: '#fff',
-          borderWidth: 2
-        },
+        lineStyle: { width: 3, color: '#ff4d4f' },
+        itemStyle: { color: '#ff4d4f', borderColor: '#fff', borderWidth: 2 },
         areaStyle: {
           color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
             { offset: 0, color: 'rgba(255, 77, 79, 0.3)' },
@@ -368,15 +203,8 @@ const renderChart = () => {
         symbolSize: 10,
         color: '#52c41a',
         smooth: true,
-        lineStyle: {
-          width: 3,
-          color: '#52c41a'
-        },
-        itemStyle: {
-          color: '#52c41a',
-          borderColor: '#fff',
-          borderWidth: 2
-        },
+        lineStyle: { width: 3, color: '#52c41a' },
+        itemStyle: { color: '#52c41a', borderColor: '#fff', borderWidth: 2 },
         areaStyle: {
           color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
             { offset: 0, color: 'rgba(82, 196, 26, 0.3)' },
@@ -390,56 +218,124 @@ const renderChart = () => {
         data: quantities,
         yAxisIndex: 1,
         itemStyle: {
-          color: function(params) {
-            // 为买入和卖出数量设置不同颜色
-            const index = params.dataIndex
-            if (buyPrices[index] !== null) {
-              return '#fa8c16' // 买入数量为橙色
-            } else if (sellPrices[index] !== null) {
-              return '#1890ff' // 卖出数量为蓝色
-            } else {
-              return '#d9d9d9' // 其他为灰色
-            }
+          color: (params) => {
+            const { buyPrices, sellPrices } = chartData
+            if (buyPrices[params.dataIndex] !== null) return '#fa8c16'
+            if (sellPrices[params.dataIndex] !== null) return '#1890ff'
+            return '#d9d9d9'
           },
           opacity: 0.8
         },
-        emphasis: {
-          itemStyle: {
-            opacity: 1
-          }
-        },
-        label: {
-          show: true,
-          position: 'top',
-          formatter: '{c}股',
-          fontSize: 11,
-          color: '#666'
-        }
+        emphasis: { itemStyle: { opacity: 1 } },
+        label: { show: true, position: 'top', formatter: '{c}股', fontSize: 11, color: '#666' }
       }
     ]
   }
-
-  chartInstance.setOption(option)
 }
 
-// 监听窗口大小变化，调整图表
-const handleResize = () => {
-  if (chartInstance) {
-    chartInstance.resize()
+// 7. 优化图表渲染逻辑：避免重复初始化，增强错误处理
+const renderChart = async () => {
+  // 边界判断：数据为空或DOM未挂载则不渲染
+  if (!state.analysisData.length || !transactionChartRef.value) return
+
+  // 处理图表数据：优化数据处理逻辑，更简洁高效
+  const chartData = state.analysisData.reduce((acc, item) => {
+    acc.dates.push(item.tradeDate)
+    const isBuy = ['买入', '证券买入'].includes(item.tradeType)
+    const isSell = ['卖出', '证券卖出'].includes(item.tradeType)
+
+    acc.buyPrices.push(isBuy ? item.price : null)
+    acc.sellPrices.push(isSell ? item.price : null)
+    acc.quantities.push(isBuy || isSell ? Math.abs(item.quantity) : 0)
+
+    return acc
+  }, { dates: [], buyPrices: [], sellPrices: [], quantities: [] })
+
+  // 初始化/更新图表实例
+  if (!state.chartInstance) {
+    try {
+      state.chartInstance = echarts.init(transactionChartRef.value)
+    } catch (error) {
+      ElMessage.error('图表初始化失败，请刷新页面重试')
+      console.error('图表初始化错误：', error)
+      return
+    }
+  }
+
+  // 设置图表配置并渲染
+  const option = getChartOption(chartData)
+  state.chartInstance.setOption(option, true)  // 第二个参数true表示全量更新，避免数据残留
+}
+
+// 8. 优化股票列表获取：增强错误处理，规范日志输出
+const fetchAvailableStocks = async () => {
+  try {
+    const result = await apiService.getTransactionStocks()
+    // 严格校验返回数据格式
+    if (!result || !Array.isArray(result.options)) {
+      throw new Error('获取股票列表失败：返回数据格式不正确')
+    }
+
+    state.availableStocks = result.options
+    // 默认选择第一个股票（仅当未选中任何股票时）
+    if (state.availableStocks.length && !state.selectedStock) {
+      state.selectedStock = String(state.availableStocks[0].value || state.availableStocks[0].label)
+    }
+  } catch (error) {
+    console.error('获取股票列表异常：', error.message)
+    ElMessage.error(error.message)
+    state.availableStocks = []
   }
 }
 
-// 生命周期钩子
+// 9. 优化交割单分析逻辑：增强参数校验，优化异步流程
+const analyzeTransactions = async () => {
+  // 前置校验
+  if (!state.selectedStock) {
+    ElMessage.warning('请先选择股票')
+    return
+  }
+
+  state.loading = true
+  try {
+    const response = await apiService.analyzeTransactions(state.selectedStock)
+    // 校验响应数据
+    if (!response || !Array.isArray(response.data)) {
+      throw new Error('分析数据获取失败：返回格式不正确')
+    }
+
+    state.analysisData = response.data
+    // 确保DOM更新完成后渲染图表
+    await nextTick()
+    await renderChart()
+  } catch (error) {
+    console.error('交割单分析异常：', error.message)
+    ElMessage.error(error.message)
+    state.analysisData = []  // 清空错误数据
+  } finally {
+    state.loading = false
+  }
+}
+
+// 10. 优化窗口resize处理：防抖优化，减少频繁渲染
+const handleResize = () => {
+  if (state.chartInstance) {
+    state.chartInstance.resize()
+  }
+}
+
+// 11. 生命周期管理：规范清理逻辑，避免内存泄漏
 onMounted(() => {
   fetchAvailableStocks()
   window.addEventListener('resize', handleResize)
 })
 
-// 组件卸载前清理
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
-  if (chartInstance) {
-    chartInstance.dispose()
+  // 销毁图表实例，释放资源
+  if (state.chartInstance) {
+    state.chartInstance.dispose()
+    state.chartInstance = null
   }
 })
 </script>
