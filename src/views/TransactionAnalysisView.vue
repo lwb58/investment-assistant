@@ -342,30 +342,6 @@ const renderChart = () => {
         data: buyPrices,
         symbol: 'circle',
         symbolSize: 10,
-        color: '#52c41a',
-        smooth: true,
-        lineStyle: {
-          width: 3,
-          color: '#52c41a'
-        },
-        itemStyle: {
-          color: '#52c41a',
-          borderColor: '#fff',
-          borderWidth: 2
-        },
-        areaStyle: {
-          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: 'rgba(82, 196, 26, 0.3)' },
-            { offset: 1, color: 'rgba(82, 196, 26, 0.05)' }
-          ])
-        }
-      },
-      {
-        name: '卖出价格',
-        type: 'line',
-        data: sellPrices,
-        symbol: 'circle',
-        symbolSize: 10,
         color: '#ff4d4f',
         smooth: true,
         lineStyle: {
@@ -385,6 +361,30 @@ const renderChart = () => {
         }
       },
       {
+        name: '卖出价格',
+        type: 'line',
+        data: sellPrices,
+        symbol: 'circle',
+        symbolSize: 10,
+        color: '#52c41a',
+        smooth: true,
+        lineStyle: {
+          width: 3,
+          color: '#52c41a'
+        },
+        itemStyle: {
+          color: '#52c41a',
+          borderColor: '#fff',
+          borderWidth: 2
+        },
+        areaStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: 'rgba(82, 196, 26, 0.3)' },
+            { offset: 1, color: 'rgba(82, 196, 26, 0.05)' }
+          ])
+        }
+      },
+      {
         name: '交易数量',
         type: 'bar',
         data: quantities,
@@ -394,9 +394,9 @@ const renderChart = () => {
             // 为买入和卖出数量设置不同颜色
             const index = params.dataIndex
             if (buyPrices[index] !== null) {
-              return '#1890ff' // 买入数量为蓝色
+              return '#fa8c16' // 买入数量为橙色
             } else if (sellPrices[index] !== null) {
-              return '#fa8c16' // 卖出数量为橙色
+              return '#1890ff' // 卖出数量为蓝色
             } else {
               return '#d9d9d9' // 其他为灰色
             }
