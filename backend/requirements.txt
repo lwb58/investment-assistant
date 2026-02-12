@@ -1,11 +1,12 @@
-# Python 3.9兼容版本
-fastapi==0.104.1          # 支持Python 3.9
-uvicorn==0.24.0           # 支持Python 3.9
-requests==2.32.3          # 无兼容问题
-sqlalchemy==2.0.30         # 最新2.x版本，无警告
-pydantic==2.8.2           # 最新2.x版本，功能更强
+fastapi==0.104.1
+uvicorn==0.24.0
+requests==2.32.3
+sqlalchemy==2.0.30
+pydantic==2.8.2
+python-multipart
+beautifulsoup4
 tushare
 baostock
-plotly==6.1.1
-kaleido==0.2.1  # Plotly生成静态图片的必需依赖
-pycryptodomex==3.23.0      # 用于芝士财富API的AES加密
+plotly>=5.0.0,<6.0.0
+kaleido==0.2.1
+pycryptodomex==3.23.0
